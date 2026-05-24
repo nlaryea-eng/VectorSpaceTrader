@@ -1,4 +1,3 @@
-import { PLAYER_SHIPS } from "./Ships";
 import { RANK_THRESHOLDS } from "./Rank";
 
 export type HelpSectionId =
@@ -265,8 +264,14 @@ export const HELP_CONTENT: HelpSection[] = [
     summary: "Choosing the right hull.",
     pages: [
       {
-        heading: "Ship Manifest",
-        body: PLAYER_SHIPS.map(s => `${s.name}: ${s.role}.`)
+        heading: "Ship Classes",
+        body: [
+          "Courier: Fast and light for urgent data/package runs.",
+          "Hauler: Broad-bellied with massive cargo capacity.",
+          "Explorer: Long-lane specialist with huge fuel reserves.",
+          "Armored: Heavy plating trading speed for survival.",
+          "Balanced: Premium multi-role frames without compromise."
+        ]
       },
       {
         heading: "Performance Stats",
@@ -284,7 +289,7 @@ export const HELP_CONTENT: HelpSection[] = [
           "Cargo must be clear if the new ship has less capacity.",
           "Installed equipment is preserved during ship transfers."
         ],
-        tips: ["Fuel is clamped to the new tank size upon transfer."]
+        tips: ["Use class filters to navigate the expanded catalog."]
       }
     ]
   },

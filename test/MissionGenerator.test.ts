@@ -13,7 +13,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     speed: 0,
     shipId: "mirelle",
     hull: 100, maxHull: 100, shield: 100, maxShield: 100, energy: 100,
-    balance: 1000, fuel: 7.5, cargo: {}, cargoCapacity: 20,
+    balance: 1000, fuel: 7.5, cargo: {}, cargoCostBasis: {}, cargoCapacity: 20,
     currentSystemId: 0, discoveredSystemIds: [0], docked: false,
     legalRisk: 0, reputation: 0, equipment: { ...DEFAULT_EQUIPMENT },
     ...overrides

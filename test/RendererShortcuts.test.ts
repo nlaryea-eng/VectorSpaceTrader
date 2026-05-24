@@ -30,6 +30,7 @@ function stubPlayer(docked: boolean): PlayerState {
     balance: 1000,
     fuel: 7.5,
     cargo: {},
+    cargoCostBasis: {},
     cargoCapacity: 20,
     currentSystemId: 0,
     discoveredSystemIds: [0],
@@ -89,7 +90,9 @@ function stubState(mode: GameMode, docked = false): RenderState {
     equipmentPage: 0,
     equipmentCategoryFilter: "all",
     helpSectionId: "quickStart",
-    helpPageIndex: 0
+    helpPageIndex: 0,
+    shipyardPage: 0,
+    shipyardClassFilter: "all"
   };
 }
 

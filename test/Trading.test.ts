@@ -55,6 +55,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     balance: 100,
     fuel: 7.5,
     cargo: {},
+    cargoCostBasis: {},
     cargoCapacity: 20,
     currentSystemId: 0,
     discoveredSystemIds: [0],

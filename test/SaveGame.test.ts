@@ -59,6 +59,7 @@ function makeSave(): SaveData {
       balance: 1000,
       fuel: 7.5,
       cargo: { grain: 2 },
+      cargoCostBasis: { grain: 10 },
       cargoCapacity: 20,
       currentSystemId: 0,
       discoveredSystemIds: [0],
@@ -72,6 +73,21 @@ function makeSave(): SaveData {
     settings: { muted: false, sfxVolume: 1.0, musicVolume: 0.6 }
   };
 }
+
+describe("SaveGame cost basis migration", () => {
+  it("migrates old save without cargoCostBasis by defaulting to empty object", () => {
+    const storage = new MemoryStorage();
+    const save = makeSave();
+    const playerWithoutBasis = { ...save.player } as Record<string, unknown>;
+    delete playerWithoutBasis.cargoCostBasis;
+    const rawOld = JSON.stringify({ ...save, player: playerWithoutBasis });
+    storage.setItem(SAVE_KEY, rawOld);
+
+    const loaded = loadGame(storage);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.player.cargoCostBasis).toEqual({});
+  });
+});
 
 describe("SaveGame meta and settings persistence", () => {
   it("round-trips meta with onboarding state", () => {

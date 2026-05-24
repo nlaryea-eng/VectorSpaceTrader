@@ -81,6 +81,11 @@ export function buyCommodity(player: PlayerState, item: MarketItem, quantity: nu
   const totalCost = item.price * amount;
   if (player.balance < totalCost) return fail("Not enough BAL", player);
 
+  const oldQty = player.cargo[item.id] ?? 0;
+  const oldBasis = player.cargoCostBasis[item.id] ?? 0;
+  const newQty = oldQty + amount;
+  const newBasis = (oldQty * oldBasis + amount * item.price) / newQty;
+
   return {
     ok: true,
     player: {
@@ -88,7 +93,11 @@ export function buyCommodity(player: PlayerState, item: MarketItem, quantity: nu
       balance: player.balance - totalCost,
       cargo: {
         ...player.cargo,
-        [item.id]: (player.cargo[item.id] ?? 0) + amount
+        [item.id]: newQty
+      },
+      cargoCostBasis: {
+        ...player.cargoCostBasis,
+        [item.id]: newBasis
       }
     }
   };
@@ -102,11 +111,15 @@ export function sellCommodity(player: PlayerState, item: MarketItem, quantity: n
   if (held < amount) return fail("Not enough cargo to sell", player);
 
   const nextCargo = { ...player.cargo };
+  const nextCargoCostBasis = { ...player.cargoCostBasis };
   const remaining = held - amount;
+
   if (remaining <= 0) {
     delete nextCargo[item.id];
+    delete nextCargoCostBasis[item.id];
   } else {
     nextCargo[item.id] = remaining;
+    // Basis remains the same for the remaining units
   }
 
   return {
@@ -114,7 +127,8 @@ export function sellCommodity(player: PlayerState, item: MarketItem, quantity: n
     player: {
       ...player,
       balance: player.balance + item.price * amount,
-      cargo: nextCargo
+      cargo: nextCargo,
+      cargoCostBasis: nextCargoCostBasis
     }
   };
 }

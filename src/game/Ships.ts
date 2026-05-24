@@ -1,7 +1,8 @@
-import type { EquipmentState, PlayerShipId, PlayerState, TradeResult } from "./types";
+import type { EquipmentState, PlayerShipId, PlayerState, ShipClassId, TradeResult } from "./types";
 
 export interface PlayerShipDefinition {
   id: PlayerShipId;
+  classId: ShipClassId;
   name: string;
   role: string;
   price: number;
@@ -36,6 +37,7 @@ export const BASE_JUMP_RANGE = 24;
 export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
   {
     id: "mirelle",
+    classId: "starter",
     name: "Mirelle",
     role: "Starter generalist",
     price: 0,
@@ -52,6 +54,7 @@ export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
   },
   {
     id: "vaskRelay",
+    classId: "courier",
     name: "Vask Relay",
     role: "Courier interceptor",
     price: 1500,
@@ -67,7 +70,25 @@ export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
     description: "Fast, light, and efficient for urgent contracts with little room for bulk freight."
   },
   {
+    id: "swiftVector",
+    classId: "courier",
+    name: "Swift Vector",
+    role: "Data runner",
+    price: 2100,
+    maxHull: 75,
+    maxShield: 80,
+    cargoCapacity: 10,
+    fuelCapacity: 9.0,
+    jumpRangeModifier: 1.2,
+    fuelUseModifier: 0.88,
+    speedModifier: 1.25,
+    handlingModifier: 1.22,
+    combatDamageModifier: 0.9,
+    description: "Tuned for speed and evasion, sacrifice hold space for unmatched transit times."
+  },
+  {
     id: "vannicHold",
+    classId: "hauler",
     name: "Vannic Hold",
     role: "Cargo hauler",
     price: 2600,
@@ -83,7 +104,25 @@ export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
     description: "A broad-bellied hauler built around route profit and contract cargo."
   },
   {
+    id: "bulkTitan",
+    classId: "hauler",
+    name: "Bulk Titan",
+    role: "Heavy freighter",
+    price: 4800,
+    maxHull: 180,
+    maxShield: 110,
+    cargoCapacity: 95,
+    fuelCapacity: 6.8,
+    jumpRangeModifier: 0.85,
+    fuelUseModifier: 1.25,
+    speedModifier: 0.7,
+    handlingModifier: 0.65,
+    combatDamageModifier: 0.85,
+    description: "Massive hold capacity for high-volume trade, though slow and fuel-hungry."
+  },
+  {
     id: "talemRange",
+    classId: "explorer",
     name: "Talem Range",
     role: "Survey explorer",
     price: 3100,
@@ -99,7 +138,25 @@ export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
     description: "An efficient long-lane hull tuned for discovery, survey work, and sparse routes."
   },
   {
+    id: "voidSeeker",
+    classId: "explorer",
+    name: "Void Seeker",
+    role: "Deep scout",
+    price: 5400,
+    maxHull: 110,
+    maxShield: 120,
+    cargoCapacity: 28,
+    fuelCapacity: 14.0,
+    jumpRangeModifier: 1.4,
+    fuelUseModifier: 0.85,
+    speedModifier: 1.1,
+    handlingModifier: 1.12,
+    combatDamageModifier: 1.05,
+    description: "Premium exploration frame with massive fuel reserves and enhanced sensor housing."
+  },
+  {
     id: "brontWard",
+    classId: "armored",
     name: "Bront Ward",
     role: "Armored brawler",
     price: 3700,
@@ -115,7 +172,25 @@ export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
     description: "Heavy plating and hardpoints trade speed and hold space for survival."
   },
   {
+    id: "ironBastion",
+    classId: "armored",
+    name: "Iron Bastion",
+    role: "Siege platform",
+    price: 5900,
+    maxHull: 240,
+    maxShield: 160,
+    cargoCapacity: 22,
+    fuelCapacity: 6.5,
+    jumpRangeModifier: 0.8,
+    fuelUseModifier: 1.35,
+    speedModifier: 0.65,
+    handlingModifier: 0.6,
+    combatDamageModifier: 1.3,
+    description: "The ultimate in defensive engineering, capable of weathering intense combat."
+  },
+  {
     id: "calderaSpan",
+    classId: "balanced",
     name: "Caldera Span",
     role: "Balanced late-demo ship",
     price: 6200,
@@ -129,6 +204,74 @@ export const PLAYER_SHIPS: readonly PlayerShipDefinition[] = [
     handlingModifier: 1.02,
     combatDamageModifier: 1.08,
     description: "A premium all-route frame with balanced reach, hold space, and combat tolerance."
+  },
+  {
+    id: "voidTrekker",
+    classId: "longRange",
+    name: "Void Trekker",
+    role: "Long-lane specialist",
+    price: 4300,
+    maxHull: 105,
+    maxShield: 115,
+    cargoCapacity: 30,
+    fuelCapacity: 12.5,
+    jumpRangeModifier: 1.35,
+    fuelUseModifier: 0.88,
+    speedModifier: 1.02,
+    handlingModifier: 1.0,
+    combatDamageModifier: 1.0,
+    description: "Designed for systems where fuel stops are rare and jumps are long."
+  },
+  {
+    id: "apexVoyager",
+    classId: "balanced",
+    name: "Apex Voyager",
+    role: "Premium multi-role",
+    price: 8500,
+    maxHull: 160,
+    maxShield: 155,
+    cargoCapacity: 45,
+    fuelCapacity: 11.0,
+    jumpRangeModifier: 1.25,
+    fuelUseModifier: 0.85,
+    speedModifier: 1.1,
+    handlingModifier: 1.1,
+    combatDamageModifier: 1.15,
+    description: "Cutting-edge design that refuses to compromise on any core flight system."
+  },
+  {
+    id: "surveyRig",
+    classId: "specialist",
+    name: "Survey Rig",
+    role: "Sensor platform",
+    price: 3400,
+    maxHull: 115,
+    maxShield: 105,
+    cargoCapacity: 32,
+    fuelCapacity: 8.5,
+    jumpRangeModifier: 1.1,
+    fuelUseModifier: 1.0,
+    speedModifier: 0.95,
+    handlingModifier: 0.98,
+    combatDamageModifier: 1.0,
+    description: "Modified industrial hull optimized for systemic survey and data collection."
+  },
+  {
+    id: "salvageBarge",
+    classId: "specialist",
+    name: "Salvage Barge",
+    role: "Wreckage hauler",
+    price: 3900,
+    maxHull: 155,
+    maxShield: 95,
+    cargoCapacity: 68,
+    fuelCapacity: 7.8,
+    jumpRangeModifier: 0.9,
+    fuelUseModifier: 1.15,
+    speedModifier: 0.85,
+    handlingModifier: 0.82,
+    combatDamageModifier: 1.05,
+    description: "Rugged hull with reinforced bays for handling debris and salvaged components."
   }
 ] as const;
 

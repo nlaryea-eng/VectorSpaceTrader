@@ -1,4 +1,4 @@
-import type { CargoHold, EquipmentState, Meta, Mission, PlayerState, SaveData, Settings } from "./types";
+import type { CargoHold, CommodityId, EquipmentState, Meta, Mission, PlayerState, SaveData, Settings } from "./types";
 import { DEFAULT_EQUIPMENT } from "./Equipment";
 import { normalizeOnboardingMeta } from "./Onboarding";
 import { createRunStats, type RunStats } from "./RunStats";
@@ -62,7 +62,8 @@ function migrateSaveData(value: unknown): SaveData | null {
     hull: hasHull ? raw.hull : 100,
     maxHull: hasMaxHull ? raw.maxHull : 100,
     missionCargoUnits: typeof raw.missionCargoUnits === "number" ? raw.missionCargoUnits : 0,
-    discoveredSystemIds: normalizeDiscoveredSystemIds(raw.discoveredSystemIds, currentSystemId)
+    discoveredSystemIds: normalizeDiscoveredSystemIds(raw.discoveredSystemIds, currentSystemId),
+    cargoCostBasis: isRecord(raw.cargoCostBasis) ? (raw.cargoCostBasis as Partial<Record<CommodityId, number>>) : {}
   } as unknown as PlayerState;
 
   if (player.activeMission) {
@@ -228,7 +229,13 @@ function isValidPlayerState(value: unknown): value is PlayerState {
   if (value.hull !== undefined && (typeof value.hull !== "number" || value.hull < 0)) return false;
   if (value.maxHull !== undefined && (typeof value.maxHull !== "number" || value.maxHull < 1)) return false;
   if (value.missionCargoUnits !== undefined && typeof value.missionCargoUnits !== "number") return false;
-  return isValidCargo(value.cargo as CargoHold);
+  return isValidCargo(value.cargo as CargoHold) && isValidCargoCostBasis(value.cargoCostBasis as Record<CommodityId, number>);
+}
+
+function isValidCargoCostBasis(basis: Record<CommodityId, number> | undefined): basis is Record<CommodityId, number> {
+  if (basis === undefined) return true;
+  if (!isRecord(basis)) return false;
+  return Object.values(basis).every((price) => typeof price === "number" && price >= 0);
 }
 
 

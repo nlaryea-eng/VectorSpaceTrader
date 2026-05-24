@@ -24,6 +24,7 @@ import type {
   PlayerState,
   Projectile,
   Ship,
+  ShipClassId,
   StarSystem,
   Vector3
 } from "./types";
@@ -69,6 +70,8 @@ export interface RenderState {
   equipmentCategoryFilter: EquipmentCategory | "all";
   helpSectionId: HelpSectionId;
   helpPageIndex: number;
+  shipyardPage: number;
+  shipyardClassFilter: ShipClassId | "all";
 }
 
 interface ProjectedPoint {
@@ -1126,15 +1129,15 @@ export class Renderer {
     const headerFont = THEME.fonts.mono;
 
     if (this.narrow) {
-      // 4 narrow columns: NAME, PRICE, QTY, HELD. Trend folds into price color.
+      // 4 narrow columns: NAME, PRICE, HELD, P/L. QTY removed for space.
       const colName = rowLeft + 8;
-      const colPrice = rowLeft + rowW * 0.5;
-      const colQty = rowLeft + rowW * 0.72;
-      const colHeld = rowLeft + rowW - 8;
+      const colPrice = rowLeft + rowW * 0.44;
+      const colHeld = rowLeft + rowW * 0.7;
+      const colPL = rowLeft + rowW - 8;
       this.drawText("ITEM", colName, top - 16, { color: headerColor, font: headerFont, size: 9 });
       this.drawText("BAL", colPrice, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
-      this.drawText("QTY", colQty, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
       this.drawText("HELD", colHeld, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
+      this.drawText("P/L", colPL, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
 
       state.market.forEach((item, index) => {
         const y = top + index * rowGap;
@@ -1152,10 +1155,13 @@ export class Renderer {
         const trend = getPriceTrend(prevPrice, item.price);
         const priceColor = trend.label === "rising" ? THEME.colors.danger : trend.label === "falling" ? THEME.colors.success : THEME.colors.textPrimary;
         const arrow = trend.label === "rising" ? "↑" : trend.label === "falling" ? "↓" : " ";
+        const held = state.player.cargo[item.id] ?? 0;
+        const pl = this.formatProfitLoss(held, state.player.cargoCostBasis[item.id], item.price, true);
+
         this.drawText(item.name.toUpperCase(), colName, y, { size: 12, font: THEME.fonts.accent, color: THEME.colors.textPrimary });
         this.drawText(`${arrow}${item.price}`, colPrice, y, { align: "right", size: 11, font: THEME.fonts.mono, color: priceColor });
-        this.drawText(`${item.quantity}`, colQty, y, { align: "right", size: 11, font: THEME.fonts.mono });
-        this.drawText(`${state.player.cargo[item.id] ?? 0}`, colHeld, y, { align: "right", size: 11, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
+        this.drawText(`${held}`, colHeld, y, { align: "right", size: 11, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
+        this.drawText(pl.text, colPL, y, { align: "right", size: 11, font: THEME.fonts.mono, color: pl.color });
       });
 
       const buyFuelY = panelY + panelH - 80;
@@ -1172,6 +1178,7 @@ export class Renderer {
       this.drawText("TREND", left + 340, top - 28, { color: headerColor, font: headerFont, size: headerSize });
       this.drawText("SUPPLY", left + 430, top - 28, { color: headerColor, font: headerFont, size: headerSize });
       this.drawText("HELD", left + 520, top - 28, { color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("P/L", left + 610, top - 28, { color: headerColor, font: headerFont, size: headerSize });
 
       const wideRowW = this.width * 0.76;
       state.market.forEach((item, index) => {
@@ -1197,12 +1204,16 @@ export class Renderer {
 
         const rowFont = THEME.fonts.mono;
         const rowSize = 13;
+        const held = state.player.cargo[item.id] ?? 0;
+        const pl = this.formatProfitLoss(held, state.player.cargoCostBasis[item.id], item.price, false);
+
         this.drawText(`${index + 1}`, left, y, { size: rowSize, font: rowFont, color: THEME.colors.textDim });
         this.drawText(item.name.toUpperCase(), left + 50, y, { size: rowSize, font: THEME.fonts.accent, color: THEME.colors.textPrimary });
         this.drawText(`${item.price}`, left + 260, y, { size: rowSize, font: rowFont });
         this.drawText(trendText, left + 340, y, { size: 12, font: rowFont, color: trendColor });
         this.drawText(`${item.quantity}`, left + 430, y, { size: rowSize, font: rowFont });
-        this.drawText(`${state.player.cargo[item.id] ?? 0}`, left + 520, y, { size: rowSize, font: rowFont, color: THEME.colors.accentAmber });
+        this.drawText(`${held}`, left + 520, y, { size: rowSize, font: rowFont, color: THEME.colors.accentAmber });
+        this.drawText(pl.text, left + 610, y, { size: rowSize, font: rowFont, color: pl.color });
       });
 
       this.drawText(
@@ -1350,12 +1361,18 @@ export class Renderer {
     const left = this.narrow ? panelX + 12 : this.width * 0.1;
     const listTop = titleY + (this.narrow ? 40 : 64);
     const listW = this.narrow ? panelW - 24 : this.width * 0.36;
-    const rowSpacing = this.narrow ? 38 : 48;
+    const rowSpacing = this.narrow ? 38 : 42;
 
-    PLAYER_SHIPS.forEach((ship, index) => {
+    const filteredShips = PLAYER_SHIPS.filter((ship) => state.shipyardClassFilter === "all" || ship.classId === state.shipyardClassFilter);
+    const pageSize = this.narrow ? 5 : 8;
+    const pageCount = Math.max(1, Math.ceil(filteredShips.length / pageSize));
+    const page = Math.max(0, Math.min(state.shipyardPage, pageCount - 1));
+    const visibleShips = filteredShips.slice(page * pageSize, page * pageSize + pageSize);
+
+    visibleShips.forEach((ship, index) => {
       const y = listTop + index * rowSpacing;
       const rowY = y - 16;
-      const rowH = 30;
+      const rowH = this.narrow ? 32 : 36;
       const selected = ship.id === selectedShip.id;
 
       if (selected || isPointInRect(state.mousePosition, left, rowY, listW, rowH)) {
@@ -1381,9 +1398,15 @@ export class Renderer {
       });
     });
 
+    const shipyardPageY = listTop + visibleShips.length * rowSpacing + (this.narrow ? 8 : 12);
+    const filterLabel = `CLASS: ${state.shipyardClassFilter.toUpperCase()}`;
+    this.button("shipyard-class-cycle", filterLabel, left, shipyardPageY - 14, 120, 28);
+    if (page > 0) this.button("shipyard-page-prev", "PREV", left + 130, shipyardPageY - 14, 60, 28);
+    if (page < pageCount - 1) this.button("shipyard-page-next", "NEXT", left + 200, shipyardPageY - 14, 60, 28);
+
     // On narrow viewports, render detail below the list; on wider screens, beside.
     const detailX = this.narrow ? panelX + 16 : this.width * 0.52;
-    const detailY = this.narrow ? listTop + PLAYER_SHIPS.length * rowSpacing + 8 : this.height * 0.27;
+    const detailY = this.narrow ? shipyardPageY + 32 : this.height * 0.27;
     const detailNameSize = this.narrow ? 16 : 24;
     const detailRoleSize = this.narrow ? 10 : 12;
     this.drawText(selectedShip.name.toUpperCase(), detailX, detailY, { color: THEME.colors.textPrimary, size: detailNameSize, font: THEME.fonts.accent });
@@ -1923,6 +1946,18 @@ export class Renderer {
     this.ctx.moveTo(this.width / 2 - 160, y + 24);
     this.ctx.lineTo(this.width / 2 + 160, y + 24);
     this.ctx.stroke();
+  }
+
+  private formatProfitLoss(held: number, avgPrice: number | undefined, currentPrice: number, isNarrow: boolean): { text: string; color: string } {
+    if (held <= 0) return { text: "—", color: THEME.colors.textDim };
+    if (avgPrice === undefined || avgPrice === 0) {
+      return { text: isNarrow ? "?" : "Basis unknown", color: THEME.colors.textDim };
+    }
+    const diff = currentPrice - avgPrice;
+    const total = diff * held;
+    const sign = total > 0 ? "+" : "";
+    const color = total > 0 ? THEME.colors.success : total < 0 ? THEME.colors.danger : THEME.colors.textPrimary;
+    return { text: `${sign}${Math.round(total)}`, color };
   }
 
   private drawText(

@@ -1,18 +1,36 @@
 # Vector Space Trader
 
-Vector Space Trader is an original browser-based vector space-trading game.
+**Vector Space Trader** is an original browser-based vector space-trading and combat game.
+
+Current Release: **v0.3.0-beta — Content Systems Sprint**
+
+**Status:** This is a **desktop-first public demo beta**. It is not a v1 product, not an early access candidate, and is not yet mobile-certified.
 
 It is a clean-room project built with TypeScript, Canvas, and procedural Web Audio. It does not use source code, assets, ship designs, universe names, text, audio, or data tables from any protected third-party source-code archive.
 
 It is inspired by the broader tradition of classic vector space-trading and wireframe combat games, but it is not affiliated with, endorsed by, or derived from any protected third-party franchise or rights holder.
 
-## Install, Run, Test
+## Quick Start
 
 ```bash
+# Install dependencies
 npm install
+
+# Start development server
 npm run dev
-npm run build
+
+# Run TypeScript type-check
+npm run type-check
+
+# Run unit tests
 npm test
+
+# Build production distribution
+npm run build
+
+# Run browser smoke tests
+npm run smoke
+# or
 npm run test:browser
 ```
 
@@ -23,6 +41,16 @@ Open the local URL printed by Vite after `npm run dev`.
 After GitHub Pages is enabled for GitHub Actions, the public demo is published at:
 
 https://nlaryea-eng.github.io/VectorSpaceTrader/
+
+## Release Workflow
+
+To maintain repository integrity and compliance:
+- **No broad rewrites:** keep changes focused.
+- **Explicit staging:** do not use `git add .`; stage files individually or with `git add -u`.
+- **Verification:** run `npm run type-check`, `npm test`, `npm run build`, and `npm run smoke` before any commit.
+- **Compliance:** run the strict compliance grep to ensure no banned terms are introduced.
+- **Save Compatibility:** ensure `PlayerState` changes include migration logic.
+- **Tagging:** beta releases are tagged semantically (e.g., `v0.3.0-beta`).
 
 ## Controls
 
@@ -51,28 +79,21 @@ https://nlaryea-eng.github.io/VectorSpaceTrader/
 - `U`: mute or unmute procedural audio
 - `Escape`: pause, return, or menu
 
-Touch controls are drawn directly on the canvas for pitch, yaw, throttle, fire, map, dock/launch, trade, and menu actions.
+Touch controls are drawn directly on the canvas for pitch, yaw, throttle, fire, map, dock/launch, trade, and menu actions. Note that while functional, touch layout is not yet certified for all mobile devices.
 
-## Current MVP
+## Major Systems
 
-- Start screen with new game, continue, and controls.
-- First-person vector flight view with stars, HUD, station beacon, a wireframe enemy, laser fire, shield, and energy.
-- Deterministic original universe map with 128 systems generated from a numeric seed.
-- Discovery state for visited systems, with searchable and filterable map controls.
-- Jump range and fuel checks.
-- Docking and trading with original commodity set: Grain, Minerals, Computers, Medicine, Machinery, Luxuries, Fuel Cells, and Alloys.
-- LocalStorage save/load with versioned validation.
-- Original cockpit overlay with speed, shield, energy, balance (BAL), fuel, cargo, legal risk, and reputation panels.
-- Optional phosphor glow rendering mode.
-- Four original enemy ship classes with distinct wireframe geometry and combat behavior.
-- Animated station docking corridor with original station geometry.
-- Station service profiles that vary market depth, shipyard access, equipment stock, missions, survey work, salvage work, and repair pricing.
-- Shipyard progression with six original player hulls: Mirelle, Vask Relay, Vannic Hold, Talem Range, Bront Ward, and Caldera Span.
-- Equipment upgrades across weapons, cargo, fuel, shields, survey tools, repair tools, navigation, and salvage.
-- Hull damage and station-side repair through the equipment bay.
-- Original procedural missions across courier, fragile cargo, urgent dispatch, medical relief, survey, passenger, salvage, supply, restricted freight, and reputation-gated contracts.
-- Mission deadlines, reserved mission cargo capacity, reputation changes, legal-risk changes, dynamic economy drift, supply/demand changes, and price history.
-- Procedural Web Audio effects for lasers, hits, destruction, jumps, docking, trading, UI selection, and warnings.
+- **Flight & Combat:** First-person vector flight with starfield, HUD, station beacons, wireframe enemies, lasers, shields, and energy management.
+- **Docking:** Animated docking corridor transitions and deterministic station service profiles.
+- **Trading & Economy:** Original commodity set with a dynamic economy featuring drift, supply/demand shifts, and price history.
+- **Universe Map:** Deterministic original universe with 128 systems, discovery state, and searchable/filterable map controls.
+- **Shipyard:** Fleet progression with distinct ship classes, comparison tools, and equipment preservation.
+- **Equipment Bay:** Upgrade catalog across weapons, cargo, fuel, shields, and specialized tools.
+- **Procedural Missions:** Diverse contract types (courier, medical, salvage, etc.) with deadlines, reputation effects, and legal risks.
+- **Pilot Manual:** Integrated contextual help content for all major systems.
+- **Persistence:** LocalStorage save/resume with versioned validation and migration safety.
+- **Aesthetics:** Minimalist wireframe rendering with optional phosphor glow and procedural Web Audio.
+- **Compliance:** Verified clean-room implementation with no external IP references.
 
 ## Shipyard And Progression
 
@@ -88,16 +109,16 @@ All stations keep fuel and basic repair access, while other services vary by det
 
 ## Recent Changes
 
-### Compliance hardening pass:
-- Renamed the trademark-adjacent economy type to “Periphery”.
-- Rotated procedural universe seed.
-- Replaced the old HUD currency shorthand with “BAL”.
-- Confirmed build and test suite pass.
-- Maintained clean-room implementation with original code, procedural audio, and original wireframe assets.
+### v0.3.0-beta — Content Systems Sprint
+- **Compliance hardening:** Resolved economy labels and currency markers.
+- **Universe Rotation:** Refreshed procedural seed.
+- **Fleet Expansion:** Added player hulls and specialized equipment.
+- **Mission Variety:** Expanded procedural contract types.
+- **Browser Smoke:** Established viewport-specific QA safety net.
 
 ## Browser Smoke
 
-Run `npm run test:browser` before a public demo pass. It launches the built app locally, verifies the first playable flow, checks the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
+Run `npm run smoke` (or `npm run test:browser`) before a public demo pass. It launches the built app locally, verifies the first playable flow, checks the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
 
 ## Known Limitations
 
@@ -108,6 +129,8 @@ Run `npm run test:browser` before a public demo pass. It launches the built app 
 
 ## Roadmap
 
+- Add trading clarity (profit/loss visibility).
+- Expand fleet into data-driven classes.
 - Add richer multi-contact encounters and wing behavior.
 - Add stricter manual docking alignment and landing guidance.
 - Add equipment resale and trade route history.

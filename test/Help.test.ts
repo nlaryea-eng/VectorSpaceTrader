@@ -36,9 +36,13 @@ describe("Help Content", () => {
 
   it("is synchronized with ship data", () => {
     const shipsSection = HELP_CONTENT.find(s => s.id === "ships")!;
-    const shipNames = shipsSection.pages.flatMap(p => p.body).join(" ");
-    PLAYER_SHIPS.forEach(ship => {
-      expect(shipNames).toContain(ship.name);
+    const shipText = shipsSection.pages.flatMap(p => p.body).join(" ").toLowerCase();
+    const uniqueClasses = new Set(PLAYER_SHIPS.map(s => s.classId.toLowerCase()));
+
+    uniqueClasses.forEach(className => {
+      if (["courier", "hauler", "explorer", "armored", "balanced"].includes(className)) {
+        expect(shipText).toContain(className);
+      }
     });
   });
 

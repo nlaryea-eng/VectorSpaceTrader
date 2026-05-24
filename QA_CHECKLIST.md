@@ -33,6 +33,7 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 ## Station Services
 
 - [ ] Market buys and sells one unit with number keys and shifted number keys.
+- [ ] Market shows profit/loss visibility for held cargo (e.g. "+10 BAL", "-5 BAL", or "Basis unknown").
 - [ ] Market bulk buy/sell controls respect cargo capacity, available stock, owned cargo, and balance.
 - [ ] Fuel purchase works from the market and respects fuel capacity and balance.
 - [ ] Station dock screen clearly shows available and unavailable market, equipment, shipyard, and mission services.
@@ -40,6 +41,7 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] Equipment paging works by click/touch and `N` / `P`.
 - [ ] Hull repair works from the equipment bay and handles full, partial, unaffordable, discounted, and already-full repair states.
 - [ ] Shipyard is available at starter station and other shipyard stations.
+- [ ] Shipyard shows ship classes/categories and supports filtering or paging if catalog is expanded.
 - [ ] Shipyard compares current and selected hull stats, blocks cargo overflow, blocks unaffordable purchases, and preserves installed equipment.
 
 ## Missions
@@ -69,6 +71,7 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 ## Browser Smoke Tests
 
 - [ ] `npm run test:browser` passed locally with Chrome/Chromium.
+- [ ] 390×844 mobile viewport: verify touch controls and docked-hint overlap are not clipped.
 - [ ] Chrome desktop: launch, flight, dock, market, map, jump, combat, reload save.
 - [ ] Firefox desktop: launch, flight, dock, market, map, jump, combat, reload save.
 - [ ] Safari desktop: launch, flight, dock, market, map, jump, combat, reload save.

@@ -30,7 +30,7 @@ import {
   type RunStats
 } from "./RunStats";
 import { hasSave, loadGame, saveGame } from "./SaveGame";
-import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID } from "./Ships";
+import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID, type PlayerShipDefinition } from "./Ships";
 import { getStationProfile, hasStationService } from "./StationServices";
 import { createInitialTransientState } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
@@ -50,6 +50,7 @@ import type {
   Projectile,
   SaveData,
   Ship,
+  ShipClassId,
   StarSystem,
   Vector3
 } from "./types";
@@ -88,6 +89,8 @@ export class Game {
   private selectedShipId: PlayerShipId = PLAYER_SHIPS[1].id;
   private equipmentPage = 0;
   private equipmentCategoryFilter: EquipmentCategory | "all" = "all";
+  private shipyardPage = 0;
+  private shipyardClassFilter: ShipClassId | "all" = "all";
   private mapFilters: MapFilterState = { ...DEFAULT_MAP_FILTERS };
   private message = "";
   private lastTime = 0;
@@ -588,9 +591,21 @@ export class Game {
   }
 
   private updateShipyard(): void {
-    for (let index = 0; index < PLAYER_SHIPS.length; index += 1) {
+    if (this.input.consume("KeyN")) {
+      this.shipyardPage = (this.shipyardPage + 1) % this.getShipyardPageCount();
+      this.audio.play("ui");
+      return;
+    }
+    if (this.input.consume("KeyP")) {
+      this.shipyardPage = (this.shipyardPage - 1 + this.getShipyardPageCount()) % this.getShipyardPageCount();
+      this.audio.play("ui");
+      return;
+    }
+
+    const visibleShips = this.getVisibleShips();
+    for (let index = 0; index < visibleShips.length; index += 1) {
       if (!this.input.consume(`Digit${index + 1}`)) continue;
-      this.selectedShipId = PLAYER_SHIPS[index].id;
+      this.selectedShipId = visibleShips[index].id;
       this.audio.play("ui");
       return;
     }
@@ -598,6 +613,19 @@ export class Game {
     if (this.input.consume("Enter")) {
       this.purchaseSelectedShip();
     }
+  }
+
+  private getVisibleShips(): readonly PlayerShipDefinition[] {
+    const filtered = PLAYER_SHIPS.filter((ship) => this.shipyardClassFilter === "all" || ship.classId === this.shipyardClassFilter);
+    const pageSize = this.renderer.isNarrow() ? 5 : 8;
+    const start = this.shipyardPage * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }
+
+  private getShipyardPageCount(): number {
+    const filtered = PLAYER_SHIPS.filter((ship) => this.shipyardClassFilter === "all" || ship.classId === this.shipyardClassFilter);
+    const pageSize = this.renderer.isNarrow() ? 5 : 8;
+    return Math.max(1, Math.ceil(filtered.length / pageSize));
   }
 
   private updateMissions(): void {
@@ -1013,18 +1041,39 @@ export class Game {
       return;
     }
 
+    if (zone.id === "ship-buy") {
+      this.purchaseSelectedShip();
+      return;
+    }
+
+    if (zone.id === "shipyard-class-cycle") {
+      const classes: (ShipClassId | "all")[] = ["all", "starter", "courier", "hauler", "explorer", "patrol", "armored", "longRange", "balanced", "specialist"];
+      this.shipyardClassFilter = nextValue(classes, this.shipyardClassFilter);
+      this.shipyardPage = 0;
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "shipyard-page-prev") {
+      this.shipyardPage = Math.max(0, this.shipyardPage - 1);
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "shipyard-page-next") {
+      this.shipyardPage = Math.min(this.getShipyardPageCount() - 1, this.shipyardPage + 1);
+      this.audio.play("ui");
+      return;
+    }
+
     if (zone.id.startsWith("ship-row-")) {
       const index = parseInt(zone.id.slice("ship-row-".length), 10);
-      const ship = PLAYER_SHIPS[index];
+      const visible = this.getVisibleShips();
+      const ship = visible[index];
       if (ship) {
         this.selectedShipId = ship.id;
         this.audio.play("ui");
       }
-      return;
-    }
-
-    if (zone.id === "ship-buy") {
-      this.purchaseSelectedShip();
       return;
     }
 
@@ -1358,6 +1407,8 @@ export class Game {
       equipmentCategoryFilter: this.equipmentCategoryFilter,
       helpSectionId: this.helpSectionId,
       helpPageIndex: this.helpPageIndex,
+      shipyardPage: this.shipyardPage,
+      shipyardClassFilter: this.shipyardClassFilter,
     });
   }
 }
@@ -1377,6 +1428,7 @@ function createInitialPlayer(): PlayerState {
     balance: 1000,
     fuel: 7.5,
     cargo: {},
+    cargoCostBasis: {},
     cargoCapacity: 20,
     currentSystemId: 0,
     discoveredSystemIds: [0],

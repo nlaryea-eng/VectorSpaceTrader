@@ -91,11 +91,24 @@ export interface MarketItem extends Commodity {
 
 export type PlayerShipId =
   | "mirelle"
-  | "vaskRelay"
-  | "vannicHold"
-  | "talemRange"
-  | "brontWard"
-  | "calderaSpan";
+  | "vaskRelay" | "swiftVector" | "dashFrame"
+  | "vannicHold" | "bulkTitan" | "cargoWhale"
+  | "talemRange" | "voidSeeker" | "stellarScout"
+  | "brontWard" | "ironBastion" | "fortressHull"
+  | "calderaSpan" | "apexVoyager"
+  | "voidTrekker" | "spoolMaster"
+  | "surveyRig" | "salvageBarge";
+
+export type ShipClassId =
+  | "starter"
+  | "courier"
+  | "hauler"
+  | "explorer"
+  | "patrol"
+  | "armored"
+  | "longRange"
+  | "balanced"
+  | "specialist";
 
 export type StationService =
   | "market"
@@ -226,6 +239,7 @@ export interface PlayerState {
   balance: number;
   fuel: number;
   cargo: CargoHold;
+  cargoCostBasis: Partial<Record<CommodityId, number>>;
   cargoCapacity: number;
   currentSystemId: number;
   discoveredSystemIds: number[];
