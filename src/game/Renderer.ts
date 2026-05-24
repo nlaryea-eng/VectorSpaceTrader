@@ -1,4 +1,7 @@
-import { THEME } from "./Theme";
+import { SIGNAL_GLASS_THEME, THEME } from "./Theme";
+import { isSignalGlassUiEnabled } from "./FeatureFlags";
+import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
+import { respectsReducedMotion } from "./Layout";
 import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
@@ -10,7 +13,17 @@ import type { RunStats } from "./RunStats";
 import type { HintId } from "./Onboarding";
 import { getPlayerShip, getPlayerShipStats, PLAYER_SHIPS } from "./Ships";
 import { getStationProfile } from "./StationServices";
-import { HELP_CONTENT, type HelpSectionId } from "./HelpContent";
+import { HELP_CONTENT, searchHelpContent, type HelpSectionId } from "./HelpContent";
+import {
+  classifyEquipment,
+  formatDeltaBadge,
+  getEquipmentAffordability,
+  getMissionCardState,
+  getRouteValidity,
+  getShipComparison,
+  getStationRecommendation,
+  getStationServiceTiles
+} from "./SignalGlassScreens";
 import type {
   ButtonZone,
   CommodityId,
@@ -70,6 +83,7 @@ export interface RenderState {
   equipmentCategoryFilter: EquipmentCategory | "all";
   helpSectionId: HelpSectionId;
   helpPageIndex: number;
+  helpSearchQuery?: string;
   shipyardPage: number;
   shipyardClassFilter: ShipClassId | "all";
 }
@@ -160,6 +174,9 @@ export class Renderer {
   private readonly stars: Vector3[] = [];
   private narrow = false;
   private short = false;
+  private signalGlassUi = isSignalGlassUiEnabled();
+  private currentMousePosition: { x: number; y: number } | null = null;
+  private reducedMotion = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext("2d");
@@ -204,6 +221,9 @@ export class Renderer {
   }
 
   render(state: RenderState): void {
+    this.signalGlassUi = isSignalGlassUiEnabled();
+    this.reducedMotion = respectsReducedMotion();
+    this.currentMousePosition = state.mousePosition;
     this.buttonZones = [];
     this.ctx.clearRect(0, 0, this.width, this.height);
     this.ctx.fillStyle = THEME.colors.bgDeep;
@@ -366,17 +386,22 @@ export class Renderer {
 
     if (!overlayActive) {
       this.renderCockpitOverlay(state);
-      this.renderHud(state);
+      if (this.signalGlassUi) this.renderSignalGlassHud(state);
+      else this.renderHud(state);
       this.renderTouchControls(state);
       if (state.playerHitFlash > 0) this.renderHitFlash(state.playerHitFlash);
       if (state.message) {
-        this.drawStatusMessage(state.message);
+        if (this.signalGlassUi) this.renderSignalGlassToast(state.message);
+        else this.drawStatusMessage(state.message);
       }
     } else {
       // Behind a modal: still allow a thin dim of background so wireframe vista
       // remains visible, but no flight HUD/touch controls.
       this.ctx.fillStyle = "rgba(2, 4, 8, 0.55)";
       this.ctx.fillRect(0, 0, this.width, this.height);
+      if (this.signalGlassUi && !this.narrow) {
+        this.renderSignalGlassHud(state);
+      }
     }
   }
 
@@ -563,6 +588,103 @@ export class Renderer {
       this.ctx.shadowColor = color;
       this.ctx.fill();
       this.ctx.shadowBlur = 0;
+    }
+  }
+
+  private renderSignalGlassHud(state: RenderState): void {
+    const layout = createHudShellLayout({ width: this.width, height: this.height });
+    const colors = SIGNAL_GLASS_THEME.colors;
+    const shipStats = getPlayerShipStats(state.player);
+    const cargo = getTotalOccupiedCargo(state.player);
+    const hullFraction = state.player.hull / state.player.maxHull;
+    const shieldFraction = state.player.shield / state.player.maxShield;
+    const energyFraction = state.player.energy / 100;
+    const fuelFraction = state.player.fuel / shipStats.fuelCapacity;
+    const hullColor = hullFraction < 0.3 ? colors.danger : hullFraction < 0.6 ? colors.warning : colors.accent;
+    const riskLabel = getLegalRiskLabel(state.player.legalRisk);
+    const riskColor = state.player.legalRisk >= 5 ? colors.danger : state.player.legalRisk >= 2 ? colors.warning : colors.success;
+    const system = state.systems[state.player.currentSystemId];
+    const activeMission = state.player.activeMission;
+
+    this.signalPanel(layout.vitals.x, layout.vitals.y, layout.vitals.width, layout.vitals.height, "base");
+    if (layout.compact) {
+      const cells: Array<{ label: string; value: string; fraction: number; color: string }> = [
+        { label: "SHD", value: `${Math.round(state.player.shield)}`, fraction: shieldFraction, color: colors.info },
+        { label: "HULL", value: `${Math.round(state.player.hull)}`, fraction: hullFraction, color: hullColor },
+        { label: "ENG", value: `${Math.round(state.player.energy)}`, fraction: energyFraction, color: colors.accentViolet },
+        { label: "FUEL", value: state.player.fuel.toFixed(1), fraction: fuelFraction, color: colors.accent2 }
+      ];
+      const cellW = (layout.vitals.width - 18) / cells.length;
+      cells.forEach((cell, index) => {
+        const x = layout.vitals.x + 9 + cellW * index;
+        this.drawText(cell.label, x, layout.vitals.y + 17, { size: 9, font: THEME.fonts.mono, color: colors.textMuted });
+        this.drawText(cell.value, x + cellW - 8, layout.vitals.y + 17, { align: "right", size: 10, font: THEME.fonts.mono, color: colors.text });
+        this.drawProgressBar(x, layout.vitals.y + 34, cellW - 8, 4, cell.fraction, cell.color);
+      });
+      this.drawText(`${Math.round(state.player.balance)} BAL`, layout.vitals.x + 10, layout.vitals.y + 55, {
+        size: 10, font: THEME.fonts.mono, color: colors.accent2
+      });
+      this.drawText(`${cargo}/${state.player.cargoCapacity}`, layout.vitals.x + layout.vitals.width / 2, layout.vitals.y + 55, {
+        align: "center", size: 10, font: THEME.fonts.mono, color: colors.textMuted
+      });
+      this.drawText(riskLabel.toUpperCase(), layout.vitals.x + layout.vitals.width - 10, layout.vitals.y + 55, {
+        align: "right", size: 10, font: THEME.fonts.mono, color: riskColor
+      });
+    } else {
+      this.drawText("SIGNAL VITALS", layout.vitals.x + 14, layout.vitals.y + 18, {
+        color: colors.accent, size: 10, font: THEME.fonts.accent
+      });
+      const vitals: Array<{ label: string; value: string; fraction: number; color: string }> = [
+        { label: "SHIELD", value: `${Math.round(state.player.shield)}`, fraction: shieldFraction, color: colors.info },
+        { label: "HULL", value: `${Math.round(state.player.hull)}`, fraction: hullFraction, color: hullColor },
+        { label: "ENERGY", value: `${Math.round(state.player.energy)}`, fraction: energyFraction, color: colors.accentViolet },
+        { label: "FUEL", value: state.player.fuel.toFixed(1), fraction: fuelFraction, color: colors.accent2 }
+      ];
+      vitals.forEach((vital, index) => {
+        const y = layout.vitals.y + 48 + index * 42;
+        this.drawText(vital.label, layout.vitals.x + 14, y, { size: 10, font: THEME.fonts.mono, color: colors.textMuted });
+        this.drawText(vital.value, layout.vitals.x + layout.vitals.width - 14, y, {
+          align: "right", size: 11, font: THEME.fonts.mono, color: colors.text
+        });
+        this.drawProgressBar(layout.vitals.x + 14, y + 12, layout.vitals.width - 28, 5, vital.fraction, vital.color);
+      });
+      this.drawText(`SPD ${Math.round(state.player.speed).toString().padStart(3, "0")}`, layout.vitals.x + 14, layout.vitals.y + layout.vitals.height - 18, {
+        size: 13, font: THEME.fonts.mono, color: colors.accent
+      });
+    }
+
+    this.signalPanel(layout.status.x, layout.status.y, layout.status.width, layout.status.height, "base");
+    this.drawText("BALANCE", layout.status.x + 14, layout.status.y + 18, { color: colors.textMuted, size: 10, font: THEME.fonts.mono });
+    this.drawText(`${Math.round(state.player.balance)} BAL`, layout.status.x + layout.status.width - 14, layout.status.y + 18, {
+      align: "right", color: colors.accent2, size: 12, font: THEME.fonts.mono
+    });
+    if (!layout.compact) {
+      const ship = getPlayerShip(state.player.shipId);
+      const rows: Array<[string, string, string?]> = [
+        ["CARGO", `${cargo}/${state.player.cargoCapacity}`],
+        ["SHIP", ship.name],
+        ["RANK", state.pilotRank.title],
+        ["STATUS", riskLabel, riskColor],
+        ["REP", state.player.reputation.toFixed(1)]
+      ];
+      rows.forEach(([label, value, color], index) => {
+        const y = layout.status.y + 52 + index * 30;
+        this.drawText(label, layout.status.x + 14, y, { color: colors.textMuted, size: 10, font: THEME.fonts.mono });
+        this.drawText(value, layout.status.x + layout.status.width - 14, y, {
+          align: "right", color: color ?? colors.text, size: 11, font: THEME.fonts.mono
+        });
+      });
+    }
+
+    this.signalChip(layout.systemChip.x, layout.systemChip.y, layout.systemChip.width, layout.systemChip.height, formatSystemChip(system), colors.accent);
+    const missionText = activeMission
+      ? `${activeMission.title} -> ${state.systems[activeMission.destinationSystemId]?.name ?? "Unknown"}`
+      : "No active mission";
+    this.signalChip(layout.missionChip.x, layout.missionChip.y, layout.missionChip.width, layout.missionChip.height, missionText, activeMission ? colors.accent2 : colors.textMuted);
+
+    if (!layout.compact) {
+      const threat = state.enemy.alive ? "CONTACT ACTIVE" : "LANE CLEAR";
+      this.signalChip(layout.threatChip.x, layout.threatChip.y, layout.threatChip.width, layout.threatChip.height, threat, state.enemy.alive ? colors.warning : colors.success);
     }
   }
 
@@ -826,6 +948,8 @@ export class Renderer {
     const selected = state.systems[state.selectedSystemId];
 
     const currentPoint = projectSystemToMap(current, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
+    const selectedPoint = projectSystemToMap(selected, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
+    const routeValidity = getRouteValidity(current, selected, state.player);
     const shipStats = getPlayerShipStats(state.player);
     const ringRx = (shipStats.maxJumpRange / UNIVERSE_CONSTANTS.width) * mapW;
     const ringRy = (shipStats.maxJumpRange / UNIVERSE_CONSTANTS.height) * mapH;
@@ -840,6 +964,24 @@ export class Renderer {
     this.ctx.stroke();
     this.ctx.setLineDash([]);
     this.ctx.restore();
+
+    if (selected.id !== current.id) {
+      const routeColor = routeValidity.state === "valid"
+        ? THEME.colors.success
+        : routeValidity.state === "warning"
+          ? THEME.colors.warning
+          : THEME.colors.danger;
+      this.ctx.save();
+      this.ctx.strokeStyle = routeColor;
+      this.ctx.globalAlpha = 0.72;
+      this.ctx.lineWidth = 1.5;
+      this.ctx.setLineDash(routeValidity.state === "valid" ? [] : [6, 5]);
+      this.ctx.beginPath();
+      this.ctx.moveTo(currentPoint.x, currentPoint.y);
+      this.ctx.lineTo(selectedPoint.x, selectedPoint.y);
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
 
     const labeledPoints: Array<{ x: number; y: number }> = [];
 
@@ -922,6 +1064,7 @@ export class Renderer {
       { label: "CLASS", value: discovered ? selected.profile.classId.toUpperCase() : "UNKNOWN" },
       { label: "ECONOMY", value: discovered ? selected.economy.toUpperCase() : "UNKNOWN" },
       { label: "HAZARD", value: discovered ? formatMapValue(selected.hazardTag).toUpperCase() : "UNKNOWN", color: discovered ? (selected.hazardLevel > 5 ? THEME.colors.danger : THEME.colors.success) : THEME.colors.textDim },
+      { label: "ROUTE", value: routeValidity.label.toUpperCase(), color: routeValidity.state === "valid" ? THEME.colors.success : routeValidity.state === "warning" ? THEME.colors.warning : THEME.colors.danger },
     ];
 
     if (this.narrow) {
@@ -1063,6 +1206,24 @@ export class Renderer {
       });
     }
 
+    if (this.signalGlassUi) {
+      const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
+      const recommendation = getStationRecommendation(state.player, system, state.market, repairCost);
+      const recW = this.narrow ? panelW - 32 : Math.min(520, panelW - 64);
+      const recX = this.width / 2 - recW / 2;
+      const recY = this.narrow ? panelY + panelH - 322 : this.height * 0.52;
+      this.signalPanel(recX, recY, recW, this.narrow ? 62 : 70, "base");
+      this.drawText("RECOMMENDED NEXT ACTION", recX + 14, recY + 16, {
+        color: SIGNAL_GLASS_THEME.colors.textMuted, size: 9, font: THEME.fonts.mono
+      });
+      this.drawText(recommendation.title.toUpperCase(), recX + 14, recY + (this.narrow ? 34 : 38), {
+        color: SIGNAL_GLASS_THEME.colors.accent2, size: this.narrow ? 12 : 14, font: THEME.fonts.accent
+      });
+      this.drawText(recommendation.detail.toUpperCase(), recX + 14, recY + (this.narrow ? 50 : 56), {
+        color: SIGNAL_GLASS_THEME.colors.textMuted, size: this.narrow ? 8 : 10, font: THEME.fonts.mono
+      });
+    }
+
     if (this.narrow) {
       // Two-column grid of station service buttons that fits at 390px.
       const cols = 2;
@@ -1070,13 +1231,15 @@ export class Renderer {
       const bgap = 8;
       const bw = (panelW - 32 - bgap * (cols - 1)) / cols;
       const bh = 36;
-      const labels: Array<[string, string]> = [
-        ["touch-trade", "MARKET"],
-        ["touch-equipment", "EQUIPMENT"],
-        ["touch-shipyard", "SHIPS"],
-        ["touch-missions", "MISSIONS"],
-        ["help", "HELP"],
-      ];
+      const labels = this.signalGlassUi
+        ? getStationServiceTiles(system).map((tile) => [tile.id, tile.available ? tile.label.toUpperCase() : `${tile.label.toUpperCase()} LOCKED`] as [string, string])
+        : [
+            ["touch-trade", "MARKET"],
+            ["touch-equipment", "EQUIPMENT"],
+            ["touch-shipyard", "SHIPS"],
+            ["touch-missions", "MISSIONS"],
+            ["help", "HELP"],
+          ] as Array<[string, string]>;
       labels.forEach((entry, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
@@ -1090,13 +1253,20 @@ export class Renderer {
       const y = this.height * 0.67;
       const bw = 84;
       const bgap = 10;
+      const tiles = this.signalGlassUi ? getStationServiceTiles(system) : null;
       const totalW = bw * 6 + bgap * 5;
       const startX = this.width / 2 - totalW / 2;
-      this.button("touch-trade", "MARKET", startX, y, bw, 42);
-      this.button("touch-equipment", "EQUIPMENT", startX + (bw + bgap), y, bw, 42);
-      this.button("touch-shipyard", "SHIPS", startX + (bw + bgap) * 2, y, bw, 42);
-      this.button("touch-missions", "MISSIONS", startX + (bw + bgap) * 3, y, bw, 42);
-      this.button("help", "HELP", startX + (bw + bgap) * 4, y, bw, 42);
+      const labels: Array<[string, string]> = tiles
+        ? tiles.map((tile) => [tile.id, tile.available ? tile.label.toUpperCase().replace("TRADE ", "") : "LOCKED"])
+        : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"], ["help", "HELP"], ["touch-dock", "LAUNCH"]];
+      labels.slice(0, 5).forEach(([id, label], index) => {
+        this.button(id, label, startX + (bw + bgap) * index, y, bw, 42);
+        if (tiles && tiles[index] && !tiles[index].available) {
+          this.drawText(tiles[index].why.toUpperCase(), startX + (bw + bgap) * index + bw / 2, y + 56, {
+            align: "center", color: SIGNAL_GLASS_THEME.colors.textDim, size: 7, font: THEME.fonts.mono
+          });
+        }
+      });
       this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * 5, y, bw, 42);
     }
   }
@@ -1246,6 +1416,15 @@ export class Renderer {
     });
 
     const profile = getStationProfile(state.systems[state.player.currentSystemId]);
+    const sections = classifyEquipment(state.player, profile);
+    if (this.signalGlassUi) {
+      this.drawText(
+        `INSTALLED ${sections.installed.length} / AVAILABLE ${sections.available.length} / UNAVAILABLE ${sections.unavailable.length}`,
+        this.width / 2,
+        titleY + (this.narrow ? 20 : 28),
+        { align: "center", color: SIGNAL_GLASS_THEME.colors.accent, size: this.narrow ? 9 : 11, font: THEME.fonts.mono }
+      );
+    }
     const filteredEquipment = state.equipmentCategoryFilter === "all"
       ? EQUIPMENT
       : EQUIPMENT.filter((e) => e.category === state.equipmentCategoryFilter);
@@ -1283,7 +1462,7 @@ export class Renderer {
         color: installed ? THEME.colors.accentTeal : THEME.colors.textPrimary, font: THEME.fonts.accent, size: nameSize
       });
 
-      const status = installed ? "INSTALLED" : !stocked ? "OUT" : `${item.price} BAL`;
+      const status = installed ? "INSTALLED" : !stocked ? "UNAVAILABLE" : getEquipmentAffordability(state.player, item).toUpperCase();
       const statusColor = installed ? THEME.colors.accentTeal : !stocked || !affordable ? THEME.colors.textDim : THEME.colors.accentAmber;
       if (this.narrow) {
         // Status right-aligned; description on a second row.
@@ -1353,6 +1532,7 @@ export class Renderer {
     const selectedShip = getPlayerShip(state.selectedShipId);
     const currentStats = getPlayerShipStats(state.player);
     const selectedStats = getPlayerShipStats({ ...state.player, shipId: selectedShip.id });
+    const comparison = getShipComparison(state.player, selectedShip.id);
     const cargoUsed = getTotalOccupiedCargo(state.player);
     const canAfford = state.player.balance >= selectedShip.price;
     const cargoFits = cargoUsed <= selectedStats.cargoCapacity;
@@ -1366,6 +1546,11 @@ export class Renderer {
     this.drawText(`${Math.round(state.player.balance)} BAL · CARGO ${cargoUsed}/${state.player.cargoCapacity}`,
       this.width / 2, titleY + (this.narrow ? 18 : 24),
       { align: "center", color: THEME.colors.accentTeal, font: THEME.fonts.mono, size: this.narrow ? 10 : 11 });
+    if (this.signalGlassUi) {
+      this.drawText(`COMPARISON READY / ${comparison.affordabilityLabel.toUpperCase()}`,
+        this.width / 2, titleY + (this.narrow ? 34 : 42),
+        { align: "center", color: SIGNAL_GLASS_THEME.colors.accent2, font: THEME.fonts.mono, size: this.narrow ? 9 : 10 });
+    }
 
     const left = this.narrow ? panelX + 12 : this.width * 0.1;
     const listTop = titleY + (this.narrow ? 40 : 64);
@@ -1461,9 +1646,9 @@ export class Renderer {
     const warning = alreadyCurrent
       ? "SYSTEMS ACTIVE"
       : !canAfford
-        ? "INSUFFICIENT BAL"
+        ? comparison.affordabilityLabel.toUpperCase()
         : !cargoFits
-          ? `CARGO OVERFLOW: ${cargoUsed - selectedStats.cargoCapacity} UNITS`
+          ? `CARGO OVERFLOW: ${comparison.cargoOverflow} UNITS`
           : "READY FOR ACQUISITION";
 
     const warningColor = alreadyCurrent ? THEME.colors.accentTeal : (!canAfford || !cargoFits ? THEME.colors.danger : THEME.colors.success);
@@ -1539,6 +1724,12 @@ export class Renderer {
 
       this.buttonZones.push({ id: `mission-row-${index}`, label: mission.title, x: left, y: rowY, width: rowW, height: rowH });
       this.drawText(`${index + 1}`, left, y, { color: THEME.colors.textDim, font: THEME.fonts.mono, size: 12 });
+      const cardState = getMissionCardState(state.player, mission);
+      const cardColor = cardState.state === "acceptable"
+        ? THEME.colors.success
+        : cardState.state === "warning"
+          ? THEME.colors.warning
+          : THEME.colors.danger;
 
       const titleText = `${mission.typeLabel.toUpperCase()}: ${mission.title.toUpperCase()}`;
       if (this.narrow) {
@@ -1553,14 +1744,17 @@ export class Renderer {
         this.drawText(`→ ${dest} · ${cargoText} · ${deadlineText} · ${mission.riskLabel.toUpperCase()}`, left + 22, y + 18, {
           size: 10, color: THEME.colors.textSecondary, font: THEME.fonts.mono
         });
+        this.drawText(cardState.label.toUpperCase(), left + rowW - 8, y + 34, {
+          align: "right", size: 9, color: cardColor, font: THEME.fonts.mono
+        });
       } else {
         this.drawText(titleText, left + 38, y, { color: THEME.colors.textPrimary, size: 14, font: THEME.fonts.accent });
         this.drawText(`${mission.reward} BAL`, left + 320, y, { color: THEME.colors.accentAmber, font: THEME.fonts.mono, size: 13 });
         const cargoText = mission.cargoUnitsRequired > 0 ? `${mission.cargoUnitsRequired}T CARGO` : "NO CARGO";
         const deadlineText = mission.deadlineJumps >= 0 ? `${mission.deadlineJumps}J LIMIT` : "OPEN";
-        this.drawText(`${cargoText} · ${deadlineText} · ${mission.riskLabel.toUpperCase()}`, left + 420, y, { size: 11, color: THEME.colors.accentTeal, font: THEME.fonts.mono });
+        this.drawText(`${cargoText} · ${deadlineText} · ${mission.riskLabel.toUpperCase()} · ${cardState.label.toUpperCase()}`, left + 420, y, { size: 11, color: cardColor, font: THEME.fonts.mono });
         this.drawText(state.systems[mission.destinationSystemId]?.name.toUpperCase() ?? "?", left + 38, y + 20, { size: 11, color: THEME.colors.textSecondary, font: THEME.fonts.mono });
-        this.drawText(`REP ${signed(mission.reputationChange)} / LEGAL ${signed(mission.legalRiskChange)}`, left + 320, y + 20, { size: 11, color: THEME.colors.textDim, font: THEME.fonts.mono });
+        this.drawText(`REP ${signed(mission.reputationChange)} / LEGAL ${signed(mission.legalRiskChange)} / ${cardState.slackLabel.toUpperCase()}`, left + 320, y + 20, { size: 11, color: THEME.colors.textDim, font: THEME.fonts.mono });
       }
     });
 
@@ -1591,8 +1785,20 @@ export class Renderer {
 
     const sidebarRowH = this.narrow ? 22 : 30;
     const sidebarFontSize = this.narrow ? 9 : 12;
+    const helpQuery = state.helpSearchQuery ?? "";
+    const helpSections = searchHelpContent(helpQuery);
+    const visibleSections = helpSections.length > 0 ? helpSections : HELP_CONTENT;
 
-    HELP_CONTENT.forEach((section, index) => {
+    if (this.signalGlassUi) {
+      const searchLabel = helpQuery
+        ? `SEARCH "${helpQuery.toUpperCase()}" / ${helpSections.length} TOPICS`
+        : "SEARCH MANUAL TOPICS";
+      this.drawText(searchLabel, contentX, top - (this.narrow ? 14 : 24), {
+        color: SIGNAL_GLASS_THEME.colors.accent, size: this.narrow ? 9 : 11, font: THEME.fonts.mono
+      });
+    }
+
+    visibleSections.forEach((section, index) => {
       const y = top + index * sidebarRowH;
       const selected = section.id === state.helpSectionId;
       const rowY = y - sidebarRowH / 2;
@@ -1617,7 +1823,7 @@ export class Renderer {
       });
     });
 
-    const activeSection = HELP_CONTENT.find((s) => s.id === state.helpSectionId)!;
+    const activeSection = HELP_CONTENT.find((s) => s.id === state.helpSectionId) ?? visibleSections[0] ?? HELP_CONTENT[0];
     const activePage = activeSection.pages[state.helpPageIndex] ?? activeSection.pages[0];
 
     this.drawText(activeSection.title.toUpperCase(), contentX, top, {
@@ -1684,6 +1890,11 @@ export class Renderer {
     this.drawText("AUTO-SAVED DURING TRANSITS", this.width / 2, panelY + 110, {
       align: "center", color: THEME.colors.textSecondary, size: 11, font: THEME.fonts.mono
     });
+    if (this.signalGlassUi) {
+      this.drawText("SAVE CARD: SYSTEM / SHIP / CARGO / BAL / ACTIVE MISSION / LOADOUT", this.width / 2, panelY + 124, {
+        align: "center", color: SIGNAL_GLASS_THEME.colors.textMuted, size: 9, font: THEME.fonts.mono
+      });
+    }
     this.drawText(`BALANCE: ${Math.round(state.player.balance)} BAL`, this.width / 2, panelY + 138, {
       align: "center", font: THEME.fonts.mono, size: 13, color: THEME.colors.accentAmber
     });
@@ -1704,6 +1915,11 @@ export class Renderer {
     this.drawText("SYSTEM SETTINGS", this.width / 2, panelY + 36, {
       align: "center", color: THEME.colors.textPrimary, size: this.narrow ? 20 : 24, font: THEME.fonts.accent
     });
+    if (this.signalGlassUi) {
+      this.drawText("DISPLAY / AUDIO / CONTROLS", this.width / 2, panelY + 60, {
+        align: "center", color: SIGNAL_GLASS_THEME.colors.accent, size: 10, font: THEME.fonts.mono
+      });
+    }
 
     const left = panelX + 20;
     const top = panelY + 80;
@@ -1789,13 +2005,18 @@ export class Renderer {
       const pbColor = state.isNewPersonalBest ? THEME.colors.accentTeal : THEME.colors.success;
       row += rowGap + 8;
       this.drawText(pbLabel, cx, row, { align: "center", color: pbColor, size: 13, font: THEME.fonts.accent });
-
-      const btnRowY = py + panelH - 64;
-      const gbw = 130;
-      this.button("death-restart", "RESTART [R]", cx - gbw * 1.5 - 16, btnRowY, gbw, 42);
-      this.button("help", "PILOT MANUAL", cx - gbw / 2, btnRowY, gbw, 42);
-      this.button("death-menu", "MENU [Esc]", cx + gbw / 2 + 16, btnRowY, gbw, 42);
     }
+    if (this.signalGlassUi) {
+      this.drawText("SUGGESTED NEXT ACTION: RESTART, DOCK EARLY, REPAIR BEFORE RISKY CORRIDORS", cx, py + panelH - 92, {
+        align: "center", color: SIGNAL_GLASS_THEME.colors.accent2, size: 10, font: THEME.fonts.mono
+      });
+    }
+
+    const btnRowY = py + panelH - 64;
+    const gbw = 130;
+    this.button("death-restart", "RESTART [R]", cx - gbw * 1.5 - 16, btnRowY, gbw, 42);
+    this.button("help", "PILOT MANUAL", cx - gbw / 2, btnRowY, gbw, 42);
+    this.button("death-menu", "MENU [Esc]", cx + gbw / 2 + 16, btnRowY, gbw, 42);
   }
 
   private renderOnboardingHint(state: RenderState, hint: HintId): void {
@@ -1874,6 +2095,30 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
   }
 
+  private renderSignalGlassToast(message: string): void {
+    const toast = createToastModel(message, { width: this.width, height: this.height });
+    if (!toast) return;
+    const colors = SIGNAL_GLASS_THEME.colors;
+    const toneColor = toast.tone === "success"
+      ? colors.success
+      : toast.tone === "warning"
+        ? colors.warning
+        : toast.tone === "danger"
+          ? colors.danger
+          : colors.accent;
+
+    this.signalPanel(toast.bounds.x, toast.bounds.y, toast.bounds.width, toast.bounds.height, "overlay");
+    this.ctx.fillStyle = toneColor;
+    this.ctx.beginPath();
+    this.ctx.roundRect(toast.bounds.x + 10, toast.bounds.y + 10, 3, toast.bounds.height - 20, 2);
+    this.ctx.fill();
+    this.drawText(toast.text.toUpperCase(), toast.bounds.x + 24, toast.bounds.y + toast.bounds.height / 2, {
+      color: colors.text,
+      size: this.narrow ? 10 : 12,
+      font: THEME.fonts.mono
+    });
+  }
+
   private project(point: Vector3): ProjectedPoint {
     const z = point.z + 120;
     if (z <= 2) return { x: 0, y: 0, visible: false, scale: 0 };
@@ -1888,6 +2133,35 @@ export class Renderer {
 
   private button(id: string, label: string, x: number, y: number, width: number, height: number): void {
     this.buttonZones.push({ id, label, x, y, width, height });
+
+    if (this.signalGlassUi) {
+      const hovered = isPointInRect(this.currentMousePosition, x, y, width, height);
+      const lift = hovered && !this.reducedMotion ? -1 : 0;
+      this.ctx.shadowBlur = hovered && !this.reducedMotion ? 8 : 0;
+      this.ctx.shadowColor = hovered ? "rgba(108, 227, 214, 0.24)" : "transparent";
+      this.ctx.fillStyle = hovered ? SIGNAL_GLASS_THEME.colors.surface3 : "rgba(14, 19, 32, 0.74)";
+      this.ctx.beginPath();
+      this.ctx.roundRect(x, y + lift, width, height, SIGNAL_GLASS_THEME.radius.control);
+      this.ctx.fill();
+      this.ctx.shadowBlur = 0;
+
+      this.ctx.strokeStyle = hovered ? SIGNAL_GLASS_THEME.colors.focus : "rgba(108, 227, 214, 0.62)";
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.roundRect(x, y + lift, width, height, SIGNAL_GLASS_THEME.radius.control);
+      this.ctx.stroke();
+
+      this.ctx.fillStyle = "rgba(108, 227, 214, 0.9)";
+      this.ctx.fillRect(x + 8, y + lift + height - 3, Math.max(12, width - 16), hovered ? 2 : 1.5);
+
+      this.drawText(label, x + width / 2, y + lift + height / 2, {
+        align: "center",
+        color: SIGNAL_GLASS_THEME.colors.text,
+        size: Math.min(13, Math.max(9, height * 0.32)),
+        font: THEME.fonts.accent
+      });
+      return;
+    }
 
     // Glass effect background
     this.ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
@@ -1909,6 +2183,11 @@ export class Renderer {
   }
 
   private panel(x: number, y: number, width: number, height: number): void {
+    if (this.signalGlassUi) {
+      this.signalPanel(x, y, width, height, "elevated");
+      return;
+    }
+
     this.ctx.fillStyle = THEME.colors.bgGlass;
     this.ctx.beginPath();
     this.ctx.roundRect(x, y, width, height, 8);
@@ -1921,6 +2200,11 @@ export class Renderer {
   }
 
   private hudPanel(x: number, y: number, width: number, height: number): void {
+    if (this.signalGlassUi) {
+      this.signalPanel(x, y, width, height, "base");
+      return;
+    }
+
     this.ctx.fillStyle = "rgba(10, 14, 20, 0.4)";
     this.ctx.beginPath();
     this.ctx.roundRect(x, y, width, height, 4);
@@ -1930,6 +2214,47 @@ export class Renderer {
     this.ctx.beginPath();
     this.ctx.roundRect(x, y, width, height, 4);
     this.ctx.stroke();
+  }
+
+  private signalPanel(x: number, y: number, width: number, height: number, tier: "base" | "elevated" | "overlay"): void {
+    const colors = SIGNAL_GLASS_THEME.colors;
+    this.ctx.shadowBlur = tier === "elevated" ? 10 : 0;
+    this.ctx.shadowColor = "rgba(0, 0, 0, 0.24)";
+    this.ctx.fillStyle = tier === "overlay" ? colors.surfaceOverlay : tier === "elevated" ? colors.surface2 : colors.surfaceGlass;
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.panel);
+    this.ctx.fill();
+    this.ctx.shadowBlur = 0;
+
+    this.ctx.strokeStyle = "rgba(230, 236, 245, 0.1)";
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.panel);
+    this.ctx.stroke();
+
+    this.ctx.strokeStyle = "rgba(108, 227, 214, 0.28)";
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + SIGNAL_GLASS_THEME.radius.panel, y + 1);
+    this.ctx.lineTo(x + width - SIGNAL_GLASS_THEME.radius.panel, y + 1);
+    this.ctx.stroke();
+  }
+
+  private signalChip(x: number, y: number, width: number, height: number, label: string, color: string): void {
+    this.ctx.fillStyle = "rgba(14, 19, 32, 0.78)";
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.chip);
+    this.ctx.fill();
+    this.ctx.strokeStyle = "rgba(230, 236, 245, 0.12)";
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
+    this.ctx.fillStyle = color;
+    this.ctx.fillRect(x + 8, y + height - 3, Math.max(20, width - 16), 1);
+
+    const maxChars = Math.max(8, Math.floor(width / 8));
+    const clipped = label.length > maxChars ? `${label.slice(0, maxChars - 1)}...` : label;
+    this.drawText(clipped.toUpperCase(), x + width / 2, y + height / 2, {
+      align: "center", color, size: this.narrow ? 9 : 10, font: THEME.fonts.mono
+    });
   }
 
   private setVectorStroke(color: string, width: number, glow: boolean): void {
@@ -1962,11 +2287,9 @@ export class Renderer {
     if (avgPrice === undefined || avgPrice === 0) {
       return { text: isNarrow ? "?" : "Basis unknown", color: THEME.colors.textDim };
     }
-    const diff = currentPrice - avgPrice;
-    const total = diff * held;
-    const sign = total > 0 ? "+" : "";
-    const color = total > 0 ? THEME.colors.success : total < 0 ? THEME.colors.danger : THEME.colors.textPrimary;
-    return { text: `${sign}${Math.round(total)}`, color };
+    const badge = formatDeltaBadge(held, avgPrice, currentPrice);
+    const color = badge.tone === "success" ? THEME.colors.success : badge.tone === "danger" ? THEME.colors.danger : THEME.colors.textPrimary;
+    return { text: isNarrow ? badge.text.replace(" BAL / ", "/") : badge.text, color };
   }
 
   private drawText(

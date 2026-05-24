@@ -33,6 +33,23 @@ export type HelpSection = {
   pages: HelpPage[];
 };
 
+export const SCREEN_HELP_SECTIONS: Record<string, HelpSectionId> = {
+  start: "quickStart",
+  controls: "controls",
+  flight: "flight",
+  docking: "docking",
+  docked: "stations",
+  trade: "trading",
+  missions: "missions",
+  map: "map",
+  equipment: "equipment",
+  shipyard: "ships",
+  paused: "saveLoad",
+  settings: "saveLoad",
+  gameOver: "demoNotes",
+  help: "quickStart"
+};
+
 export const HELP_CONTENT: HelpSection[] = [
   {
     id: "quickStart",
@@ -444,4 +461,22 @@ export function getHelpSection(id: HelpSectionId): HelpSection {
   const section = HELP_CONTENT.find(s => s.id === id);
   if (!section) throw new Error(`Unknown help section: ${id}`);
   return section;
+}
+
+export function getHelpSectionForMode(mode: string): HelpSectionId {
+  return SCREEN_HELP_SECTIONS[mode] ?? "quickStart";
+}
+
+export function searchHelpContent(query: string): HelpSection[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return HELP_CONTENT;
+
+  return HELP_CONTENT.filter((section) => {
+    const haystack = [
+      section.title,
+      section.summary,
+      ...section.pages.flatMap((page) => [page.heading, ...page.body, ...(page.tips ?? [])])
+    ].join(" ").toLowerCase();
+    return haystack.includes(normalized);
+  });
 }
