@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Compliance string search
+        run: |
+          set +e
+          grep -RniE "elite|cobra|jameson|lave|diso|leesti|zaonce|riedquat|tionisla|coriolis|galcop|thargoid|thargon|frontier" . \
+            --exclude-dir=node_modules \
+            --exclude-dir=dist \
+            --exclude-dir=.git > /tmp/compliance-matches.txt
+          grep_status=$?
+          set -e
+
+          if [ "$grep_status" -eq 0 ]; then
+            grep -vE '^\./(AGENTS\.md|COMPLIANCE\.md|2026-05-24_compliance-review\.md|2026-05-24_assessment\.md|README\.md|CHANGELOG\.md|DEPLOY\.md|\.github/workflows/ci\.yml):' \
+              /tmp/compliance-matches.txt > /tmp/compliance-violations.txt || true
+            if [ -s /tmp/compliance-violations.txt ]; then
+              echo "Compliance violations found outside allowed documentation:"
+              cat /tmp/compliance-violations.txt
+              exit 1
+            fi
+          elif [ "$grep_status" -gt 1 ]; then
+            echo "Compliance grep failed"
+            exit "$grep_status"
+          fi
+
+          echo "Compliance check passed"
