@@ -1,4 +1,5 @@
 import type { CargoHold, Commodity, CommodityId, MarketItem, PlayerState, TradeResult } from "./types";
+import { getPlayerShipStats } from "./Ships";
 
 export const TRADE_CONSTANTS = {
   fuelPrice: 6,
@@ -7,17 +8,18 @@ export const TRADE_CONSTANTS = {
 
 export const REPAIR_COST_PER_HULL = 5;
 
-export function calcRepairCost(player: PlayerState): number {
-  return Math.ceil((player.maxHull - player.hull) * REPAIR_COST_PER_HULL);
+export function calcRepairCost(player: PlayerState, stationModifier = 1): number {
+  return Math.ceil((player.maxHull - player.hull) * REPAIR_COST_PER_HULL * getPlayerShipStats(player).repairCostModifier * stationModifier);
 }
 
-export function repairHull(player: PlayerState): TradeResult {
+export function repairHull(player: PlayerState, stationModifier = 1): TradeResult {
   const missing = player.maxHull - player.hull;
   if (missing <= 0) return fail("Hull is already at full integrity", player);
-  const affordable = Math.floor(player.credits / REPAIR_COST_PER_HULL);
+  const costPerHull = Math.max(1, REPAIR_COST_PER_HULL * getPlayerShipStats(player).repairCostModifier * stationModifier);
+  const affordable = Math.floor(player.credits / costPerHull);
   if (affordable <= 0) return fail("Not enough credits for hull repair", player);
   const repairAmount = Math.min(missing, affordable);
-  const cost = repairAmount * REPAIR_COST_PER_HULL;
+  const cost = Math.ceil(repairAmount * costPerHull);
   return {
     ok: true,
     player: {
@@ -119,8 +121,9 @@ export function sellCommodity(player: PlayerState, item: MarketItem, quantity: n
 
 export function buyFuel(player: PlayerState, units: number): TradeResult {
   const amount = Math.max(0, Number(units.toFixed(1)));
+  const fuelCapacity = getPlayerShipStats(player).fuelCapacity;
   if (amount <= 0) return fail("Fuel quantity must be positive", player);
-  if (player.fuel + amount > TRADE_CONSTANTS.maxFuel) return fail("Fuel tank is full", player);
+  if (player.fuel + amount > fuelCapacity) return fail("Fuel tank is full", player);
 
   const cost = Math.ceil(amount * TRADE_CONSTANTS.fuelPrice);
   if (player.credits < cost) return fail("Not enough credits", player);

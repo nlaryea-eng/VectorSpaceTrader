@@ -1,11 +1,14 @@
-import { EQUIPMENT } from "./Equipment";
+import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
+import { filterSystems, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
 import { getLegalRiskLabel, getReputationLabel } from "./Reputation";
 import { HINT_TEXT } from "./Onboarding";
 import { formatTimePlayed } from "./RunStats";
 import type { RankInfo } from "./Rank";
 import type { RunStats } from "./RunStats";
 import type { HintId } from "./Onboarding";
+import { getPlayerShip, getPlayerShipStats, PLAYER_SHIPS } from "./Ships";
+import { getStationProfile } from "./StationServices";
 import type {
   ButtonZone,
   CommodityId,
@@ -14,13 +17,14 @@ import type {
   MarketItem,
   Meta,
   Mission,
+  PlayerShipId,
   PlayerState,
   Projectile,
   Ship,
   StarSystem,
   Vector3
 } from "./types";
-import { calcRepairCost, getTotalOccupiedCargo, TRADE_CONSTANTS } from "./Trading";
+import { calcRepairCost, getTotalOccupiedCargo } from "./Trading";
 import { canJump, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
 
 export interface ExplosionEffect {
@@ -54,6 +58,9 @@ export interface RenderState {
   pilotRank: RankInfo;
   isNewPersonalBest: boolean;
   activeHint: HintId | null;
+  mapFilters: MapFilterState;
+  selectedShipId: PlayerShipId;
+  equipmentPage: number;
 }
 
 interface ProjectedPoint {
@@ -113,6 +120,7 @@ export class Renderer {
       if (state.mode === "docked") this.renderDocked(state);
       if (state.mode === "trade") this.renderTrade(state);
       if (state.mode === "equipment") this.renderEquipment(state);
+      if (state.mode === "shipyard") this.renderShipyard(state);
       if (state.mode === "missions") this.renderMissions(state);
       if (state.mode === "paused") this.renderPause(state);
       if (state.mode === "gameOver") this.renderGameOver(state);
@@ -157,6 +165,7 @@ export class Renderer {
     const rightLines = [
       "T — market (docked)",
       "E — equipment bay (docked)",
+      "Y — shipyard (docked)",
       "R — mission board (docked)",
       "H — repair hull (docked)",
       "F or + or = — buy fuel",
@@ -304,13 +313,14 @@ export class Renderer {
   }
 
   private renderHud(state: RenderState): void {
-    const system = state.systems[state.player.currentSystemId];
     const speed = Math.round(state.player.speed);
     const cargo = getTotalOccupiedCargo(state.player);
     const hullFraction = state.player.hull / state.player.maxHull;
     const hullColor = hullFraction < 0.3 ? "#ff6a6a" : hullFraction < 0.6 ? "#ffbb40" : "#d8ffe7";
     const riskLabel = getLegalRiskLabel(state.player.legalRisk);
     const riskColor = state.player.legalRisk >= 5 ? "#ff8f8f" : state.player.legalRisk >= 2 ? "#ffbb40" : "#d8ffe7";
+    const shipStats = getPlayerShipStats(state.player);
+    const ship = getPlayerShip(state.player.shipId);
     this.hudPanel(12, 12, 196, 222);
     this.hudPanel(this.width - 224, 12, 212, 222);
     const leftLines: Array<{ text: string; color?: string }> = [
@@ -318,7 +328,7 @@ export class Renderer {
       { text: `SHD ${Math.round(state.player.shield)}/${state.player.maxShield}` },
       { text: `HULL ${Math.round(state.player.hull)}/${state.player.maxHull}`, color: hullColor },
       { text: `ENG ${Math.round(state.player.energy).toString().padStart(3, "0")}` },
-      { text: `FUEL ${state.player.fuel.toFixed(1)}` },
+      { text: `FUEL ${state.player.fuel.toFixed(1)}/${shipStats.fuelCapacity.toFixed(1)}` },
       { text: `RANK ${state.pilotRank.title}`, color: "#86ffb2" }
     ];
     const rightLines: Array<{ text: string; color?: string }> = [
@@ -326,7 +336,7 @@ export class Renderer {
       { text: `CARGO ${cargo}/${state.player.cargoCapacity}` },
       { text: `STATUS: ${riskLabel}`, color: riskColor },
       { text: `REP ${state.player.reputation.toFixed(1)}` },
-      { text: `SYS ${system.name}` },
+      { text: `SHIP ${ship.name}` },
       { text: `KILLS ${state.runStats.enemiesDestroyed}`, color: "#d8ffe7" }
     ];
 
@@ -374,65 +384,81 @@ export class Renderer {
 
   private renderMap(state: RenderState): void {
     this.panel(this.width * 0.08, this.height * 0.1, this.width * 0.84, this.height * 0.78);
+    const matches = filterSystems(state.systems, state.mapFilters, state.player);
     this.drawText("Universe Map", this.width / 2, this.height * 0.15, { align: "center", size: 24, color: "#fff" });
     const mapX = this.width * 0.16;
-    const mapY = this.height * 0.2;
+    const mapY = this.height * 0.23;
     const mapW = this.width * 0.5;
-    const mapH = this.height * 0.56;
+    const mapH = this.height * 0.5;
     this.ctx.strokeStyle = "#276b42";
     this.ctx.strokeRect(mapX, mapY, mapW, mapH);
 
     const current = state.systems[state.player.currentSystemId];
     const selected = state.systems[state.selectedSystemId];
 
-    const curScreenX = mapX + (current.x / 96) * mapW;
-    const curScreenY = mapY + (current.y / 72) * mapH;
-    const ringRx = (UNIVERSE_CONSTANTS.maxJumpRange / 96) * mapW;
-    const ringRy = (UNIVERSE_CONSTANTS.maxJumpRange / 72) * mapH;
+    const currentPoint = projectSystemToMap(current, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
+    const shipStats = getPlayerShipStats(state.player);
+    const ringRx = (shipStats.maxJumpRange / UNIVERSE_CONSTANTS.width) * mapW;
+    const ringRy = (shipStats.maxJumpRange / UNIVERSE_CONSTANTS.height) * mapH;
     this.ctx.save();
     this.ctx.strokeStyle = "rgba(60,255,120,0.28)";
     this.ctx.lineWidth = 1.2;
     this.ctx.setLineDash([5, 5]);
     this.ctx.beginPath();
-    this.ctx.ellipse(curScreenX, curScreenY, ringRx, ringRy, 0, 0, Math.PI * 2);
+    this.ctx.ellipse(currentPoint.x, currentPoint.y, ringRx, ringRy, 0, 0, Math.PI * 2);
     this.ctx.stroke();
     this.ctx.setLineDash([]);
     this.ctx.restore();
 
     for (const system of state.systems) {
-      const x = mapX + (system.x / 96) * mapW;
-      const y = mapY + (system.y / 72) * mapH;
+      const point = projectSystemToMap(system, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
       const isCurrent = system.id === current.id;
       const isSelected = system.id === selected.id;
-      const inRange = !isCurrent && canJump(current, system, state.player.fuel);
-      this.ctx.fillStyle = isCurrent ? "#fff" : isSelected ? "#3cff78" : inRange ? "#a8e8b8" : "#456b54";
+      const inRange = !isCurrent && canJump(current, system, state.player.fuel, state.player);
+      const discovered = isSystemDiscovered(state.player, system.id);
+      const matched = matchesMapFilters(system, state.mapFilters, state.player);
+      const nearby = getJumpDistance(current, system) <= shipStats.maxJumpRange * 0.65;
+      const activeFilter = hasActiveMapFilter(state.mapFilters);
+      this.ctx.globalAlpha = activeFilter && !matched && !isSelected ? 0.24 : discovered ? 1 : 0.52;
+      this.ctx.fillStyle = isCurrent ? "#fff" : isSelected ? "#3cff78" : matched && activeFilter ? "#ffe066" : inRange ? "#a8e8b8" : "#456b54";
       this.ctx.beginPath();
-      this.ctx.arc(x, y, isCurrent || isSelected ? 4 : 2.5, 0, Math.PI * 2);
+      this.ctx.arc(point.x, point.y, isCurrent || isSelected ? 4 : matched && activeFilter ? 3.5 : 2.4, 0, Math.PI * 2);
       this.ctx.fill();
-      if (isCurrent || isSelected) {
-        this.drawText(system.name, x + 8, y - 8, { align: "left", size: 12, color: "#d8ffe7" });
+      this.ctx.globalAlpha = 1;
+      if (isCurrent || isSelected || nearby || (matched && activeFilter)) {
+        this.drawText(system.name, point.x + 8, point.y - 8, { align: "left", size: 11, color: discovered ? "#d8ffe7" : "#789b82" });
       }
       const hitR = 10;
-      this.buttonZones.push({ id: `map-system-${system.id}`, label: system.name, x: x - hitR, y: y - hitR, width: hitR * 2, height: hitR * 2 });
+      this.buttonZones.push({ id: `map-system-${system.id}`, label: system.name, x: point.x - hitR, y: point.y - hitR, width: hitR * 2, height: hitR * 2 });
     }
 
     const detailX = this.width * 0.7;
     const dist = getJumpDistance(current, selected);
-    const fuelRequired = getFuelRequired(current, selected);
-    const jumpReady = canJump(current, selected, state.player.fuel);
+    const fuelRequired = getFuelRequired(current, selected, state.player);
+    const jumpReady = canJump(current, selected, state.player.fuel, state.player);
+    const selectedProfile = getStationProfile(selected);
+    const selectedDiscovered = isSystemDiscovered(state.player, selected.id);
     this.drawText(selected.name, detailX, mapY + 20, { align: "left", color: "#fff", size: 20 });
-    this.drawText(`Economy: ${selected.economy}`, detailX, mapY + 56, { align: "left" });
-    this.drawText(`Gov: ${selected.government}`, detailX, mapY + 82, { align: "left" });
-    this.drawText(`Tech: ${selected.techLevel}`, detailX, mapY + 108, { align: "left" });
-    this.drawText(`Population: ${selected.population}M`, detailX, mapY + 134, { align: "left" });
-    this.drawText(`Distance: ${dist.toFixed(1)}`, detailX, mapY + 170, { align: "left" });
-    this.drawText(`Fuel needed: ${fuelRequired.toFixed(1)}`, detailX, mapY + 196, { align: "left" });
-    this.drawText(jumpReady ? "Jump ready" : "Out of range or fuel", detailX, mapY + 226, {
+    this.drawText(`${selectedDiscovered ? "Discovered" : "Unvisited"} · ${selected.economy}`, detailX, mapY + 50, { align: "left", color: "#b8ffd0", size: 13 });
+    this.drawText(`Hazard: ${formatMapValue(selected.hazardTag)} (${selected.hazardLevel})`, detailX, mapY + 76, { align: "left", size: 13 });
+    this.drawText(`Station: ${selectedProfile.label}`, detailX, mapY + 102, { align: "left", size: 13 });
+    this.drawText(`Exports ${selected.exportHint} · imports ${selected.importHint}`, detailX, mapY + 128, { align: "left", size: 13 });
+    this.drawText(`Distance: ${dist.toFixed(1)}   Fuel: ${fuelRequired.toFixed(1)}`, detailX, mapY + 164, { align: "left" });
+    this.drawText(jumpReady ? "Jump ready" : "Out of range or fuel", detailX, mapY + 194, {
       align: "left",
       color: jumpReady ? "#3cff78" : "#ff8f8f"
     });
-    this.button("map-jump", "JUMP [Enter]", detailX, mapY + 256, 160, 36);
-    this.drawText("Click system · A/D or ←/→ select · Enter/JUMP to travel · Esc back", this.width / 2, this.height * 0.83, {
+    this.button("map-jump", "JUMP [Enter]", detailX, mapY + 224, 160, 36);
+
+    const filterY = this.height * 0.18;
+    this.drawText(`Matches ${matches.length}/${state.systems.length}`, mapX, filterY, { align: "left", color: "#ffe066", size: 13 });
+    this.button("map-filter-hazard", `Haz ${formatMapValue(state.mapFilters.hazard)}`, mapX + 110, filterY - 16, 96, 28);
+    this.button("map-filter-economy", `Eco ${state.mapFilters.economy}`, mapX + 214, filterY - 16, 136, 28);
+    this.button("map-filter-discovery", `Seen ${state.mapFilters.discovery}`, mapX + 358, filterY - 16, 120, 28);
+    this.button("map-filter-service", `Svc ${formatMapValue(state.mapFilters.service)}`, mapX + 486, filterY - 16, 128, 28);
+    this.button("map-filter-clear", "Clear", mapX + 622, filterY - 16, 64, 28);
+
+    this.drawText("Search field above · click filters · A/D or ←/→ select · Enter/JUMP travel · Esc back", this.width / 2, this.height * 0.83, {
       align: "center", color: "#b8ffd0"
     });
     if (state.activeHint !== null) this.renderOnboardingHint(state.activeHint);
@@ -452,13 +478,14 @@ export class Renderer {
   private renderDocked(state: RenderState): void {
     this.panel(this.width * 0.2, this.height * 0.1, this.width * 0.6, this.height * 0.68);
     const system = state.systems[state.player.currentSystemId];
+    const profile = getStationProfile(system);
     const hullFraction = state.player.hull / state.player.maxHull;
     const hullColor = hullFraction < 0.3 ? "#ff6a6a" : hullFraction < 0.6 ? "#ffbb40" : "#72ff9d";
     const repLabel = getReputationLabel(state.player.reputation);
     const riskLabel = getLegalRiskLabel(state.player.legalRisk);
     const riskColor = state.player.legalRisk >= 5 ? "#ff8f8f" : state.player.legalRisk >= 2 ? "#ffbb40" : "#72ff9d";
     this.drawText(`${system.name} Dock`, this.width / 2, this.height * 0.18, { align: "center", size: 28, color: "#fff" });
-    this.drawText("Station services online", this.width / 2, this.height * 0.25, { align: "center", color: "#72ff9d" });
+    this.drawText(`${profile.label} · ${system.stationHint}`, this.width / 2, this.height * 0.25, { align: "center", color: "#72ff9d" });
     this.drawText(
       `Rank: ${state.pilotRank.title}`,
       this.width / 2, this.height * 0.31, { align: "center", color: "#86ffb2", size: 16 }
@@ -480,27 +507,36 @@ export class Renderer {
         this.width / 2, this.height * 0.49, { align: "center", color: "#86ffb2", size: 13 }
       );
     }
-    this.drawText("T: Market   E: Equipment   R: Missions   M: Map   D: Launch", this.width / 2, this.height * 0.56, {
+    const serviceSummary = [
+      profile.services.market ? "Market" : "No Market",
+      profile.services.equipment || profile.services.advancedEquipment ? "Gear" : "No Gear",
+      profile.services.shipyard ? "Shipyard" : "No Shipyard",
+      profile.services.missions ? "Missions" : "No Missions"
+    ].join("   ");
+    this.drawText(serviceSummary, this.width / 2, this.height * 0.55, { align: "center", color: "#b8ffd0", size: 13 });
+    this.drawText("T: Market   E: Equipment   Y: Shipyard   R: Missions   M: Map   D: Launch", this.width / 2, this.height * 0.6, {
       align: "center", size: 15
     });
-    const y = this.height * 0.64;
+    const y = this.height * 0.67;
     this.button("touch-trade", "Market", this.width / 2 - 185, y, 90, 38);
     this.button("touch-equipment", "Gear", this.width / 2 - 85, y, 80, 38);
-    this.button("touch-missions", "Missions", this.width / 2 + 5, y, 100, 38);
-    this.button("touch-dock", "Launch", this.width / 2 + 115, y, 90, 38);
+    this.button("touch-shipyard", "Ships", this.width / 2 + 5, y, 82, 38);
+    this.button("touch-missions", "Missions", this.width / 2 + 96, y, 100, 38);
+    this.button("touch-dock", "Launch", this.width / 2 + 206, y, 90, 38);
     if (state.activeHint !== null) this.renderOnboardingHint(state.activeHint);
   }
 
   private renderTrade(state: RenderState): void {
     this.panel(this.width * 0.06, this.height * 0.08, this.width * 0.88, this.height * 0.84);
     const cargoUsed = getTotalOccupiedCargo(state.player);
+    const shipStats = getPlayerShipStats(state.player);
     const missionCargo = state.player.missionCargoUnits ?? 0;
     const cargoLabel = missionCargo > 0
       ? `${cargoUsed}/${state.player.cargoCapacity} (${missionCargo} mission)`
       : `${cargoUsed}/${state.player.cargoCapacity}`;
     this.drawText("Station Market", this.width / 2, this.height * 0.14, { align: "center", size: 24, color: "#fff" });
     this.drawText(
-      `Credits ${state.player.credits}   Cargo ${cargoLabel}   Fuel ${state.player.fuel.toFixed(1)}/${TRADE_CONSTANTS.maxFuel}`,
+      `Credits ${state.player.credits}   Cargo ${cargoLabel}   Fuel ${state.player.fuel.toFixed(1)}/${shipStats.fuelCapacity.toFixed(1)}`,
       this.width / 2, this.height * 0.19, { align: "center", color: "#b8ffd0" }
     );
 
@@ -550,33 +586,47 @@ export class Renderer {
   private renderEquipment(state: RenderState): void {
     this.panel(this.width * 0.08, this.height * 0.1, this.width * 0.84, this.height * 0.82);
     this.drawText("Equipment Bay", this.width / 2, this.height * 0.16, { align: "center", size: 24, color: "#fff" });
+    const profile = getStationProfile(state.systems[state.player.currentSystemId]);
+    const pageSize = 8;
+    const pageCount = Math.max(1, Math.ceil(EQUIPMENT.length / pageSize));
+    const page = Math.min(state.equipmentPage, pageCount - 1);
+    const visibleEquipment = EQUIPMENT.slice(page * pageSize, page * pageSize + pageSize);
     const left = this.width * 0.16;
-    const top = this.height * 0.26;
+    const top = this.height * 0.24;
     const rowW = this.width * 0.68;
-    EQUIPMENT.forEach((item, index) => {
+    visibleEquipment.forEach((item, index) => {
       const installed = state.player.equipment[item.id];
-      const y = top + index * 56;
-      const rowY = y - 22;
-      const rowH = 44;
+      const stocked = isEquipmentAvailableAtStation(item, profile);
+      const affordable = state.player.credits >= item.price;
+      const y = top + index * 45;
+      const rowY = y - 18;
+      const rowH = 36;
       const hovered = isPointInRect(state.mousePosition, left, rowY, rowW, rowH);
-      if (hovered && !installed) {
+      if (hovered && !installed && stocked) {
         this.ctx.fillStyle = "rgba(60,255,120,0.10)";
         this.ctx.fillRect(left, rowY, rowW, rowH);
       }
       this.buttonZones.push({ id: `equip-row-${index}`, label: item.name, x: left, y: rowY, width: rowW, height: rowH });
       this.drawText(`${index + 1}`, left, y, { align: "left", color: "#72ff9d" });
       this.drawText(item.name, left + 42, y, { align: "left", color: installed ? "#86ffb2" : "#fff" });
-      this.drawText(installed ? "INSTALLED" : `${item.price} BAL`, left + 240, y, { align: "left" });
-      this.drawText(item.description, left + 390, y, { align: "left", size: 13, color: "#b8ffd0" });
+      const status = installed ? "INSTALLED" : !stocked ? "UNSTOCKED" : affordable ? `${item.price} BAL` : `${item.price} BAL`;
+      const statusColor = installed ? "#86ffb2" : !stocked || !affordable ? "#888" : "#d8ffe7";
+      this.drawText(status, left + 240, y, { align: "left", color: statusColor, size: 13 });
+      this.drawText(item.description, left + 390, y, { align: "left", size: 12, color: stocked ? "#b8ffd0" : "#777" });
     });
 
-    const repairY = top + EQUIPMENT.length * 56 + 22;
+    const pageY = top + visibleEquipment.length * 45 + 8;
+    this.drawText(`Page ${page + 1}/${pageCount} · ${profile.label}`, left, pageY, { align: "left", color: "#72ff9d", size: 13 });
+    if (page > 0) this.button("equip-page-prev", "Prev [P]", left + 220, pageY - 18, 94, 30);
+    if (page < pageCount - 1) this.button("equip-page-next", "Next [N]", left + 322, pageY - 18, 94, 30);
+
+    const repairY = pageY + 42;
     const missing = state.player.maxHull - state.player.hull;
     const hullFraction = state.player.hull / state.player.maxHull;
     const hullColor = hullFraction < 0.3 ? "#ff6a6a" : hullFraction < 0.6 ? "#ffbb40" : "#86ffb2";
     this.drawText(`Hull integrity: ${Math.round(state.player.hull)} / ${state.player.maxHull}`, left, repairY, { align: "left", color: hullColor });
     if (missing > 0) {
-      const repairCost = calcRepairCost(state.player);
+      const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
       const canAfford = state.player.credits >= 5;
       const repairLabel = `Repair hull  (${repairCost} BAL)  [H]`;
       const hovered = isPointInRect(state.mousePosition, left + 260, repairY - 14, 280, 28);
@@ -590,7 +640,82 @@ export class Renderer {
       this.drawText("Hull fully repaired", left + 260, repairY, { align: "left", color: "#86ffb2" });
     }
 
-    this.drawText("Click row or 1-5 to purchase.  H repairs hull.  Esc back.", this.width / 2, this.height * 0.86, {
+    this.drawText("Click row or 1-8 to purchase. N/P pages. H repairs hull. Esc back.", this.width / 2, this.height * 0.86, {
+      align: "center",
+      color: "#d8ffe7"
+    });
+  }
+
+  private renderShipyard(state: RenderState): void {
+    this.panel(this.width * 0.06, this.height * 0.08, this.width * 0.88, this.height * 0.84);
+    const currentShip = getPlayerShip(state.player.shipId);
+    const selectedShip = getPlayerShip(state.selectedShipId);
+    const currentStats = getPlayerShipStats(state.player);
+    const selectedStats = getPlayerShipStats({ ...state.player, shipId: selectedShip.id });
+    const cargoUsed = getTotalOccupiedCargo(state.player);
+    const canAfford = state.player.credits >= selectedShip.price;
+    const cargoFits = cargoUsed <= selectedStats.cargoCapacity;
+    const alreadyCurrent = selectedShip.id === currentShip.id;
+
+    this.drawText("Shipyard", this.width / 2, this.height * 0.14, { align: "center", size: 24, color: "#fff" });
+    this.drawText(`Credits ${state.player.credits} BAL · Cargo ${cargoUsed}/${state.player.cargoCapacity}`, this.width / 2, this.height * 0.19, {
+      align: "center",
+      color: "#b8ffd0"
+    });
+
+    const left = this.width * 0.1;
+    const listTop = this.height * 0.27;
+    const listW = this.width * 0.34;
+    PLAYER_SHIPS.forEach((ship, index) => {
+      const y = listTop + index * 44;
+      const rowY = y - 18;
+      const selected = ship.id === selectedShip.id;
+      if (selected || isPointInRect(state.mousePosition, left, rowY, listW, 36)) {
+        this.ctx.fillStyle = selected ? "rgba(60,255,120,0.16)" : "rgba(60,255,120,0.10)";
+        this.ctx.fillRect(left, rowY, listW, 36);
+      }
+      this.buttonZones.push({ id: `ship-row-${index}`, label: ship.name, x: left, y: rowY, width: listW, height: 36 });
+      this.drawText(`${index + 1}`, left + 8, y, { align: "left", color: "#72ff9d" });
+      this.drawText(ship.name, left + 44, y, { align: "left", color: ship.id === currentShip.id ? "#86ffb2" : "#fff" });
+      this.drawText(ship.id === currentShip.id ? "ACTIVE" : `${ship.price} BAL`, left + 210, y, { align: "left", size: 13 });
+    });
+
+    const detailX = this.width * 0.5;
+    const detailY = this.height * 0.27;
+    this.drawText(selectedShip.name, detailX, detailY, { align: "left", color: "#fff", size: 22 });
+    this.drawText(selectedShip.role, detailX, detailY + 28, { align: "left", color: "#72ff9d", size: 14 });
+    this.drawText(selectedShip.description, detailX, detailY + 56, { align: "left", color: "#b8ffd0", size: 13 });
+
+    const rows: Array<[string, string, string]> = [
+      ["Hull", `${currentStats.maxHull}`, `${selectedStats.maxHull}`],
+      ["Shield", `${currentStats.maxShield}`, `${selectedStats.maxShield}`],
+      ["Cargo", `${currentStats.cargoCapacity}`, `${selectedStats.cargoCapacity}`],
+      ["Fuel", currentStats.fuelCapacity.toFixed(1), selectedStats.fuelCapacity.toFixed(1)],
+      ["Range", currentStats.maxJumpRange.toFixed(1), selectedStats.maxJumpRange.toFixed(1)],
+      ["Speed", currentStats.speedModifier.toFixed(2), selectedStats.speedModifier.toFixed(2)],
+      ["Handling", currentStats.handlingModifier.toFixed(2), selectedStats.handlingModifier.toFixed(2)],
+      ["Combat", currentStats.combatDamageModifier.toFixed(2), selectedStats.combatDamageModifier.toFixed(2)]
+    ];
+    this.drawText("Current", detailX + 160, detailY + 100, { align: "right", color: "#72ff9d", size: 13 });
+    this.drawText("Selected", detailX + 260, detailY + 100, { align: "right", color: "#72ff9d", size: 13 });
+    rows.forEach(([label, current, selected], index) => {
+      const y = detailY + 128 + index * 24;
+      this.drawText(label, detailX, y, { align: "left", size: 13 });
+      this.drawText(current, detailX + 160, y, { align: "right", size: 13 });
+      this.drawText(selected, detailX + 260, y, { align: "right", size: 13, color: compareColor(Number(selected), Number(current)) });
+    });
+
+    const warning = alreadyCurrent
+      ? "Already active"
+      : !canAfford
+        ? "Not enough BAL"
+        : !cargoFits
+          ? `Cargo overflow: clear ${cargoUsed - selectedStats.cargoCapacity} units`
+          : "Purchase ready";
+    const warningColor = alreadyCurrent || !canAfford || !cargoFits ? "#ffbb40" : "#86ffb2";
+    this.drawText(warning, detailX, this.height * 0.76, { align: "left", color: warningColor });
+    this.button("ship-buy", "Buy [Enter]", detailX + 220, this.height * 0.735, 142, 38);
+    this.drawText("Click a hull or press 1-6 to compare. Enter buys. Esc back.", this.width / 2, this.height * 0.86, {
       align: "center",
       color: "#d8ffe7"
     });
@@ -625,15 +750,17 @@ export class Renderer {
       }
       this.buttonZones.push({ id: `mission-row-${index}`, label: mission.title, x: left, y: rowY, width: rowW, height: rowH });
       this.drawText(`${index + 1}`, left, y, { align: "left", color: "#72ff9d" });
-      this.drawText(mission.title, left + 38, y, { align: "left", color: "#fff" });
-      this.drawText(`${mission.reward} BAL`, left + 270, y, { align: "left" });
+      this.drawText(`${mission.typeLabel}: ${mission.title}`, left + 38, y, { align: "left", color: "#fff", size: 14 });
+      this.drawText(`${mission.reward} BAL`, left + 300, y, { align: "left" });
 
       const cargoText = mission.cargoUnitsRequired > 0 ? `${mission.cargoUnitsRequired}t cargo` : "no cargo";
       const deadlineText = mission.deadlineJumps >= 0 ? `${mission.deadlineJumps}j limit` : "open";
-      this.drawText(`${cargoText} · ${deadlineText}`, left + 370, y, { align: "left", size: 13, color: "#b8ffd0" });
-      this.drawText(state.systems[mission.destinationSystemId]?.name ?? "?", left + 530, y, { align: "left", size: 13, color: "#d8ffe7" });
+      const equipText = mission.requiredEquipment ? ` · needs ${formatMapValue(mission.requiredEquipment)}` : "";
+      this.drawText(`${cargoText} · ${deadlineText} · ${mission.riskLabel}${equipText}`, left + 390, y, { align: "left", size: 12, color: "#b8ffd0" });
+      this.drawText(state.systems[mission.destinationSystemId]?.name ?? "?", left + 38, y + 18, { align: "left", size: 12, color: "#d8ffe7" });
+      this.drawText(`Rep ${signed(mission.reputationChange)} / legal ${signed(mission.legalRiskChange)}`, left + 300, y + 18, { align: "left", size: 12, color: "#b8ffd0" });
     });
-    this.drawText("Click row or 1-6 to accept.  Jump to destination to complete.  Esc back.", this.width / 2, this.height * 0.84, {
+    this.drawText("Click row or 1-8 to accept. Jump to destination to complete. Esc back.", this.width / 2, this.height * 0.84, {
       align: "center", color: "#d8ffe7"
     });
     if (state.activeHint !== null) this.renderOnboardingHint(state.activeHint);
@@ -863,3 +990,17 @@ function isPointInRect(
   return point.x >= x && point.x <= x + w && point.y >= y && point.y <= y + h;
 }
 
+function formatMapValue(value: string): string {
+  if (value === "all") return "all";
+  return value.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
+}
+
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+function compareColor(selected: number, current: number): string {
+  if (selected > current) return "#86ffb2";
+  if (selected < current) return "#ffbb40";
+  return "#d8ffe7";
+}

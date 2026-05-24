@@ -1,8 +1,8 @@
-import type { CargoHold, Meta, PlayerState, SaveData, Settings } from "./types";
+import type { CargoHold, EquipmentState, Meta, Mission, PlayerState, SaveData, Settings } from "./types";
 import { DEFAULT_EQUIPMENT } from "./Equipment";
 import { normalizeOnboardingMeta } from "./Onboarding";
 import { createRunStats, type RunStats } from "./RunStats";
-import { TRADE_CONSTANTS } from "./Trading";
+import { applyPlayerShipStats, isPlayerShipId, normalizeShipId } from "./Ships";
 
 export const SAVE_KEY = "vector-space-trader:v1";
 
@@ -19,54 +19,52 @@ export function serializeSave(data: SaveData): string {
 export function deserializeSave(raw: string): SaveData | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!isValidSaveData(parsed)) return null;
-    return migrateSaveData(parsed);
+    const migrated = migrateSaveData(parsed);
+    if (!migrated || !isValidSaveData(migrated)) return null;
+    return migrated;
   } catch {
     return null;
   }
 }
 
-function migrateSaveData(data: SaveData): SaveData {
-  const raw = data.player as unknown as Record<string, unknown>;
+function migrateSaveData(value: unknown): SaveData | null {
+  if (!isRecord(value)) return null;
+  if (value.version !== 1) return null;
+  if (typeof value.savedAt !== "number" || typeof value.seed !== "number") return null;
+  if (!isRecord(value.player)) return null;
+
+  const raw = value.player;
+  const equipment = normalizeEquipment(raw.equipment);
+  if (!equipment) return null;
 
   const hasHull = "hull" in raw && typeof raw.hull === "number";
   const hasMaxHull = "maxHull" in raw && typeof raw.maxHull === "number";
+  const currentSystemId = typeof raw.currentSystemId === "number" ? raw.currentSystemId : 0;
 
-  let player = data.player;
-  if (!hasHull || !hasMaxHull) {
-    player = {
-      ...player,
-      hull: hasHull ? (raw.hull as number) : 100,
-      maxHull: hasMaxHull ? (raw.maxHull as number) : 100
-    };
-  }
-
-  if (player.missionCargoUnits === undefined) {
-    player = { ...player, missionCargoUnits: 0 };
-  }
+  let player = {
+    ...raw,
+    equipment,
+    shipId: normalizeShipId(raw.shipId),
+    hull: hasHull ? raw.hull : 100,
+    maxHull: hasMaxHull ? raw.maxHull : 100,
+    missionCargoUnits: typeof raw.missionCargoUnits === "number" ? raw.missionCargoUnits : 0,
+    discoveredSystemIds: normalizeDiscoveredSystemIds(raw.discoveredSystemIds, currentSystemId)
+  } as unknown as PlayerState;
 
   if (player.activeMission) {
-    const am = player.activeMission as unknown as Record<string, unknown>;
-    if (am.cargoUnitsRequired === undefined || am.deadlineJumps === undefined) {
-      player = {
-        ...player,
-        activeMission: {
-          ...player.activeMission,
-          cargoUnitsRequired: (am.cargoUnitsRequired as number | undefined) ?? 0,
-          deadlineJumps: (am.deadlineJumps as number | undefined) ?? -1
-        }
-      };
-    }
+    player = { ...player, activeMission: migrateMission(player.activeMission) };
   }
 
+  player = applyPlayerShipStats(player);
+
   const migrated: SaveData = {
-    ...data,
+    ...(value as unknown as SaveData),
     player,
-    runStats: data.runStats ?? createRunStats(player.currentSystemId)
+    runStats: isRecord(value.runStats) ? (value.runStats as unknown as RunStats) : createRunStats(player.currentSystemId)
   };
 
-  if (data.meta !== undefined) {
-    migrated.meta = normalizeOnboardingMeta(data.meta);
+  if (value.meta !== undefined) {
+    migrated.meta = normalizeOnboardingMeta(value.meta as Meta);
   }
 
   return migrated;
@@ -139,14 +137,17 @@ function isValidPlayerState(value: unknown): value is PlayerState {
   if (typeof value.orientation.yaw !== "number") return false;
   if (typeof value.orientation.roll !== "number") return false;
   if (typeof value.speed !== "number") return false;
-  if (typeof value.maxShield !== "number" || value.maxShield < 1 || value.maxShield > 160) return false;
+  if (!isPlayerShipId(value.shipId)) return false;
+  if (typeof value.maxShield !== "number" || value.maxShield < 1 || value.maxShield > 240) return false;
   if (typeof value.shield !== "number" || value.shield < 0 || value.shield > value.maxShield) return false;
   if (typeof value.energy !== "number" || value.energy < 0 || value.energy > 100) return false;
   if (typeof value.credits !== "number" || value.credits < 0) return false;
-  if (typeof value.fuel !== "number" || value.fuel < 0 || value.fuel > TRADE_CONSTANTS.maxFuel) return false;
+  if (typeof value.fuel !== "number" || value.fuel < 0 || value.fuel > 12) return false;
   if (!isRecord(value.cargo)) return false;
   if (typeof value.cargoCapacity !== "number" || value.cargoCapacity <= 0) return false;
   if (typeof value.currentSystemId !== "number" || value.currentSystemId < 0) return false;
+  if (!Array.isArray(value.discoveredSystemIds)) return false;
+  if (!value.discoveredSystemIds.every((id: unknown) => typeof id === "number" && id >= 0)) return false;
   if (typeof value.docked !== "boolean") return false;
   if (typeof value.legalRisk !== "number" || value.legalRisk < 0) return false;
   if (typeof value.reputation !== "number") return false;
@@ -154,11 +155,68 @@ function isValidPlayerState(value: unknown): value is PlayerState {
   const equipment = value.equipment;
   if (!Object.keys(DEFAULT_EQUIPMENT).every((key) => typeof equipment[key] === "boolean")) return false;
   if (value.activeMissionId !== undefined && typeof value.activeMissionId !== "string") return false;
-  if (value.activeMission !== undefined && !isRecord(value.activeMission)) return false;
+  if (value.activeMission !== undefined && !isValidMission(value.activeMission)) return false;
   if (value.hull !== undefined && (typeof value.hull !== "number" || value.hull < 0)) return false;
   if (value.maxHull !== undefined && (typeof value.maxHull !== "number" || value.maxHull < 1)) return false;
   if (value.missionCargoUnits !== undefined && typeof value.missionCargoUnits !== "number") return false;
   return isValidCargo(value.cargo as CargoHold);
+}
+
+function isValidMission(value: unknown): value is Mission {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== "string" || typeof value.type !== "string") return false;
+  if (typeof value.typeLabel !== "string" || typeof value.title !== "string" || typeof value.briefing !== "string") return false;
+  if (typeof value.originSystemId !== "number" || value.originSystemId < 0) return false;
+  if (typeof value.destinationSystemId !== "number" || value.destinationSystemId < 0) return false;
+  if (typeof value.reward !== "number" || value.reward < 0) return false;
+  if (typeof value.reputationChange !== "number" || typeof value.legalRiskChange !== "number") return false;
+  if (typeof value.failureReputationChange !== "number" || typeof value.failureLegalRiskChange !== "number") return false;
+  if (typeof value.cargoUnitsRequired !== "number" || value.cargoUnitsRequired < 0) return false;
+  if (typeof value.cargoLabel !== "string") return false;
+  if (typeof value.deadlineJumps !== "number") return false;
+  if (typeof value.riskLabel !== "string" || typeof value.riskLevel !== "number") return false;
+  if (value.requiredEquipment !== undefined && typeof value.requiredEquipment !== "string") return false;
+  if (value.minReputation !== undefined && typeof value.minReputation !== "number") return false;
+  return true;
+}
+
+function migrateMission(value: Mission): Mission {
+  const raw = value as unknown as Record<string, unknown>;
+  const type = typeof raw.type === "string" ? raw.type : "courier";
+  return {
+    ...value,
+    typeLabel: typeof raw.typeLabel === "string" ? raw.typeLabel : type,
+    failureReputationChange: typeof raw.failureReputationChange === "number" ? raw.failureReputationChange : -2,
+    failureLegalRiskChange: typeof raw.failureLegalRiskChange === "number" ? raw.failureLegalRiskChange : 1,
+    cargoUnitsRequired: typeof raw.cargoUnitsRequired === "number" ? raw.cargoUnitsRequired : 0,
+    cargoLabel: typeof raw.cargoLabel === "string" ? raw.cargoLabel : "contract cargo",
+    deadlineJumps: typeof raw.deadlineJumps === "number" ? raw.deadlineJumps : -1,
+    riskLabel: typeof raw.riskLabel === "string" ? raw.riskLabel : "standard",
+    riskLevel: typeof raw.riskLevel === "number" ? raw.riskLevel : 1,
+    requiredEquipment: typeof raw.requiredEquipment === "string" ? raw.requiredEquipment as Mission["requiredEquipment"] : undefined,
+    minReputation: typeof raw.minReputation === "number" ? raw.minReputation : undefined
+  };
+}
+
+function normalizeEquipment(value: unknown): EquipmentState | null {
+  if (!isRecord(value)) return null;
+  const result: EquipmentState = { ...DEFAULT_EQUIPMENT };
+  for (const key of Object.keys(DEFAULT_EQUIPMENT) as Array<keyof EquipmentState>) {
+    if (value[key] === undefined) continue;
+    if (typeof value[key] !== "boolean") return null;
+    result[key] = value[key];
+  }
+  return result;
+}
+
+function normalizeDiscoveredSystemIds(value: unknown, currentSystemId: number): number[] {
+  const discovered = new Set<number>([currentSystemId]);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (typeof item === "number" && item >= 0) discovered.add(item);
+    }
+  }
+  return [...discovered].sort((a, b) => a - b);
 }
 
 function isValidCargo(cargo: CargoHold): boolean {

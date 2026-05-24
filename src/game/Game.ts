@@ -8,9 +8,10 @@ import {
   getLastKnownPrice,
   recordPriceHistory
 } from "./Economy";
-import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile } from "./Equipment";
+import { buyEquipment, DEFAULT_EQUIPMENT, getEquipmentKeys, getLaserProfile } from "./Equipment";
 import { Input } from "./Input";
 import { normalizeMapAction, normalizeMarketAction } from "./InputRouter";
+import { DEFAULT_MAP_FILTERS, type MapFilterState, selectAdjacentFilteredSystem } from "./MapSearch";
 import { acceptMission, completeMission, decrementMissionDeadline, generateMissions } from "./Missions";
 import { dismissHint, shouldShowHint, type HintId } from "./Onboarding";
 import { clamp, distance, length, updateOrientation, updatePosition, updateVelocity, vec3 } from "./Physics";
@@ -29,9 +30,11 @@ import {
   type RunStats
 } from "./RunStats";
 import { hasSave, loadGame, saveGame } from "./SaveGame";
+import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID } from "./Ships";
+import { getStationProfile, hasStationService } from "./StationServices";
 import { createInitialTransientState } from "./TransientState";
-import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity, TRADE_CONSTANTS } from "./Trading";
-import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
+import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
+import { canJump, generateUniverse, getFuelRequired, getJumpDistance } from "./Universe";
 import type {
   EconomyState,
   EquipmentId,
@@ -39,6 +42,7 @@ import type {
   MarketItem,
   Meta,
   Mission,
+  PlayerShipId,
   PlayerState,
   Projectile,
   SaveData,
@@ -53,8 +57,7 @@ const DOCKING_RANGE = 78;
 const DOCKING_DURATION = 1.35;
 const WARNING_COOLDOWN = 2.5;
 const RESPAWN_DELAY = 5.0;
-
-const EQUIPMENT_KEYS: EquipmentId[] = ["pulseLaser", "beamLaser", "cargoExpansion", "fuelScoop", "shieldBooster"];
+const EQUIPMENT_PAGE_SIZE = 8;
 
 const HINT_MODES: Partial<Record<GameMode, HintId>> = {
   flight: "flight",
@@ -62,6 +65,7 @@ const HINT_MODES: Partial<Record<GameMode, HintId>> = {
   trade: "trade",
   map: "map",
   missions: "missions",
+  shipyard: "shipyard",
 };
 
 export class Game {
@@ -78,6 +82,9 @@ export class Game {
   private enemy: Ship = createEnemyShip();
   private projectiles: Projectile[] = [];
   private selectedSystemId = 1;
+  private selectedShipId: PlayerShipId = PLAYER_SHIPS[1].id;
+  private equipmentPage = 0;
+  private mapFilters: MapFilterState = { ...DEFAULT_MAP_FILTERS };
   private message = "";
   private lastTime = 0;
   private enemyCooldown = 1.5;
@@ -93,10 +100,12 @@ export class Game {
   private meta: Meta = { hasSeenOnboarding: false, dismissedHints: [] };
   private isNewPersonalBest = false;
   private lastAmbientMode: AmbientMode = "none";
+  private readonly mapSearchInput: HTMLInputElement;
 
   constructor(canvas: HTMLCanvasElement) {
     this.input = new Input(canvas);
     this.renderer = new Renderer(canvas);
+    this.mapSearchInput = this.createMapSearchInput();
     this.economy = recordPriceHistory(this.economy, this.player.currentSystemId, this.market);
   }
 
@@ -109,6 +118,7 @@ export class Game {
   stop(): void {
     cancelAnimationFrame(this.animationFrame);
     this.input.detach();
+    this.mapSearchInput.remove();
   }
 
   private readonly loop = (time: number): void => {
@@ -154,7 +164,7 @@ export class Game {
 
     if (this.input.consume("Escape")) {
       if (this.mode === "paused") this.mode = this.previousMode;
-      else if (this.mode === "map" || this.mode === "trade" || this.mode === "equipment" || this.mode === "missions") {
+      else if (this.mode === "map" || this.mode === "trade" || this.mode === "equipment" || this.mode === "shipyard" || this.mode === "missions") {
         this.mode = this.player.docked ? "docked" : "flight";
       } else {
         this.previousMode = this.mode;
@@ -196,9 +206,10 @@ export class Game {
     }
 
     if (this.player.docked) {
-      if (this.input.consume("KeyT")) this.mode = "trade";
-      if (this.input.consume("KeyE")) this.mode = "equipment";
-      if (this.input.consume("KeyR")) this.mode = "missions";
+      if (this.input.consume("KeyT")) this.openStationMode("trade");
+      if (this.input.consume("KeyE")) this.openStationMode("equipment");
+      if (this.input.consume("KeyY")) this.openStationMode("shipyard");
+      if (this.input.consume("KeyR")) this.openStationMode("missions");
     }
 
     if (this.mode === "trade") {
@@ -208,6 +219,11 @@ export class Game {
 
     if (this.mode === "equipment") {
       this.updateEquipment();
+      return;
+    }
+
+    if (this.mode === "shipyard") {
+      this.updateShipyard();
       return;
     }
 
@@ -243,21 +259,23 @@ export class Game {
 
   private updateFlight(dt: number): void {
     const axes = this.input.getFlightAxes();
+    const shipStats = getPlayerShipStats(this.player);
     this.player = {
       ...this.player,
-      orientation: updateOrientation(this.player.orientation, axes, dt)
+      orientation: updateOrientation(this.player.orientation, axes, dt, shipStats.handlingModifier)
     };
-    const velocity = updateVelocity(this.player.velocity, this.player.orientation, axes.throttle, dt);
+    const velocity = updateVelocity(this.player.velocity, this.player.orientation, axes.throttle, dt, shipStats.speedModifier);
+    const shieldRecharge = this.player.equipment.quietShieldMatrix ? 2.6 : 2;
     this.player = {
       ...this.player,
       velocity,
       position: updatePosition(this.player.position, velocity, dt),
       speed: length(velocity),
       energy: clamp(this.player.energy + dt * 3, 0, 100),
-      shield: clamp(this.player.shield + dt * 2, 0, this.player.maxShield),
+      shield: clamp(this.player.shield + dt * shieldRecharge, 0, this.player.maxShield),
       fuel:
         this.player.equipment.fuelScoop && length(velocity) > 12
-          ? clamp(Number((this.player.fuel + dt * 0.035).toFixed(3)), 0, TRADE_CONSTANTS.maxFuel)
+          ? clamp(Number((this.player.fuel + dt * 0.035).toFixed(3)), 0, shipStats.fuelCapacity)
           : this.player.fuel
     };
 
@@ -375,11 +393,11 @@ export class Game {
     if (!action) return;
 
     if (action === "previous") {
-      this.selectedSystemId = (this.selectedSystemId - 1 + this.systems.length) % this.systems.length;
+      this.selectedSystemId = selectAdjacentFilteredSystem(this.systems, this.selectedSystemId, -1, this.mapFilters, this.player);
       this.audio.play("ui");
     }
     if (action === "next") {
-      this.selectedSystemId = (this.selectedSystemId + 1) % this.systems.length;
+      this.selectedSystemId = selectAdjacentFilteredSystem(this.systems, this.selectedSystemId, 1, this.mapFilters, this.player);
       this.audio.play("ui");
     }
     if (action === "jump") {
@@ -426,7 +444,6 @@ export class Game {
       this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, quantityDelta);
       this.player = {
         ...result.player,
-        reputation: Number((result.player.reputation + 0.1).toFixed(1)),
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, action.type)
       };
       this.refreshMarket(true);
@@ -447,7 +464,6 @@ export class Game {
       this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, -qty);
       this.player = {
         ...result.player,
-        reputation: Number((result.player.reputation + 0.1).toFixed(1)),
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "buyCommodity")
       };
       this.refreshMarket(true);
@@ -473,7 +489,6 @@ export class Game {
       this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, qty);
       this.player = {
         ...result.player,
-        reputation: Number((result.player.reputation + 0.1).toFixed(1)),
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "sellCommodity")
       };
       this.refreshMarket(true);
@@ -486,18 +501,45 @@ export class Game {
   }
 
   private updateEquipment(): void {
+    const station = getStationProfile(this.systems[this.player.currentSystemId]);
     if (this.input.consume("KeyH")) {
-      const result = repairHull(this.player);
+      const result = repairHull(this.player, station.repairCostModifier);
       this.applyTradeResult(result.ok, result.player, result.reason ?? "Hull repair failed");
       return;
     }
 
-    for (let index = 0; index < EQUIPMENT_KEYS.length; index += 1) {
+    if (this.input.consume("KeyN")) {
+      this.equipmentPage = Math.min(this.getEquipmentPageCount() - 1, this.equipmentPage + 1);
+      this.audio.play("ui");
+      return;
+    }
+
+    if (this.input.consume("KeyP")) {
+      this.equipmentPage = Math.max(0, this.equipmentPage - 1);
+      this.audio.play("ui");
+      return;
+    }
+
+    const equipmentKeys = this.getVisibleEquipmentKeys();
+    for (let index = 0; index < equipmentKeys.length; index += 1) {
       if (!this.input.consume(`Digit${index + 1}`)) continue;
 
-      const result = buyEquipment(this.player, EQUIPMENT_KEYS[index]);
+      const result = buyEquipment(this.player, equipmentKeys[index], station);
       this.applyTradeResult(result.ok, result.player, result.reason);
       return;
+    }
+  }
+
+  private updateShipyard(): void {
+    for (let index = 0; index < PLAYER_SHIPS.length; index += 1) {
+      if (!this.input.consume(`Digit${index + 1}`)) continue;
+      this.selectedShipId = PLAYER_SHIPS[index].id;
+      this.audio.play("ui");
+      return;
+    }
+
+    if (this.input.consume("Enter")) {
+      this.purchaseSelectedShip();
     }
   }
 
@@ -524,6 +566,74 @@ export class Game {
       }
       return;
     }
+  }
+
+  private openStationMode(mode: "trade" | "equipment" | "shipyard" | "missions"): void {
+    const current = this.systems[this.player.currentSystemId];
+    const service = mode === "trade" ? "market" : mode === "equipment" ? "equipment" : mode === "shipyard" ? "shipyard" : "missions";
+    if (!hasStationService(current, service)) {
+      this.message = `${modeLabel(mode)} unavailable at this station`;
+      this.audio.play("tradeFail");
+      return;
+    }
+
+    this.mode = mode;
+    this.audio.play("ui");
+  }
+
+  private purchaseSelectedShip(): void {
+    const result = buyShip(this.player, this.selectedShipId);
+    if (result.ok) {
+      this.player = result.player;
+      this.message = "Ship transfer complete";
+      this.audio.play("tradeOk");
+      this.persist();
+    } else {
+      this.message = result.reason ?? "Ship transfer blocked";
+      this.audio.play("tradeFail");
+    }
+  }
+
+  private getVisibleEquipmentKeys(): EquipmentId[] {
+    const keys = getEquipmentKeys();
+    const start = this.equipmentPage * EQUIPMENT_PAGE_SIZE;
+    return keys.slice(start, start + EQUIPMENT_PAGE_SIZE);
+  }
+
+  private getEquipmentPageCount(): number {
+    return Math.max(1, Math.ceil(getEquipmentKeys().length / EQUIPMENT_PAGE_SIZE));
+  }
+
+  private cycleMapFilter(zoneId: string): void {
+    if (zoneId === "map-filter-clear") {
+      this.mapFilters = { ...DEFAULT_MAP_FILTERS };
+      this.mapSearchInput.value = "";
+      this.message = "Map filters cleared";
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zoneId === "map-filter-hazard") {
+      const values: MapFilterState["hazard"][] = ["all", "calm", "ionWeather", "debris", "patrolGap", "signalNoise", "raiderTrace"];
+      this.mapFilters = { ...this.mapFilters, hazard: nextValue(values, this.mapFilters.hazard) };
+    }
+
+    if (zoneId === "map-filter-economy") {
+      const values: MapFilterState["economy"][] = ["all", "Agricultural", "Industrial", "Research", "Mining", "Periphery", "Trade Hub"];
+      this.mapFilters = { ...this.mapFilters, economy: nextValue(values, this.mapFilters.economy) };
+    }
+
+    if (zoneId === "map-filter-discovery") {
+      const values: MapFilterState["discovery"][] = ["all", "discovered", "undiscovered"];
+      this.mapFilters = { ...this.mapFilters, discovery: nextValue(values, this.mapFilters.discovery) };
+    }
+
+    if (zoneId === "map-filter-service") {
+      const values: MapFilterState["service"][] = ["all", "shipyard", "equipment", "advancedEquipment", "missions", "survey", "salvage", "restrictedContracts"];
+      this.mapFilters = { ...this.mapFilters, service: nextValue(values, this.mapFilters.service) };
+    }
+
+    this.audio.play("ui");
   }
 
   private applyTradeResult(ok: boolean, player: PlayerState, reason?: string): void {
@@ -588,17 +698,18 @@ export class Game {
       return;
     }
 
-    if (!canJump(current, selected, this.player.fuel)) {
+    if (!canJump(current, selected, this.player.fuel, this.player)) {
       this.message = "Jump blocked: range or fuel insufficient";
       this.audio.play("tradeFail");
       return;
     }
 
-    const fuelRequired = getFuelRequired(current, selected);
+    const fuelRequired = getFuelRequired(current, selected, this.player);
     this.economy = applyEconomyDrift(this.economy, this.systems, GAME_SEED);
     this.player = {
       ...this.player,
       currentSystemId: selected.id,
+      discoveredSystemIds: discoverSystem(this.player.discoveredSystemIds, selected.id),
       fuel: Number((this.player.fuel - fuelRequired).toFixed(1)),
       docked: false,
       position: vec3(),
@@ -684,8 +795,8 @@ export class Game {
 
       if (target.id === current.id) {
         this.message = "Already in this system";
-      } else if (!canJump(current, target, this.player.fuel)) {
-        const withinRange = getJumpDistance(current, target) <= UNIVERSE_CONSTANTS.maxJumpRange;
+      } else if (!canJump(current, target, this.player.fuel, this.player)) {
+        const withinRange = getJumpDistance(current, target) <= getPlayerShipStats(this.player).maxJumpRange;
         this.message = withinRange ? "Insufficient fuel — buy fuel first" : "Out of jump range";
       } else {
         this.message = `${target.name} selected — press Enter or JUMP to travel`;
@@ -695,6 +806,11 @@ export class Game {
 
     if (zone.id === "map-jump") {
       this.jumpToSelectedSystem();
+      return;
+    }
+
+    if (zone.id.startsWith("map-filter-")) {
+      this.cycleMapFilter(zone.id);
       return;
     }
 
@@ -719,7 +835,6 @@ export class Game {
             this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, delta);
             this.player = {
               ...result.player,
-              reputation: Number((result.player.reputation + 0.1).toFixed(1)),
               legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, click.shiftKey ? "sellCommodity" : "buyCommodity")
             };
             this.refreshMarket(true);
@@ -734,17 +849,44 @@ export class Game {
 
     if (zone.id.startsWith("equip-row-")) {
       const index = parseInt(zone.id.slice("equip-row-".length), 10);
-      const equipId = EQUIPMENT_KEYS[index];
+      const equipId = this.getVisibleEquipmentKeys()[index];
       if (equipId) {
-        const result = buyEquipment(this.player, equipId);
+        const result = buyEquipment(this.player, equipId, getStationProfile(this.systems[this.player.currentSystemId]));
         this.applyTradeResult(result.ok, result.player, result.reason);
       }
       return;
     }
 
+    if (zone.id === "equip-page-prev") {
+      this.equipmentPage = Math.max(0, this.equipmentPage - 1);
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "equip-page-next") {
+      this.equipmentPage = Math.min(this.getEquipmentPageCount() - 1, this.equipmentPage + 1);
+      this.audio.play("ui");
+      return;
+    }
+
     if (zone.id === "equip-repair") {
-      const result = repairHull(this.player);
+      const result = repairHull(this.player, getStationProfile(this.systems[this.player.currentSystemId]).repairCostModifier);
       this.applyTradeResult(result.ok, result.player, result.reason ?? "Hull repair failed");
+      return;
+    }
+
+    if (zone.id.startsWith("ship-row-")) {
+      const index = parseInt(zone.id.slice("ship-row-".length), 10);
+      const ship = PLAYER_SHIPS[index];
+      if (ship) {
+        this.selectedShipId = ship.id;
+        this.audio.play("ui");
+      }
+      return;
+    }
+
+    if (zone.id === "ship-buy") {
+      this.purchaseSelectedShip();
       return;
     }
 
@@ -779,9 +921,10 @@ export class Game {
     if (zone.id === "touch-fire") this.firePlayerLaser();
     if (zone.id === "touch-map") this.mode = "map";
     if (zone.id === "touch-dock") this.handleDockCommand();
-    if (zone.id === "touch-trade" && this.player.docked) this.mode = "trade";
-    if (zone.id === "touch-equipment" && this.player.docked) this.mode = "equipment";
-    if (zone.id === "touch-missions" && this.player.docked) this.mode = "missions";
+    if (zone.id === "touch-trade" && this.player.docked) this.openStationMode("trade");
+    if (zone.id === "touch-equipment" && this.player.docked) this.openStationMode("equipment");
+    if (zone.id === "touch-shipyard" && this.player.docked) this.openStationMode("shipyard");
+    if (zone.id === "touch-missions" && this.player.docked) this.openStationMode("missions");
     if (zone.id === "touch-menu") {
       this.previousMode = this.mode;
       this.mode = "paused";
@@ -806,6 +949,10 @@ export class Game {
     this.projectiles = [];
     this.resetTransientState();
     this.selectedSystemId = 1;
+    this.selectedShipId = PLAYER_SHIPS[1].id;
+    this.equipmentPage = 0;
+    this.mapFilters = { ...DEFAULT_MAP_FILTERS };
+    this.mapSearchInput.value = "";
     this.runStats = createRunStats(this.player.currentSystemId);
     this.isNewPersonalBest = false;
     this.mode = "flight";
@@ -832,6 +979,10 @@ export class Game {
     this.projectiles = [];
     this.resetTransientState();
     this.selectedSystemId = (this.player.currentSystemId + 1) % this.systems.length;
+    this.selectedShipId = this.player.shipId === STARTER_SHIP_ID ? PLAYER_SHIPS[1].id : this.player.shipId;
+    this.equipmentPage = 0;
+    this.mapFilters = { ...DEFAULT_MAP_FILTERS };
+    this.mapSearchInput.value = "";
     this.runStats = save.runStats ?? createRunStats(this.player.currentSystemId);
     this.isNewPersonalBest = false;
     this.mode = this.player.docked ? "docked" : "flight";
@@ -839,7 +990,8 @@ export class Game {
   }
 
   private refreshMarket(recordHistory: boolean): void {
-    this.market = generateDynamicMarket(this.systems[this.player.currentSystemId], this.economy);
+    const current = this.systems[this.player.currentSystemId];
+    this.market = generateDynamicMarket(current, this.economy, getStationProfile(current).marketScale);
     if (recordHistory) {
       this.economy = recordPriceHistory(this.economy, this.player.currentSystemId, this.market);
     }
@@ -850,7 +1002,8 @@ export class Game {
       GAME_SEED + this.economy.day,
       this.systems[this.player.currentSystemId],
       this.systems,
-      this.player
+      this.player,
+      getStationProfile(this.systems[this.player.currentSystemId])
     );
   }
 
@@ -868,6 +1021,31 @@ export class Game {
     saveGame(data);
   }
 
+  private createMapSearchInput(): HTMLInputElement {
+    const input = document.createElement("input");
+    input.type = "search";
+    input.placeholder = "Search systems";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.className = "map-search-input";
+    input.hidden = true;
+    input.addEventListener("input", () => {
+      this.mapFilters = { ...this.mapFilters, query: input.value };
+    });
+    document.body.appendChild(input);
+    return input;
+  }
+
+  private syncMapSearchInput(): void {
+    const visible = this.mode === "map";
+    this.mapSearchInput.hidden = !visible;
+    if (visible) {
+      this.mapSearchInput.value = this.mapFilters.query;
+    } else if (document.activeElement === this.mapSearchInput) {
+      this.mapSearchInput.blur();
+    }
+  }
+
   private resetTransientState(): void {
     const state = createInitialTransientState();
     this.respawnCountdown = state.respawnCountdown;
@@ -883,6 +1061,7 @@ export class Game {
       this.mode === "docking" ||
       this.mode === "trade" ||
       this.mode === "equipment" ||
+      this.mode === "shipyard" ||
       this.mode === "missions"
     ) {
       target = "docked";
@@ -939,7 +1118,11 @@ export class Game {
       pilotRank,
       isNewPersonalBest: this.isNewPersonalBest,
       activeHint: this.getActiveHint(),
+      mapFilters: this.mapFilters,
+      selectedShipId: this.selectedShipId,
+      equipmentPage: this.equipmentPage,
     });
+    this.syncMapSearchInput();
   }
 }
 
@@ -949,6 +1132,7 @@ function createInitialPlayer(): PlayerState {
     velocity: vec3(),
     orientation: { pitch: 0, yaw: 0, roll: 0 },
     speed: 0,
+    shipId: STARTER_SHIP_ID,
     hull: 100,
     maxHull: 100,
     shield: 100,
@@ -959,6 +1143,7 @@ function createInitialPlayer(): PlayerState {
     cargo: {},
     cargoCapacity: 20,
     currentSystemId: 0,
+    discoveredSystemIds: [0],
     docked: false,
     legalRisk: 0,
     reputation: 0,
@@ -972,6 +1157,22 @@ function getTradeLegalRisk(current: number, commodityId: string, action: "buyCom
   if (commodityId === "fuelCells" || commodityId === "luxuries") return Number((current + 0.2).toFixed(1));
   if (commodityId === "medicine") return Math.max(0, Number((current - 0.1).toFixed(1)));
   return current;
+}
+
+function discoverSystem(discoveredSystemIds: number[], systemId: number): number[] {
+  return [...new Set([...discoveredSystemIds, systemId])].sort((a, b) => a - b);
+}
+
+function modeLabel(mode: "trade" | "equipment" | "shipyard" | "missions"): string {
+  if (mode === "trade") return "Market";
+  if (mode === "equipment") return "Equipment";
+  if (mode === "shipyard") return "Shipyard";
+  return "Mission board";
+}
+
+function nextValue<T>(values: T[], current: T): T {
+  const index = values.findIndex((value) => value === current);
+  return values[(index + 1 + values.length) % values.length];
 }
 
 function lerp(a: number, b: number, amount: number): number {

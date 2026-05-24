@@ -7,6 +7,8 @@ export class Input {
   private clickPoint: { x: number; y: number; shiftKey: boolean; ctrlKey: boolean; altKey: boolean } | null = null;
   private mousePosition: { x: number; y: number } | null = null;
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (isEditableTarget(event.target)) return;
+
     if (shouldPreventGameKey(event)) {
       event.preventDefault();
     }
@@ -26,6 +28,8 @@ export class Input {
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
+    if (isEditableTarget(event.target)) return;
+
     if (shouldPreventGameKey(event)) {
       event.preventDefault();
     }
@@ -118,4 +122,10 @@ export class Input {
   private isPressedEvent(event: KeyboardEvent): boolean {
     return Boolean((event.code && this.pressedCodes.has(event.code)) || (event.key && this.pressedKeys.has(event.key)));
   }
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || target.isContentEditable;
 }

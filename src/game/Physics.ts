@@ -55,12 +55,14 @@ export function rightVector(orientation: Orientation): Vector3 {
 export function updateOrientation(
   orientation: Orientation,
   input: { pitch: number; yaw: number; roll: number },
-  dt: number
+  dt: number,
+  handlingModifier = 1
 ): Orientation {
+  const rate = PHYSICS_CONSTANTS.turnRate * handlingModifier;
   return {
-    pitch: clampAngle(orientation.pitch + input.pitch * PHYSICS_CONSTANTS.turnRate * dt),
-    yaw: clampAngle(orientation.yaw + input.yaw * PHYSICS_CONSTANTS.turnRate * dt),
-    roll: clampAngle(orientation.roll + input.roll * PHYSICS_CONSTANTS.turnRate * dt)
+    pitch: clampAngle(orientation.pitch + input.pitch * rate * dt),
+    yaw: clampAngle(orientation.yaw + input.yaw * rate * dt),
+    roll: clampAngle(orientation.roll + input.roll * rate * dt)
   };
 }
 
@@ -68,12 +70,14 @@ export function updateVelocity(
   velocity: Vector3,
   orientation: Orientation,
   throttleInput: number,
-  dt: number
+  dt: number,
+  speedModifier = 1
 ): Vector3 {
-  const thrust = scale(forwardVector(orientation), throttleInput * PHYSICS_CONSTANTS.acceleration * dt);
+  const thrust = scale(forwardVector(orientation), throttleInput * PHYSICS_CONSTANTS.acceleration * speedModifier * dt);
   const next = scale(add(velocity, thrust), Math.pow(PHYSICS_CONSTANTS.drag, dt * 60));
   const speed = length(next);
-  return speed > PHYSICS_CONSTANTS.maxSpeed ? scale(normalize(next), PHYSICS_CONSTANTS.maxSpeed) : next;
+  const maxSpeed = PHYSICS_CONSTANTS.maxSpeed * speedModifier;
+  return speed > maxSpeed ? scale(normalize(next), maxSpeed) : next;
 }
 
 export function updatePosition(position: Vector3, velocity: Vector3, dt: number): Vector3 {

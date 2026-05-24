@@ -1,0 +1,153 @@
+import type { StarSystem, StationService } from "./types";
+
+export type StationProfileId =
+  | "startPort"
+  | "marketHub"
+  | "limitedPort"
+  | "shipwright"
+  | "instrumentBay"
+  | "repairCoop"
+  | "contractOffice"
+  | "unstablePort"
+  | "surveyOutpost";
+
+export interface StationProfile {
+  id: StationProfileId;
+  label: string;
+  services: Record<StationService, boolean>;
+  marketScale: number;
+  repairCostModifier: number;
+  missionDensity: number;
+}
+
+export const STATION_SERVICE_LABELS: Record<StationService, string> = {
+  market: "Market",
+  fuel: "Fuel",
+  repair: "Repair",
+  missions: "Missions",
+  equipment: "Gear",
+  advancedEquipment: "Advanced Gear",
+  shipyard: "Shipyard",
+  survey: "Survey",
+  salvage: "Salvage",
+  restrictedContracts: "Risk Contracts"
+};
+
+const BASE_SERVICES: Record<StationService, boolean> = {
+  market: true,
+  fuel: true,
+  repair: true,
+  missions: false,
+  equipment: false,
+  advancedEquipment: false,
+  shipyard: false,
+  survey: false,
+  salvage: false,
+  restrictedContracts: false
+};
+
+export function getStationProfile(system: StarSystem): StationProfile {
+  if (system.id === 0) {
+    return buildProfile("startPort", "First Berth", {
+      missions: true,
+      equipment: true,
+      shipyard: true,
+      survey: true
+    }, 1, 1, 1);
+  }
+
+  const selector = Math.abs(
+    Math.floor(system.x * 11 + system.y * 17 + system.techLevel * 23 + system.population * 19 + system.id * 29)
+  ) % 8;
+
+  if (system.economy === "Trade Hub" || selector === 0) {
+    return buildProfile("marketHub", "Market Hub", {
+      missions: true,
+      equipment: true,
+      advancedEquipment: system.techLevel >= 7,
+      shipyard: system.techLevel >= 6
+    }, 1.18, 1, 1);
+  }
+
+  if (system.economy === "Research" || selector === 1) {
+    return buildProfile("instrumentBay", "Instrument Bay", {
+      missions: true,
+      equipment: true,
+      advancedEquipment: true,
+      survey: true
+    }, 0.95, 1, 1);
+  }
+
+  if (system.economy === "Mining" || selector === 2) {
+    return buildProfile("surveyOutpost", "Survey Outpost", {
+      missions: true,
+      equipment: true,
+      survey: true,
+      salvage: true
+    }, 0.9, 0.95, 1);
+  }
+
+  if (selector === 3 || system.techLevel >= 9) {
+    return buildProfile("shipwright", "Shipwright", {
+      missions: true,
+      equipment: true,
+      advancedEquipment: true,
+      shipyard: true
+    }, 1, 1, 1);
+  }
+
+  if (selector === 4) {
+    return buildProfile("repairCoop", "Repair Cooperative", {
+      missions: true,
+      equipment: true
+    }, 0.92, 0.72, 0.9);
+  }
+
+  if (selector === 5 || system.opportunityTag === "contractFlow") {
+    return buildProfile("contractOffice", "Contract Office", {
+      missions: true,
+      equipment: true,
+      restrictedContracts: system.hazardLevel >= 3
+    }, 1, 1, 1.3);
+  }
+
+  if (selector === 6 || system.hazardLevel >= 4) {
+    return buildProfile("unstablePort", "Unstable Port", {
+      missions: true,
+      salvage: true,
+      restrictedContracts: true
+    }, 0.82, 1.15, 1.05);
+  }
+
+  return buildProfile("limitedPort", "Limited Port", {
+    missions: system.population >= 3 || system.techLevel >= 4,
+    equipment: system.techLevel >= 5
+  }, 0.78, 1, 0.75);
+}
+
+export function hasStationService(system: StarSystem, service: StationService): boolean {
+  return getStationProfile(system).services[service];
+}
+
+export function getAvailableServices(system: StarSystem): StationService[] {
+  const profile = getStationProfile(system);
+  return (Object.keys(profile.services) as StationService[]).filter((service) => profile.services[service]);
+}
+
+function buildProfile(
+  id: StationProfileId,
+  label: string,
+  services: Partial<Record<StationService, boolean>>,
+  marketScale: number,
+  repairCostModifier: number,
+  missionDensity: number
+): StationProfile {
+  return {
+    id,
+    label,
+    services: { ...BASE_SERVICES, ...services },
+    marketScale,
+    repairCostModifier,
+    missionDensity
+  };
+}

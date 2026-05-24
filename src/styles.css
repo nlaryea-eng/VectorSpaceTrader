@@ -30,3 +30,26 @@ canvas {
   background: #000;
   cursor: crosshair;
 }
+
+.map-search-input {
+  position: fixed;
+  left: 16%;
+  top: 16%;
+  width: min(240px, 34vw);
+  height: 30px;
+  z-index: 2;
+  border: 1px solid #3cff78;
+  background: rgba(0, 12, 6, 0.94);
+  color: #d8ffe7;
+  font: 14px "Courier New", Courier, monospace;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.map-search-input:focus {
+  box-shadow: 0 0 0 2px rgba(60, 255, 120, 0.22);
+}
+
+.map-search-input[hidden] {
+  display: none;
+}

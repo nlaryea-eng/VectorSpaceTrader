@@ -10,6 +10,7 @@ export type GameMode =
   | "docked"
   | "trade"
   | "equipment"
+  | "shipyard"
   | "missions"
   | "gameOver";
 
@@ -35,6 +36,14 @@ export interface StarSystem {
   techLevel: number;
   population: number;
   marketModifiers: Record<CommodityId, number>;
+  description: string;
+  culture: string;
+  hazardTag: HazardTag;
+  hazardLevel: number;
+  opportunityTag: OpportunityTag;
+  importHint: CommodityId;
+  exportHint: CommodityId;
+  stationHint: string;
 }
 
 export type EconomyType =
@@ -78,15 +87,75 @@ export interface MarketItem extends Commodity {
   quantity: number;
 }
 
-export type EquipmentId = "pulseLaser" | "beamLaser" | "cargoExpansion" | "fuelScoop" | "shieldBooster";
+export type PlayerShipId =
+  | "mirelle"
+  | "vaskRelay"
+  | "vannicHold"
+  | "talemRange"
+  | "brontWard"
+  | "calderaSpan";
+
+export type StationService =
+  | "market"
+  | "fuel"
+  | "repair"
+  | "missions"
+  | "equipment"
+  | "advancedEquipment"
+  | "shipyard"
+  | "survey"
+  | "salvage"
+  | "restrictedContracts";
+
+export type HazardTag =
+  | "calm"
+  | "ionWeather"
+  | "debris"
+  | "patrolGap"
+  | "signalNoise"
+  | "raiderTrace";
+
+export type OpportunityTag =
+  | "steadyDemand"
+  | "shortHaul"
+  | "surveyData"
+  | "repairQueue"
+  | "contractFlow"
+  | "salvageTrace";
+
+export type EquipmentId =
+  | "pulseLaser"
+  | "beamLaser"
+  | "cargoExpansion"
+  | "fuelScoop"
+  | "shieldBooster"
+  | "laneGlassScanner"
+  | "arcSpoolDrive"
+  | "foldedHoldGrid"
+  | "fieldPatchDrones"
+  | "quietShieldMatrix"
+  | "thriftBurnRegulator"
+  | "routeAbacus"
+  | "salvageTongs";
 
 export type EquipmentState = Record<EquipmentId, boolean>;
 
-export type MissionType = "courier" | "survey" | "rescue" | "audit" | "prototype" | "escort";
+export type MissionType =
+  | "courier"
+  | "fragile"
+  | "urgent"
+  | "medical"
+  | "survey"
+  | "passenger"
+  | "salvage"
+  | "supply"
+  | "restricted"
+  | "reputation";
 
 export interface Mission {
   id: string;
   type: MissionType;
+  typeLabel: string;
   title: string;
   briefing: string;
   originSystemId: number;
@@ -94,8 +163,15 @@ export interface Mission {
   reward: number;
   reputationChange: number;
   legalRiskChange: number;
+  failureReputationChange: number;
+  failureLegalRiskChange: number;
   cargoUnitsRequired: number;
+  cargoLabel: string;
   deadlineJumps: number;
+  riskLabel: string;
+  riskLevel: number;
+  requiredEquipment?: EquipmentId;
+  minReputation?: number;
 }
 
 export interface PriceHistoryEntry {
@@ -117,6 +193,7 @@ export interface PlayerState {
   velocity: Vector3;
   orientation: Orientation;
   speed: number;
+  shipId: PlayerShipId;
   hull: number;
   maxHull: number;
   shield: number;
@@ -127,6 +204,7 @@ export interface PlayerState {
   cargo: CargoHold;
   cargoCapacity: number;
   currentSystemId: number;
+  discoveredSystemIds: number[];
   docked: boolean;
   legalRisk: number;
   reputation: number;

@@ -1,8 +1,9 @@
-import type { CommodityId, EconomyType, GovernmentType, MarketItem, StarSystem } from "./types";
+import { getPlayerShipStats } from "./Ships";
+import type { CommodityId, EconomyType, GovernmentType, HazardTag, MarketItem, OpportunityTag, PlayerState, StarSystem } from "./types";
 import { COMMODITIES } from "./Trading";
 
 export const UNIVERSE_CONSTANTS = {
-  systemCount: 40,
+  systemCount: 128,
   width: 96,
   height: 72,
   maxJumpRange: 24,
@@ -30,6 +31,36 @@ const GOVERNMENTS: GovernmentType[] = [
 const PREFIXES = ["Ara", "Bel", "Cen", "Daro", "Eli", "Forn", "Gala", "Hes", "Ivo", "Juno", "Kera", "Luma"];
 const MIDDLES = ["mar", "tor", "ven", "lis", "cor", "nex", "phi", "ran", "sil", "qua", "dor", "zen"];
 const SUFFIXES = ["a", "on", "is", "um", "ea", "or", "ix", "ara", "os", "eth", "ion", " Prime"];
+
+const CULTURES = [
+  "charter councils",
+  "dock cooperatives",
+  "survey guilds",
+  "freehold crews",
+  "harbor syndics",
+  "ledger houses",
+  "workshop circles",
+  "route assemblies"
+];
+const HAZARDS: HazardTag[] = ["calm", "ionWeather", "debris", "patrolGap", "signalNoise", "raiderTrace"];
+const OPPORTUNITIES: OpportunityTag[] = [
+  "steadyDemand",
+  "shortHaul",
+  "surveyData",
+  "repairQueue",
+  "contractFlow",
+  "salvageTrace"
+];
+const STATION_HINTS = [
+  "compact berth",
+  "open truss port",
+  "cold storage ring",
+  "survey mast",
+  "repair gantry",
+  "contract quay",
+  "freight lock",
+  "instrument pier"
+];
 
 export class SeededPrng {
   private state: number;
@@ -66,7 +97,7 @@ export function generateSystemName(prng: SeededPrng, used: Set<string>): string 
   return fallback;
 }
 
-export function generateUniverse(seed: number, count = UNIVERSE_CONSTANTS.systemCount): StarSystem[] {
+export function generateUniverse(seed: number, count: number = UNIVERSE_CONSTANTS.systemCount): StarSystem[] {
   const prng = new SeededPrng(seed);
   const usedNames = new Set<string>();
   const systems: StarSystem[] = [];
@@ -77,20 +108,70 @@ export function generateUniverse(seed: number, count = UNIVERSE_CONSTANTS.system
     const populationBase = economy === "Periphery" ? 1 : economy === "Trade Hub" ? 6 : 3;
     const marketModifiers = createMarketModifiers(prng, economy, techLevel);
 
+    const name = generateSystemName(prng, usedNames);
+    const x = Number((prng.next() * UNIVERSE_CONSTANTS.width).toFixed(2));
+    const y = Number((prng.next() * UNIVERSE_CONSTANTS.height).toFixed(2));
+    const government = prng.pick(GOVERNMENTS);
+    const population = Number((populationBase + prng.next() * 7).toFixed(1));
+    const metadata = createSystemMetadata(seed, id, economy, government, techLevel, marketModifiers);
+
     systems.push({
       id,
-      name: generateSystemName(prng, usedNames),
-      x: Number((prng.next() * UNIVERSE_CONSTANTS.width).toFixed(2)),
-      y: Number((prng.next() * UNIVERSE_CONSTANTS.height).toFixed(2)),
+      name,
+      x,
+      y,
       economy,
-      government: prng.pick(GOVERNMENTS),
+      government: metadata.government,
       techLevel,
-      population: Number((populationBase + prng.next() * 7).toFixed(1)),
-      marketModifiers
+      population,
+      marketModifiers,
+      description: metadata.description,
+      culture: metadata.culture,
+      hazardTag: metadata.hazardTag,
+      hazardLevel: metadata.hazardLevel,
+      opportunityTag: metadata.opportunityTag,
+      importHint: metadata.importHint,
+      exportHint: metadata.exportHint,
+      stationHint: metadata.stationHint
     });
   }
 
   return systems;
+}
+
+function createSystemMetadata(
+  seed: number,
+  id: number,
+  economy: EconomyType,
+  government: GovernmentType,
+  techLevel: number,
+  marketModifiers: Record<CommodityId, number>
+): Pick<
+  StarSystem,
+  "description" | "culture" | "government" | "hazardTag" | "hazardLevel" | "opportunityTag" | "importHint" | "exportHint" | "stationHint"
+> {
+  const prng = new SeededPrng((seed + id * 1013 + techLevel * 97) >>> 0);
+  const hazardTag = prng.pick(HAZARDS);
+  const hazardLevel = hazardTag === "calm" ? 0 : prng.int(1, 5);
+  const opportunityTag = prng.pick(OPPORTUNITIES);
+  const stationHint = prng.pick(STATION_HINTS);
+  const culture = `${prng.pick(CULTURES)} under ${government.toLowerCase()} rule`;
+  const commodities = [...COMMODITIES].sort((a, b) => marketModifiers[a.id] - marketModifiers[b.id]);
+  const exportHint = commodities[0].id;
+  const importHint = commodities[commodities.length - 1].id;
+  const description = `${economy} lanes around a ${stationHint}, known for ${formatTag(opportunityTag)} and ${formatTag(hazardTag)}.`;
+
+  return {
+    description,
+    culture,
+    government,
+    hazardTag,
+    hazardLevel,
+    opportunityTag,
+    importHint,
+    exportHint,
+    stationHint
+  };
 }
 
 function createMarketModifiers(
@@ -122,13 +203,15 @@ export function getJumpDistance(from: StarSystem, to: StarSystem): number {
   return Math.hypot(to.x - from.x, to.y - from.y);
 }
 
-export function getFuelRequired(from: StarSystem, to: StarSystem): number {
-  return Number((getJumpDistance(from, to) * UNIVERSE_CONSTANTS.fuelPerDistance).toFixed(1));
+export function getFuelRequired(from: StarSystem, to: StarSystem, player?: Pick<PlayerState, "shipId" | "equipment">): number {
+  const modifier = player ? getPlayerShipStats(player).fuelUseModifier : 1;
+  return Number((getJumpDistance(from, to) * UNIVERSE_CONSTANTS.fuelPerDistance * modifier).toFixed(1));
 }
 
-export function canJump(from: StarSystem, to: StarSystem, fuel: number): boolean {
+export function canJump(from: StarSystem, to: StarSystem, fuel: number, player?: Pick<PlayerState, "shipId" | "equipment">): boolean {
   const distance = getJumpDistance(from, to);
-  return distance <= UNIVERSE_CONSTANTS.maxJumpRange && fuel >= getFuelRequired(from, to);
+  const maxRange = player ? getPlayerShipStats(player).maxJumpRange : UNIVERSE_CONSTANTS.maxJumpRange;
+  return distance <= maxRange && fuel >= getFuelRequired(from, to, player);
 }
 
 export function getSystemAtMapPoint(
@@ -170,4 +253,8 @@ export function generateMarket(system: StarSystem): MarketItem[] {
       quantity
     };
   });
+}
+
+function formatTag(tag: HazardTag | OpportunityTag): string {
+  return tag.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
 }

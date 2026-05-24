@@ -22,7 +22,7 @@ export function createEconomyState(systems: StarSystem[]): EconomyState {
   };
 }
 
-export function generateDynamicMarket(system: StarSystem, economy: EconomyState): MarketItem[] {
+export function generateDynamicMarket(system: StarSystem, economy: EconomyState, marketScale = 1): MarketItem[] {
   const drift = economy.drift[system.id] ?? ({} as Record<CommodityId, number>);
   const supplyAdjustments = economy.supplyAdjustments[system.id] ?? {};
 
@@ -32,7 +32,7 @@ export function generateDynamicMarket(system: StarSystem, economy: EconomyState)
     const supplyShift = supplyAdjustments[commodity.id] ?? 0;
     const techSupply = commodity.id === "computers" || commodity.id === "medicine" ? system.techLevel : 13 - system.techLevel;
     const price = Math.max(1, Math.round(commodity.basePrice * modifier * driftFactor));
-    const quantity = Math.max(0, Math.round(commodity.baseQuantity * modifier + techSupply + supplyShift));
+    const quantity = Math.max(0, Math.round((commodity.baseQuantity * modifier + techSupply + supplyShift) * marketScale));
 
     return { ...commodity, price, quantity };
   });

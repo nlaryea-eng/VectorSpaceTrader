@@ -16,7 +16,7 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] First launch shows the start screen and starts a new game without console errors.
 - [ ] Onboarding appears for a new run and can be dismissed cleanly.
 - [ ] Continue/load is available only when a valid save exists.
-- [ ] Save/load continuity preserves system, balance, cargo, fuel, hull, equipment, missions, reputation, legal risk, and settings after page reload.
+- [ ] Save/load continuity preserves system, discovered systems, selected ship, balance, cargo, fuel, hull, equipment, missions, reputation, legal risk, and settings after page reload.
 
 ## Flight And Navigation
 
@@ -25,19 +25,27 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] Docking works only when in range and transitions to the station state without control leakage.
 - [ ] Universe map click-select chooses a reachable target without selecting the wrong system.
 - [ ] Universe map keyboard navigation cycles systems with arrows, A/D, comma/period, and bracket keys.
+- [ ] Universe map search filters by typed system name without leaving the input visible outside map mode.
+- [ ] Universe map filters by hazard, economy, discovery state, and station service without breaking click or keyboard selection.
 - [ ] Jump travel consumes fuel, updates the current system, and rejects jumps beyond fuel or range limits.
+- [ ] Jump travel marks the destination discovered and preserves previous discoveries after reload.
 
 ## Station Services
 
 - [ ] Market buys and sells one unit with number keys and shifted number keys.
 - [ ] Market bulk buy/sell controls respect cargo capacity, available stock, owned cargo, and balance.
 - [ ] Fuel purchase works from the market and respects fuel capacity and balance.
-- [ ] Equipment purchase works for available upgrades and blocks duplicate or unaffordable purchases.
-- [ ] Hull repair works from the equipment bay and handles full, partial, unaffordable, and already-full repair states.
+- [ ] Station dock screen clearly shows available and unavailable market, gear, shipyard, and mission services.
+- [ ] Equipment purchase works for available upgrades and blocks duplicate, unaffordable, or unstocked purchases.
+- [ ] Equipment paging works by click/touch and `N` / `P`.
+- [ ] Hull repair works from the equipment bay and handles full, partial, unaffordable, discounted, and already-full repair states.
+- [ ] Shipyard is available at starter station and other shipyard stations.
+- [ ] Shipyard compares current and selected hull stats, blocks cargo overflow, blocks unaffordable purchases, and preserves installed equipment.
 
 ## Missions
 
 - [ ] Mission board lists missions with cargo, destination, risk, reward, and deadline details.
+- [ ] Expanded mission types appear with short systemic text and required-equipment/reputation labels where applicable.
 - [ ] Accepting a cargo mission reserves or loads the required cargo correctly.
 - [ ] Mission cargo affects cargo capacity as expected.
 - [ ] Delivering before the deadline pays the reward and updates reputation/legal-risk outcomes.

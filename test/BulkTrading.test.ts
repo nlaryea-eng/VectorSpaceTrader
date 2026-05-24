@@ -5,6 +5,7 @@ import {
   getBulkSellQuantity,
   getTotalOccupiedCargo
 } from "../src/game/Trading";
+import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import type { MarketItem, PlayerState } from "../src/game/types";
 
 describe("BulkTrading helpers", () => {
@@ -110,6 +111,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     velocity: { x: 0, y: 0, z: 0 },
     orientation: { pitch: 0, yaw: 0, roll: 0 },
     speed: 0,
+    shipId: "mirelle",
     hull: 100,
     maxHull: 100,
     shield: 100,
@@ -120,17 +122,12 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     cargo: {},
     cargoCapacity: 20,
     currentSystemId: 0,
+    discoveredSystemIds: [0],
     docked: false,
     legalRisk: 0,
     reputation: 0,
     missionCargoUnits: 0,
-    equipment: {
-      pulseLaser: true,
-      beamLaser: false,
-      cargoExpansion: false,
-      fuelScoop: false,
-      shieldBooster: false
-    },
+    equipment: { ...DEFAULT_EQUIPMENT },
     ...overrides
   };
 }

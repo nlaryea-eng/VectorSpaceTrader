@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALL_HINTS, shouldShowHint } from "../src/game/Onboarding";
+import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import { getPilotRank } from "../src/game/Rank";
 import { createRunStats } from "../src/game/RunStats";
 import { deserializeSave, loadGame, saveGame, SAVE_KEY } from "../src/game/SaveGame";
@@ -49,6 +50,7 @@ function makeSave(): SaveData {
       velocity: { x: 0, y: 0, z: 0 },
       orientation: { pitch: 0, yaw: 0, roll: 0 },
       speed: 0,
+      shipId: "mirelle",
       hull: 100,
       maxHull: 100,
       shield: 100,
@@ -59,16 +61,11 @@ function makeSave(): SaveData {
       cargo: { grain: 2 },
       cargoCapacity: 20,
       currentSystemId: 0,
+      discoveredSystemIds: [0],
       docked: false,
       legalRisk: 0,
       reputation: 0,
-      equipment: {
-        pulseLaser: true,
-        beamLaser: false,
-        cargoExpansion: false,
-        fuelScoop: false,
-        shieldBooster: false
-      },
+      equipment: { ...DEFAULT_EQUIPMENT },
       missionCargoUnits: 0
     },
     runStats: createRunStats(0)
@@ -238,6 +235,43 @@ describe("SaveGame migration", () => {
     const loaded = loadGame(storage);
     expect(loaded).not.toBeNull();
     expect(loaded!.player.missionCargoUnits).toBe(0);
+  });
+
+  it("migrates old save without ship and discovery fields", () => {
+    const storage = new MemoryStorage();
+    const oldSave = makeSave();
+    const playerWithoutNewFields = { ...oldSave.player, currentSystemId: 7 } as Record<string, unknown>;
+    delete playerWithoutNewFields.shipId;
+    delete playerWithoutNewFields.discoveredSystemIds;
+    const oldEquipment = {
+      pulseLaser: true,
+      beamLaser: false,
+      cargoExpansion: false,
+      fuelScoop: false,
+      shieldBooster: false
+    };
+    playerWithoutNewFields.equipment = oldEquipment;
+    storage.setItem(SAVE_KEY, JSON.stringify({ ...oldSave, player: playerWithoutNewFields }));
+
+    const loaded = loadGame(storage);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.player.shipId).toBe("mirelle");
+    expect(loaded!.player.currentSystemId).toBe(7);
+    expect(loaded!.player.discoveredSystemIds).toContain(7);
+    expect(loaded!.player.equipment.laneGlassScanner).toBe(false);
+  });
+
+  it("rejects malformed equipment fields instead of silently accepting them", () => {
+    const save = makeSave();
+    const corrupted = JSON.stringify({
+      ...save,
+      player: {
+        ...save.player,
+        equipment: { ...save.player.equipment, laneGlassScanner: "yes" }
+      }
+    });
+
+    expect(deserializeSave(corrupted)).toBeNull();
   });
 
   it("migrates activeMission missing cargoUnitsRequired and deadlineJumps", () => {

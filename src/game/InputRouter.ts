@@ -70,8 +70,8 @@ export function shouldPreventGameKey(event: KeyLike): boolean {
 
   return matchesAny(
     event,
-    ["ArrowUp", "ArrowDown", "KeyQ", "KeyE", "KeyW", "KeyS", "Space", "KeyM", "KeyT", "KeyR", "KeyG", "KeyU", "Escape"],
-    [" ", "Spacebar", "m", "M", "t", "T", "r", "R", "g", "G", "u", "U", "q", "Q", "e", "E", "w", "W", "s", "S"]
+    ["ArrowUp", "ArrowDown", "KeyQ", "KeyE", "KeyW", "KeyS", "KeyY", "KeyN", "KeyP", "Space", "KeyM", "KeyT", "KeyR", "KeyG", "KeyU", "Escape"],
+    [" ", "Spacebar", "m", "M", "t", "T", "r", "R", "y", "Y", "n", "N", "p", "P", "g", "G", "u", "U", "q", "Q", "e", "E", "w", "W", "s", "S"]
   );
 }
 

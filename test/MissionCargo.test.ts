@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import { acceptMission, completeMission, decrementMissionDeadline, failMission } from "../src/game/Missions";
 import { getTotalOccupiedCargo } from "../src/game/Trading";
 import type { Mission, PlayerState } from "../src/game/types";
@@ -134,6 +135,7 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
   return {
     id: "test-mission",
     type: "courier",
+    typeLabel: "Courier",
     title: "Test Run",
     briefing: "Deliver something.",
     originSystemId: 0,
@@ -141,8 +143,13 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     reward: 200,
     reputationChange: 3,
     legalRiskChange: 0,
+    failureReputationChange: -2,
+    failureLegalRiskChange: 1,
     cargoUnitsRequired: 1,
+    cargoLabel: "test cargo",
     deadlineJumps: 5,
+    riskLabel: "standard",
+    riskLevel: 1,
     ...overrides
   };
 }
@@ -153,6 +160,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     velocity: { x: 0, y: 0, z: 0 },
     orientation: { pitch: 0, yaw: 0, roll: 0 },
     speed: 0,
+    shipId: "mirelle",
     hull: 100,
     maxHull: 100,
     shield: 100,
@@ -163,17 +171,12 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     cargo: {},
     cargoCapacity: 20,
     currentSystemId: 0,
+    discoveredSystemIds: [0],
     docked: false,
     legalRisk: 0,
     reputation: 0,
     missionCargoUnits: 0,
-    equipment: {
-      pulseLaser: true,
-      beamLaser: false,
-      cargoExpansion: false,
-      fuelScoop: false,
-      shieldBooster: false
-    },
+    equipment: { ...DEFAULT_EQUIPMENT },
     ...overrides
   };
 }

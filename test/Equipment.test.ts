@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { buyEquipment, getLaserProfile } from "../src/game/Equipment";
+import { buyEquipment, DEFAULT_EQUIPMENT, EQUIPMENT, getLaserProfile } from "../src/game/Equipment";
+import { getPlayerShipStats } from "../src/game/Ships";
 import type { PlayerState } from "../src/game/types";
 
 describe("Equipment", () => {
+  it("defines unique priced equipment with real descriptions", () => {
+    const ids = new Set(EQUIPMENT.map((item) => item.id));
+    expect(ids.size).toBe(EQUIPMENT.length);
+    expect(EQUIPMENT.length).toBeGreaterThanOrEqual(13);
+    for (const item of EQUIPMENT) {
+      expect(item.price).toBeGreaterThan(0);
+      expect(item.description.trim()).not.toBe("");
+    }
+  });
+
   it("prevents equipment purchase without enough credits", () => {
     const result = buyEquipment(makePlayer({ credits: 1 }), "beamLaser");
 
@@ -25,6 +36,33 @@ describe("Equipment", () => {
     expect(profile.damage).toBeGreaterThan(28);
     expect(profile.energyCost).toBeGreaterThan(6);
   });
+
+  it("prevents duplicate equipment purchase", () => {
+    const result = buyEquipment(makePlayer(), "pulseLaser");
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("Already installed");
+  });
+
+  it("applies new equipment effects to ship stats", () => {
+    const player = makePlayer({
+      equipment: {
+        ...DEFAULT_EQUIPMENT,
+        arcSpoolDrive: true,
+        thriftBurnRegulator: true,
+        foldedHoldGrid: true,
+        quietShieldMatrix: true,
+        fieldPatchDrones: true
+      }
+    });
+    const stats = getPlayerShipStats(player);
+
+    expect(stats.maxJumpRange).toBeGreaterThan(24);
+    expect(stats.fuelUseModifier).toBeLessThan(1);
+    expect(stats.cargoCapacity).toBe(30);
+    expect(stats.maxShield).toBe(120);
+    expect(stats.repairCostModifier).toBeLessThan(1);
+  });
 });
 
 function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
@@ -33,6 +71,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     velocity: { x: 0, y: 0, z: 0 },
     orientation: { pitch: 0, yaw: 0, roll: 0 },
     speed: 0,
+    shipId: "mirelle",
     hull: 100,
     maxHull: 100,
     shield: 100,
@@ -43,16 +82,11 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     cargo: {},
     cargoCapacity: 20,
     currentSystemId: 0,
+    discoveredSystemIds: [0],
     docked: false,
     legalRisk: 0,
     reputation: 0,
-    equipment: {
-      pulseLaser: true,
-      beamLaser: false,
-      cargoExpansion: false,
-      fuelScoop: false,
-      shieldBooster: false
-    },
+    equipment: { ...DEFAULT_EQUIPMENT },
     ...overrides
   };
 }
