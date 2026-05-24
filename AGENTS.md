@@ -11,7 +11,7 @@ Current Release: **v0.3.0-beta — Content Systems Sprint**
     *   **DO NOT** fetch, inspect, clone, copy, reference, imitate, or derive from external space-trading IP.
     *   **DO NOT** use trademarked or homage terms; keep project-original labels such as "BAL" and "Periphery".
     *   Maintain the original procedural generation seeds and logic unless specifically asked to change the universe.
-    *   Run the strict compliance scan before every commit: `grep -RniE "elite|cobra|jameson|lave|diso|leesti|zaonce|riedquat|tionisla|coriolis|galcop|thargoid|thargon|frontier|cyberpunk|tron|neon horizon|next horizon|premier space trading|credits" . --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git`.
+    *   Run the strict compliance scan before every commit. Run the same strict compliance scan used by `.github/workflows/ci.yml`. Do not duplicate the prohibited-term pattern in this file; the workflow is the source of truth.
 2.  **Persistence Integrity:**
     *   Save data is stored in `LocalStorage` and is versioned (see `src/game/SaveGame.ts` and `src/game/types.ts`).
     *   Any changes to `PlayerState`, `EconomyState`, or `SaveData` structures **MUST** include validation/migration logic to prevent breaking existing saves.
