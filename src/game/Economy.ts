@@ -1,5 +1,6 @@
 import type { CommodityId, EconomyState, MarketItem, StarSystem } from "./types";
 import { COMMODITIES } from "./Trading";
+import { getWorldTradeQuantityModifier } from "./WorldClasses";
 
 export const ECONOMY_CONSTANTS = {
   maxHistoryEntries: 240,
@@ -31,8 +32,9 @@ export function generateDynamicMarket(system: StarSystem, economy: EconomyState,
     const driftFactor = drift[commodity.id] ?? 1;
     const supplyShift = supplyAdjustments[commodity.id] ?? 0;
     const techSupply = commodity.id === "computers" || commodity.id === "medicine" ? system.techLevel : 13 - system.techLevel;
+    const worldQuantityModifier = getWorldTradeQuantityModifier(system, commodity.id);
     const price = Math.max(1, Math.round(commodity.basePrice * modifier * driftFactor));
-    const quantity = Math.max(0, Math.round((commodity.baseQuantity * modifier + techSupply + supplyShift) * marketScale));
+    const quantity = Math.max(0, Math.round((commodity.baseQuantity * modifier + techSupply + supplyShift) * marketScale * worldQuantityModifier));
 
     return { ...commodity, price, quantity };
   });

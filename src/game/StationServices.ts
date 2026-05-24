@@ -1,4 +1,5 @@
 import type { StarSystem, StationService } from "./types";
+import { getWorldMissionDensityModifier, getWorldServiceDensityModifier } from "./WorldClasses";
 
 export type StationProfileId =
   | "startPort"
@@ -61,68 +62,68 @@ export function getStationProfile(system: StarSystem): StationProfile {
   ) % 8;
 
   if (system.economy === "Trade Hub" || selector === 0) {
-    return buildProfile("marketHub", "Market Hub", {
+    return applyWorldServiceBias(system, buildProfile("marketHub", "Market Hub", {
       missions: true,
       equipment: true,
       advancedEquipment: system.techLevel >= 7,
       shipyard: system.techLevel >= 6
-    }, 1.18, 1, 1);
+    }, 1.18, 1, 1));
   }
 
   if (system.economy === "Research" || selector === 1) {
-    return buildProfile("instrumentBay", "Instrument Bay", {
+    return applyWorldServiceBias(system, buildProfile("instrumentBay", "Instrument Bay", {
       missions: true,
       equipment: true,
       advancedEquipment: true,
       survey: true
-    }, 0.95, 1, 1);
+    }, 0.95, 1, 1));
   }
 
   if (system.economy === "Mining" || selector === 2) {
-    return buildProfile("surveyOutpost", "Survey Outpost", {
+    return applyWorldServiceBias(system, buildProfile("surveyOutpost", "Survey Outpost", {
       missions: true,
       equipment: true,
       survey: true,
       salvage: true
-    }, 0.9, 0.95, 1);
+    }, 0.9, 0.95, 1));
   }
 
   if (selector === 3 || system.techLevel >= 9) {
-    return buildProfile("shipwright", "Shipwright", {
+    return applyWorldServiceBias(system, buildProfile("shipwright", "Shipwright", {
       missions: true,
       equipment: true,
       advancedEquipment: true,
       shipyard: true
-    }, 1, 1, 1);
+    }, 1, 1, 1));
   }
 
   if (selector === 4) {
-    return buildProfile("repairCoop", "Repair Cooperative", {
+    return applyWorldServiceBias(system, buildProfile("repairCoop", "Repair Cooperative", {
       missions: true,
       equipment: true
-    }, 0.92, 0.72, 0.9);
+    }, 0.92, 0.72, 0.9));
   }
 
   if (selector === 5 || system.opportunityTag === "contractFlow") {
-    return buildProfile("contractOffice", "Contract Office", {
+    return applyWorldServiceBias(system, buildProfile("contractOffice", "Contract Office", {
       missions: true,
       equipment: true,
       restrictedContracts: system.hazardLevel >= 3
-    }, 1, 1, 1.3);
+    }, 1, 1, 1.3));
   }
 
   if (selector === 6 || system.hazardLevel >= 4) {
-    return buildProfile("unstablePort", "Unstable Port", {
+    return applyWorldServiceBias(system, buildProfile("unstablePort", "Unstable Port", {
       missions: true,
       salvage: true,
       restrictedContracts: true
-    }, 0.82, 1.15, 1.05);
+    }, 0.82, 1.15, 1.05));
   }
 
-  return buildProfile("limitedPort", "Limited Port", {
+  return applyWorldServiceBias(system, buildProfile("limitedPort", "Limited Port", {
     missions: system.population >= 3 || system.techLevel >= 4,
     equipment: system.techLevel >= 5
-  }, 0.78, 1, 0.75);
+  }, 0.78, 1, 0.75));
 }
 
 export function hasStationService(system: StarSystem, service: StationService): boolean {
@@ -150,4 +151,40 @@ function buildProfile(
     repairCostModifier,
     missionDensity
   };
+}
+
+function applyWorldServiceBias(system: StarSystem, profile: StationProfile): StationProfile {
+  const services = { ...profile.services };
+  const classId = system.profile.classId;
+
+  if (classId === "observatory" || classId === "archive" || classId === "reserve") {
+    services.survey = true;
+  }
+  if (classId === "quarry" || classId === "crucible") {
+    services.salvage = true;
+  }
+  if (classId === "forge" || classId === "harbor" || classId === "relay" || classId === "bastion") {
+    services.equipment = true;
+  }
+  if ((classId === "harbor" || classId === "relay") && system.techLevel >= 5) {
+    services.shipyard = true;
+  }
+  if ((classId === "freehold" || classId === "veil" || classId === "bastion") && system.hazardLevel >= 2) {
+    services.restrictedContracts = true;
+  }
+
+  services.market = true;
+  services.fuel = true;
+  services.repair = true;
+
+  return {
+    ...profile,
+    services,
+    marketScale: clamp(profile.marketScale * getWorldServiceDensityModifier(system), 0.72, 1.25),
+    missionDensity: clamp(profile.missionDensity * getWorldMissionDensityModifier(system), 0.7, 1.35)
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }

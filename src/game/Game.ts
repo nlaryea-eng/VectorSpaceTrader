@@ -11,7 +11,7 @@ import {
 import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT } from "./Equipment";
 import { Input } from "./Input";
 import { normalizeMapAction, normalizeMarketAction } from "./InputRouter";
-import { DEFAULT_MAP_FILTERS, type MapFilterState, selectAdjacentFilteredSystem, getSystemAtProjectedMapPoint } from "./MapSearch";
+import { DEFAULT_MAP_FILTERS, cycleMapFilterState, type MapFilterState, selectAdjacentFilteredSystem, getSystemAtProjectedMapPoint } from "./MapSearch";
 import { acceptMission, completeMission, decrementMissionDeadline, generateMissions } from "./Missions";
 import { dismissHint, shouldShowHint, type HintId } from "./Onboarding";
 import { clamp, distance, length, updateOrientation, updatePosition, updateVelocity, vec3 } from "./Physics";
@@ -697,42 +697,14 @@ export class Game {
 
   private cycleMapFilter(zoneId: string): void {
     if (zoneId === "map-filter-clear") {
-      this.mapFilters = { ...DEFAULT_MAP_FILTERS };
+      this.mapFilters = cycleMapFilterState(this.mapFilters, zoneId);
       this.mapSearchInput.value = "";
       this.message = "Map filters cleared";
       this.audio.play("ui");
       return;
     }
 
-    if (zoneId === "map-filter-hazard") {
-      const values: MapFilterState["hazard"][] = ["all", "calm", "ionWeather", "debris", "patrolGap", "signalNoise", "raiderTrace"];
-      this.mapFilters = { ...this.mapFilters, hazard: nextValue(values, this.mapFilters.hazard) };
-    }
-
-    if (zoneId === "map-filter-economy") {
-      const values: MapFilterState["economy"][] = ["all", "Agricultural", "Industrial", "Research", "Mining", "Periphery", "Trade Hub"];
-      this.mapFilters = { ...this.mapFilters, economy: nextValue(values, this.mapFilters.economy) };
-    }
-
-    if (zoneId === "map-filter-government") {
-      const values: MapFilterState["government"][] = ["all", "Cooperative", "Council", "Syndicate", "Corporate", "Collective", "Independent"];
-      this.mapFilters = { ...this.mapFilters, government: nextValue(values, this.mapFilters.government) };
-    }
-
-    if (zoneId === "map-filter-opportunity") {
-      const values: MapFilterState["opportunity"][] = ["all", "steadyDemand", "shortHaul", "surveyData", "repairQueue", "contractFlow", "salvageTrace"];
-      this.mapFilters = { ...this.mapFilters, opportunity: nextValue(values, this.mapFilters.opportunity) };
-    }
-
-    if (zoneId === "map-filter-discovery") {
-      const values: MapFilterState["discovery"][] = ["all", "discovered", "undiscovered"];
-      this.mapFilters = { ...this.mapFilters, discovery: nextValue(values, this.mapFilters.discovery) };
-    }
-
-    if (zoneId === "map-filter-service") {
-      const values: MapFilterState["service"][] = ["all", "shipyard", "equipment", "advancedEquipment", "missions", "survey", "salvage", "restrictedContracts"];
-      this.mapFilters = { ...this.mapFilters, service: nextValue(values, this.mapFilters.service) };
-    }
+    this.mapFilters = cycleMapFilterState(this.mapFilters, zoneId);
 
     this.audio.play("ui");
   }

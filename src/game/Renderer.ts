@@ -1,7 +1,7 @@
 import { THEME } from "./Theme";
 import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
-import { filterSystems, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
+import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
 import { getLegalRiskLabel, getReputationLabel } from "./Reputation";
 import { HINT_TEXT } from "./Onboarding";
 import { formatTimePlayed } from "./RunStats";
@@ -850,10 +850,11 @@ export class Renderer {
       const inRange = !isCurrent && canJump(current, system, state.player.fuel, state.player);
       const discovered = isSystemDiscovered(state.player, system.id);
       const matched = matchesMapFilters(system, state.mapFilters, state.player);
+      const visualState = getMapSystemVisualState(system, state.mapFilters, state.player, selected.id);
       const nearby = getJumpDistance(current, system) <= shipStats.maxJumpRange * 0.65;
       const activeFilter = hasActiveMapFilter(state.mapFilters);
 
-      this.ctx.globalAlpha = activeFilter && !matched && !isSelected ? 0.2 : discovered ? 1 : 0.4;
+      this.ctx.globalAlpha = visualState.protected ? 1 : visualState.dimmed ? 0.2 : discovered ? 1 : 0.4;
 
       let color = THEME.colors.textDim;
       if (isCurrent) color = THEME.colors.textPrimary;
@@ -970,12 +971,13 @@ export class Renderer {
       { id: "map-filter-opportunity", label: "OPP", value: state.mapFilters.opportunity },
       { id: "map-filter-discovery", label: "DISC", value: state.mapFilters.discovery },
       { id: "map-filter-service", label: "SVC", value: state.mapFilters.service },
+      { id: "map-filter-systemClass", label: this.narrow ? "CL" : "CLASS", value: state.mapFilters.systemClass },
       { id: "map-filter-clear", label: "CLEAR", value: "" }
     ];
 
-    const fbW = this.narrow ? 38 : 60;
+    const fbW = this.narrow ? 42 : 74;
     const fbH = this.narrow ? 24 : 28;
-    const fbGap = this.narrow ? 4 : 8;
+    const fbGap = this.narrow ? 2 : 6;
     const fbY = this.narrow ? mapY + mapH + 8 : mapY + mapH + 12;
     const fbStartX = mapX;
 

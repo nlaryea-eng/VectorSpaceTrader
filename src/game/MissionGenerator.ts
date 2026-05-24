@@ -3,6 +3,7 @@ import { SeededPrng } from "./Universe";
 import { findShortestRoute } from "./MissionRouting";
 import { type MissionId, parseMissionId } from "./MissionIds";
 import { getAvailableCargoCapacity } from "./Trading";
+import { getWorldHazardRiskAdjustment, getWorldMissionTypePool } from "./WorldClasses";
 
 export interface MissionOfferContext {
   seed: number;
@@ -11,7 +12,7 @@ export interface MissionOfferContext {
   player: PlayerState;
 }
 
-const ARCHETYPES: MissionType[] = [
+const ARCHETYPES: readonly MissionType[] = [
   "courier", "fragile", "urgent", "medical", "survey", "passenger", "salvage", "supply", "restricted", "reputation"
 ];
 
@@ -36,7 +37,7 @@ export function generateMissionOffer(
   const { value } = parseMissionId(id);
   const prng = new SeededPrng(Number(value % BigInt(0x100000000)));
 
-  const type = prng.pick(ARCHETYPES);
+  const type = prng.pick(getWorldMissionTypePool(context.origin, ARCHETYPES));
   const typeLabel = TYPE_LABELS[type];
 
   // Select destination
@@ -50,7 +51,7 @@ export function generateMissionOffer(
   if (cargoUnits > getAvailableCargoCapacity(context.player) && cargoUnits > 0) return null;
 
   const baseReward = getBaseReward(type);
-  const riskLevel = Math.min(5, getBaseRisk(type) + Math.floor(destination.hazardLevel / 3));
+  const riskLevel = clampRiskLevel(getBaseRisk(type) + Math.floor(destination.hazardLevel / 3) + getWorldHazardRiskAdjustment(destination));
   
   const hazardBonus = destination.hazardLevel * 22 + riskLevel * 15;
   const distanceBonus = route.totalDistance * 12;
@@ -194,4 +195,8 @@ function getRiskLabel(riskLevel: number): string {
   if (riskLevel <= 3) return "elevated";
   if (riskLevel <= 4) return "high";
   return "severe";
+}
+
+function clampRiskLevel(value: number): number {
+  return Math.max(1, Math.min(5, value));
 }

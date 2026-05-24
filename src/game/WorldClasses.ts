@@ -1,4 +1,4 @@
-import type { SystemClassDefinition, SystemClassId, WorldProfile, EconomyType } from "./types";
+import type { CommodityId, EconomyType, MissionType, StarSystem, SystemClassDefinition, SystemClassId, WorldProfile } from "./types";
 import { SeededPrng } from "./Universe";
 
 export const WORLD_CLASSES: Record<SystemClassId, SystemClassDefinition> = {
@@ -21,6 +21,24 @@ export const WORLD_CLASSES: Record<SystemClassId, SystemClassDefinition> = {
 
 export const WORLD_CLASS_IDS = Object.keys(WORLD_CLASSES) as SystemClassId[];
 
+const MISSION_PREFERENCES: Record<SystemClassId, MissionType[]> = {
+  cradle: ["passenger", "courier"],
+  forge: ["supply", "salvage"],
+  archive: ["survey", "courier"],
+  garden: ["supply", "medical"],
+  drift: ["courier", "salvage"],
+  relay: ["courier", "passenger"],
+  bastion: ["restricted", "courier"],
+  quarry: ["salvage", "supply"],
+  veil: ["survey", "restricted"],
+  harbor: ["supply", "courier"],
+  clinic: ["medical", "courier"],
+  observatory: ["survey", "courier"],
+  freehold: ["courier", "restricted"],
+  crucible: ["salvage", "urgent"],
+  reserve: ["survey", "medical"]
+};
+
 const TRADE_HINTS = ["Active exchange", "Quiet market", "High volume", "Specialized goods", "Fluctuating prices", "Steady flow"];
 const SERVICE_HINTS = ["Extensive repair yards", "Basic provisions", "Contract boards active", "Fuel depots available", "Restricted docks", "Open market services"];
 const MISSION_HINTS = ["Frequent postings", "High-risk offers", "Routine hauls", "Survey data needed", "Urgent couriers", "Local disputes"];
@@ -34,7 +52,7 @@ export function generateWorldProfile(seed: number, id: number, economy: EconomyT
   let classId: SystemClassId;
   
   if (economy === "Agricultural") classId = prng.pick(["garden", "cradle", "freehold"]);
-  else if (economy === "Industrial") classId = prng.pick(["forge", "harbor", "quarry"]);
+  else if (economy === "Industrial") classId = prng.pick(["forge", "harbor", "quarry", "bastion"]);
   else if (economy === "Research") classId = prng.pick(["archive", "clinic", "observatory"]);
   else if (economy === "Mining") classId = prng.pick(["quarry", "crucible", "drift"]);
   else if (economy === "Periphery") classId = prng.pick(["drift", "veil", "reserve"]);
@@ -59,4 +77,47 @@ export function generateWorldProfile(seed: number, id: number, economy: EconomyT
     discoveryNote,
     knownFor
   };
+}
+
+export function getWorldClassDefinition(system: Pick<StarSystem, "profile">): SystemClassDefinition {
+  return WORLD_CLASSES[system.profile.classId];
+}
+
+export function getWorldTradeQuantityModifier(system: Pick<StarSystem, "profile" | "importHint" | "exportHint">, commodityId: CommodityId): number {
+  const definition = getWorldClassDefinition(system);
+  const biasModifier = 1 + (definition.tradeBias - 1) * 0.25;
+  const hintModifier = commodityId === system.exportHint ? 1.03 : commodityId === system.importHint ? 0.97 : 1;
+  return roundTo(clamp(biasModifier * hintModifier, 0.92, 1.08), 3);
+}
+
+export function getWorldServiceDensityModifier(system: Pick<StarSystem, "profile">): number {
+  const definition = getWorldClassDefinition(system);
+  return roundTo(clamp(1 + (definition.serviceBias - 1) * 0.25, 0.95, 1.05), 3);
+}
+
+export function getWorldMissionDensityModifier(system: Pick<StarSystem, "profile">): number {
+  const definition = getWorldClassDefinition(system);
+  return roundTo(clamp(1 + (definition.missionBias - 1) * 0.2, 0.96, 1.04), 3);
+}
+
+export function getWorldMissionTypePool(system: Pick<StarSystem, "profile">, baseTypes: readonly MissionType[]): MissionType[] {
+  const definition = getWorldClassDefinition(system);
+  const extraCount = definition.missionBias >= 1.15 ? 2 : definition.missionBias >= 1.05 ? 1 : 0;
+  return [...baseTypes, ...MISSION_PREFERENCES[definition.id].slice(0, extraCount)];
+}
+
+export function getWorldHazardRiskAdjustment(system: Pick<StarSystem, "profile" | "hazardLevel">): -1 | 0 | 1 {
+  const definition = getWorldClassDefinition(system);
+  if (definition.hazardBias >= 1.35 && system.hazardLevel >= 2) return 1;
+  if (definition.hazardBias <= 0.8 && system.hazardLevel >= 1) return -1;
+  return 0;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function roundTo(value: number, places: number): number {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
 }

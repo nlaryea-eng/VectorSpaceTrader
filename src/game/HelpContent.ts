@@ -242,7 +242,8 @@ export const HELP_CONTENT: HelpSection[] = [
         body: [
           "Use [A/D] or Arrow keys to cycle through systems.",
           "The search field filters systems by name.",
-          "The teal ring indicates your maximum jump range."
+          "The teal ring indicates your maximum jump range.",
+          "System classes lightly shape market stock, services, mission tendencies, and risk cues."
         ],
         tips: ["Click near a system to select it; nearby/matched targets are prioritized."]
       },

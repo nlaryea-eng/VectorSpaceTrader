@@ -1,4 +1,5 @@
 import { getStationProfile } from "./StationServices";
+import { WORLD_CLASS_IDS } from "./WorldClasses";
 import type { EconomyType, GovernmentType, HazardTag, OpportunityTag, PlayerState, StarSystem, StationService, SystemClassId } from "./types";
 
 export type DiscoveryFilter = "all" | "discovered" | "undiscovered";
@@ -17,6 +18,12 @@ export interface MapFilterState {
 export interface MapProjection {
   x: number;
   y: number;
+}
+
+export interface MapSystemVisualState {
+  matched: boolean;
+  protected: boolean;
+  dimmed: boolean;
 }
 
 export const DEFAULT_MAP_FILTERS: MapFilterState = {
@@ -80,6 +87,62 @@ export function hasActiveMapFilter(filters: MapFilterState): boolean {
     filters.service !== "all" ||
     filters.systemClass !== "all"
   );
+}
+
+export function cycleMapFilterState(filters: MapFilterState, zoneId: string): MapFilterState {
+  if (zoneId === "map-filter-clear") return { ...DEFAULT_MAP_FILTERS };
+
+  if (zoneId === "map-filter-hazard") {
+    const values: MapFilterState["hazard"][] = ["all", "calm", "ionWeather", "debris", "patrolGap", "signalNoise", "raiderTrace"];
+    return { ...filters, hazard: nextValue(values, filters.hazard) };
+  }
+
+  if (zoneId === "map-filter-economy") {
+    const values: MapFilterState["economy"][] = ["all", "Agricultural", "Industrial", "Research", "Mining", "Periphery", "Trade Hub"];
+    return { ...filters, economy: nextValue(values, filters.economy) };
+  }
+
+  if (zoneId === "map-filter-government") {
+    const values: MapFilterState["government"][] = ["all", "Cooperative", "Council", "Syndicate", "Corporate", "Collective", "Independent"];
+    return { ...filters, government: nextValue(values, filters.government) };
+  }
+
+  if (zoneId === "map-filter-opportunity") {
+    const values: MapFilterState["opportunity"][] = ["all", "steadyDemand", "shortHaul", "surveyData", "repairQueue", "contractFlow", "salvageTrace"];
+    return { ...filters, opportunity: nextValue(values, filters.opportunity) };
+  }
+
+  if (zoneId === "map-filter-discovery") {
+    const values: MapFilterState["discovery"][] = ["all", "discovered", "undiscovered"];
+    return { ...filters, discovery: nextValue(values, filters.discovery) };
+  }
+
+  if (zoneId === "map-filter-service") {
+    const values: MapFilterState["service"][] = ["all", "shipyard", "equipment", "advancedEquipment", "missions", "survey", "salvage", "restrictedContracts"];
+    return { ...filters, service: nextValue(values, filters.service) };
+  }
+
+  if (zoneId === "map-filter-systemClass") {
+    const values: MapFilterState["systemClass"][] = ["all", ...WORLD_CLASS_IDS];
+    return { ...filters, systemClass: nextValue(values, filters.systemClass) };
+  }
+
+  return filters;
+}
+
+export function getMapSystemVisualState(
+  system: StarSystem,
+  filters: MapFilterState,
+  player: Pick<PlayerState, "currentSystemId" | "discoveredSystemIds">,
+  selectedSystemId: number
+): MapSystemVisualState {
+  const matched = matchesMapFilters(system, filters, player);
+  const protectedSystem = system.id === player.currentSystemId || system.id === selectedSystemId;
+  return {
+    matched,
+    protected: protectedSystem,
+    dimmed: hasActiveMapFilter(filters) && !matched && !protectedSystem
+  };
 }
 
 export function selectAdjacentFilteredSystem(
@@ -160,3 +223,8 @@ export function getSystemAtProjectedMapPoint(
 
 // Re-export canJump for hit testing
 import { canJump } from "./Universe";
+
+function nextValue<T>(values: T[], current: T): T {
+  const index = values.findIndex((value) => value === current);
+  return values[(index + 1 + values.length) % values.length];
+}

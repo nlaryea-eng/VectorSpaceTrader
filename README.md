@@ -86,7 +86,7 @@ Touch controls are drawn directly on the canvas for pitch, yaw, throttle, fire, 
 - **Flight & Combat:** First-person vector flight with starfield, HUD, station beacons, wireframe enemies, lasers, shields, and energy management.
 - **Docking:** Animated docking corridor transitions and deterministic station service profiles.
 - **Trading & Economy:** Original commodity set with a dynamic economy featuring drift, supply/demand shifts, and price history.
-- **Universe Map:** Deterministic original universe with 128 systems, discovery state, and searchable/filterable map controls.
+- **Universe Map:** Deterministic original universe with 128 systems, discovery state, world classes, and searchable/filterable map controls.
 - **Shipyard:** Fleet progression with distinct ship classes, comparison tools, and equipment preservation.
 - **Equipment Bay:** Upgrade catalog across weapons, cargo, fuel, shields, and specialized tools.
 - **Procedural Missions:** Diverse contract types (courier, medical, salvage, etc.) with deadlines, reputation effects, and legal risks.
@@ -101,7 +101,7 @@ Stations with shipyard service show a hull comparison screen. Select a hull with
 
 ## Map Search And Filters
 
-The map includes a small search field for system names. Canvas filter buttons cycle hazard, economy, discovery, and station-service filters. Matching systems are highlighted while current, selected, nearby, and matching systems keep labels readable at the expanded map scale.
+The map includes a small search field for system names. Canvas filter buttons cycle hazard, economy, discovery, station-service, and system-class filters. Matching systems are highlighted while current, selected, nearby, and matching systems keep labels readable at the expanded map scale. System classes lightly affect market stock, station services, mission tendencies, and risk cues.
 
 ## Station Services And Missions
 

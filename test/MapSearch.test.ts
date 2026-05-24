@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import {
   DEFAULT_MAP_FILTERS,
+  cycleMapFilterState,
   filterSystems,
+  getMapSystemVisualState,
   getSystemAtProjectedMapPoint,
   matchesMapFilters,
   projectSystemToMap,
@@ -37,6 +39,41 @@ describe("MapSearch", () => {
 
     expect(matchesMapFilters(target, filters, player)).toBe(true);
     expect(filterSystems(systems, filters, player).every((system) => getStationProfile(system).services.shipyard)).toBe(true);
+  });
+
+  it("cycles and clears the system class filter", () => {
+    const cycled = cycleMapFilterState(DEFAULT_MAP_FILTERS, "map-filter-systemClass");
+    expect(cycled.systemClass).not.toBe("all");
+    expect(cycleMapFilterState(cycled, "map-filter-clear")).toEqual(DEFAULT_MAP_FILTERS);
+  });
+
+  it("combines system class with text search and other filters", () => {
+    const systems = generateUniverse(492017);
+    const target = systems.find((system) => getStationProfile(system).services.missions && system.id !== 0)!;
+    const filters = {
+      ...DEFAULT_MAP_FILTERS,
+      query: target.name.slice(0, 4),
+      systemClass: target.profile.classId,
+      service: "missions" as const
+    };
+    const result = filterSystems(systems, filters, makePlayer({ discoveredSystemIds: [0, target.id] }));
+
+    expect(result.map((system) => system.id)).toContain(target.id);
+    expect(result.every((system) => system.profile.classId === target.profile.classId)).toBe(true);
+    expect(result.every((system) => system.name.toLowerCase().includes(filters.query.toLowerCase()))).toBe(true);
+  });
+
+  it("keeps selected and current systems visible when class filters exclude them", () => {
+    const systems = generateUniverse(492017);
+    const current = systems[0];
+    const selected = systems.find((system) => system.id !== current.id && system.profile.classId !== current.profile.classId)!;
+    const filteredOut = systems.find((system) => system.id !== current.id && system.id !== selected.id && system.profile.classId !== selected.profile.classId)!;
+    const filters = { ...DEFAULT_MAP_FILTERS, systemClass: selected.profile.classId };
+    const player = makePlayer({ currentSystemId: current.id, discoveredSystemIds: [current.id, selected.id, filteredOut.id] });
+
+    expect(getMapSystemVisualState(current, filters, player, selected.id).dimmed).toBe(false);
+    expect(getMapSystemVisualState(selected, filters, player, selected.id).dimmed).toBe(false);
+    expect(getMapSystemVisualState(filteredOut, filters, player, selected.id).dimmed).toBe(true);
   });
 
   it("preserves navigation through filtered matches", () => {

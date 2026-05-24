@@ -271,6 +271,12 @@ async function browserSmoke() {
     const afterMap = (await snapshot(desktop)).selectedSystemId;
     assert(afterMap !== beforeMap, "Map selection key did not change selected system");
 
+    await assertButton(desktop, "map-filter-systemClass");
+    await desktop.eval("window.__VST_DEBUG__?.game['cycleMapFilter']('map-filter-systemClass')");
+    await sleep(200);
+    const stateWithClass = await snapshot(desktop);
+    assert(stateWithClass.mapFilters.systemClass !== "all", "CLASS filter did not cycle from all");
+
     // Map search regression tests
     log("Checking map search functionality...");
     const inputHidden = await desktop.eval("document.querySelector('.map-search-input').hidden");
@@ -280,6 +286,7 @@ async function browserSmoke() {
     await sleep(200);
     const stateWithSearch = await snapshot(desktop);
     assert(stateWithSearch.mapFilters.query === 'Ara', "Map search input did not update filters");
+    assert(stateWithSearch.mapFilters.systemClass === stateWithClass.mapFilters.systemClass, "CLASS filter changed unexpectedly during search");
 
     // Test that Slash in input doesn't open help
     await desktop.key("Slash"); await sleep(200);
@@ -300,6 +307,13 @@ async function browserSmoke() {
     assert(inputVisibleAgain === false, "Map search input should be visible again after help");
     const queryPreserved = await desktop.eval("document.querySelector('.map-search-input').value");
     assert(queryPreserved === 'Ara', "Map search query should be preserved after help");
+    assert((await snapshot(desktop)).mapFilters.systemClass === stateWithClass.mapFilters.systemClass, "CLASS filter should be preserved after help");
+
+    await desktop.eval("window.__VST_DEBUG__?.game['cycleMapFilter']('map-filter-clear')");
+    await sleep(200);
+    const stateAfterClear = await snapshot(desktop);
+    assert(stateAfterClear.mapFilters.systemClass === "all", "CLR did not reset CLASS filter");
+    assert(stateAfterClear.mapFilters.query === "", "CLR did not reset map search query");
 
     await desktop.key("KeyA"); await sleep(150);
 

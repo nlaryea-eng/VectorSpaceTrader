@@ -28,6 +28,9 @@ describe("Pilot Manual Content", () => {
     expect(mapText).toContain("ECO");
     expect(mapText).toContain("DISC");
     expect(mapText).toContain("SVC");
+    expect(mapText).toContain("CLASS");
+    expect(mapText).toContain("lightly shape market stock");
+    expect(mapText).not.toContain("hidden");
 
     const reputationSection = HELP_CONTENT.find(s => s.id === "reputation")!;
     expect(JSON.stringify(reputationSection)).toContain("Trusted");
