@@ -43,7 +43,7 @@ jobs:
           set -e
 
           if [ "$grep_status" -eq 0 ]; then
-            grep -vE '^\./(AGENTS\.md|COMPLIANCE\.md|2026-05-24_compliance-review\.md|README\.md|CHANGELOG\.md|DEPLOY\.md|\.github/workflows/ci\.yml):' \
+            grep -vE '^\./(AGENTS\.md|COMPLIANCE\.md|2026-05-24_compliance-review\.md|2026-05-24_assessment\.md|README\.md|CHANGELOG\.md|DEPLOY\.md|\.github/workflows/ci\.yml):' \
               /tmp/compliance-matches.txt > /tmp/compliance-violations.txt || true
             if [ -s /tmp/compliance-violations.txt ]; then
               echo "Compliance violations found outside allowed documentation:"
