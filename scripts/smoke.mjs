@@ -253,12 +253,35 @@ async function browserSmoke() {
     await desktop.key("KeyD"); await sleep(1800);
     await assertMode(desktop, "docked");
     await assertButton(desktop, "touch-trade");
+    await assertButton(desktop, "touch-missions");
+    await assertButton(desktop, "touch-equipment");
+    await assertButton(desktop, "touch-shipyard");
+    await assertButton(desktop, "touch-repair");
 
     await desktop.key("KeyT"); await sleep(300);
     await assertMode(desktop, "trade");
+    await assertButton(desktop, "trade-row-0");
     await desktop.key("KeyF");
     await sleep(200);
     assert((await snapshot(desktop)).message.length > 0, "Market fuel shortcut did not reach a handled result");
+
+    await desktop.key("Escape"); await sleep(200);
+    await assertMode(desktop, "docked");
+    await desktop.key("KeyR"); await sleep(300);
+    await assertMode(desktop, "missions");
+    await assertButton(desktop, "mission-row-0");
+
+    await desktop.key("Escape"); await sleep(200);
+    await assertMode(desktop, "docked");
+    await desktop.key("KeyE"); await sleep(300);
+    await assertMode(desktop, "equipment");
+    await assertButton(desktop, "equip-category-cycle");
+
+    await desktop.key("Escape"); await sleep(200);
+    await assertMode(desktop, "docked");
+    await desktop.key("KeyY"); await sleep(300);
+    await assertMode(desktop, "shipyard");
+    await assertButton(desktop, "ship-buy");
 
     await desktop.key("Escape"); await sleep(200);
     await desktop.key("KeyM"); await sleep(300);
@@ -300,6 +323,11 @@ async function browserSmoke() {
     await assertMode(desktop, "help");
     const inputHiddenInHelp = await desktop.eval("document.querySelector('.map-search-input').hidden");
     assert(inputHiddenInHelp === true, "Map search input should be hidden in help mode");
+    const manualInputVisible = await desktop.eval("document.querySelector('.manual-search-input').hidden === false");
+    assert(manualInputVisible, "Manual search input should be visible in help mode");
+    await desktop.eval("const input = document.querySelector('.manual-search-input'); input.focus(); input.value = 'fuel'; input.dispatchEvent(new Event('input'))");
+    await sleep(200);
+    await assertMode(desktop, "help");
 
     await desktop.key("Escape"); await sleep(300);
     await assertMode(desktop, "map");
@@ -326,6 +354,15 @@ async function browserSmoke() {
     await desktop.key("Digit2"); await sleep(400);
     assert(["flight", "docked"].includes((await snapshot(desktop)).mode), "Continue did not restore a playable state");
 
+    await desktop.key("Escape"); await sleep(300);
+    await assertMode(desktop, "paused");
+    await assertButton(desktop, "pause-settings");
+    await clickButton(desktop, "pause-settings");
+    await sleep(300);
+    await assertMode(desktop, "settings");
+    await assertButton(desktop, "settings-sfx-up");
+    await clickButton(desktop, "settings-sfx-up");
+    await sleep(150);
     await desktop.key("Escape"); await sleep(300);
     await assertMode(desktop, "paused");
     await desktop.key("Slash"); await sleep(300);
@@ -355,10 +392,18 @@ async function browserSmoke() {
     await assertMode(mobile, "docked");
     await assertDockedHintDoesNotOverlapActions(mobile);
     writeFileSync(join(SCREENSHOTS_DIR, "smoke-mobile-docked.png"), await mobile.screenshot());
+    await mobile.key("KeyT"); await sleep(300);
+    await assertMode(mobile, "trade");
+    await assertButton(mobile, "trade-row-0");
+    await mobile.key("Escape"); await sleep(200);
+    await mobile.key("KeyM"); await sleep(300);
+    await assertMode(mobile, "map");
+    const mobileMapSearchVisible = await mobile.eval("document.querySelector('.map-search-input').hidden === false");
+    assert(mobileMapSearchVisible, "Mobile map search input should be visible in map mode");
 
     await mobile.close();
     await browser.close();
-    log("BROWSER: launch, dock, market fuel, map keys, real save/reload, and 390x844 layout checks — OK");
+    log("BROWSER: launch, docked hub, trade, missions, equipment, shipyard, manual search, settings/audio, map, save/reload, and 390x844 layout checks — OK");
   } finally {
     try { proc.kill("SIGTERM"); } catch { /* ignore */ }
     try { preview.kill("SIGTERM"); } catch { /* ignore */ }
@@ -410,6 +455,13 @@ async function assertMode(tab, mode) {
 async function assertButton(tab, id) {
   const state = await snapshot(tab);
   assert(Boolean(state.buttons.find((button) => button.id === id)), `Missing button zone ${id} in mode ${state.mode}`);
+}
+
+async function clickButton(tab, id) {
+  const state = await snapshot(tab);
+  const button = state.buttons.find((candidate) => candidate.id === id);
+  assert(button, `Missing button zone ${id} in mode ${state.mode}`);
+  await tab.click(button.x + button.width / 2, button.y + button.height / 2);
 }
 
 async function assertRealSaveExists(tab) {
@@ -518,6 +570,11 @@ function makeTarget(send, sessionId) {
     async key(code) {
       await send("Input.dispatchKeyEvent", { type: "keyDown", code, key: codeToKey(code) }, sessionId);
       await send("Input.dispatchKeyEvent", { type: "keyUp", code, key: codeToKey(code) }, sessionId);
+    },
+    async click(x, y) {
+      await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" }, sessionId);
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 }, sessionId);
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 }, sessionId);
     },
     async screenshot() {
       const r = await send("Page.captureScreenshot", { format: "png" }, sessionId);

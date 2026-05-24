@@ -1,4 +1,5 @@
 import { ModernAudio, type AmbientMode } from "./Audio";
+import { getUiSoundEvent } from "./AudioFeedback";
 import { createEnemyShip, fireEnemyLaser, fireLaser, resolveProjectileHits, selectEnemyClass, updateEnemy } from "./Combat";
 import {
   applyEconomyDrift,
@@ -35,7 +36,7 @@ import { getStationProfile, hasStationService } from "./StationServices";
 import { createInitialTransientState } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
-import { HELP_CONTENT, type HelpSectionId } from "./HelpContent";
+import { HELP_CONTENT, getHelpSectionForMode, searchHelpContent, type HelpSectionId } from "./HelpContent";
 import type {
   ButtonZone,
   EconomyState,
@@ -107,14 +108,17 @@ export class Game {
   private meta: Meta = { hasSeenOnboarding: false, dismissedHints: [] };
   private helpSectionId: HelpSectionId = "quickStart";
   private helpPageIndex = 0;
+  private helpSearchQuery = "";
   private isNewPersonalBest = false;
   private lastAmbientMode: AmbientMode = "none";
   private readonly mapSearchInput: HTMLInputElement;
+  private readonly manualSearchInput: HTMLInputElement;
 
   constructor(canvas: HTMLCanvasElement) {
     this.input = new Input(canvas);
     this.renderer = new Renderer(canvas);
     this.mapSearchInput = this.createMapSearchInput();
+    this.manualSearchInput = this.createManualSearchInput();
     this.economy = recordPriceHistory(this.economy, this.player.currentSystemId, this.market);
   }
 
@@ -128,6 +132,7 @@ export class Game {
     cancelAnimationFrame(this.animationFrame);
     this.input.detach();
     this.mapSearchInput.remove();
+    this.manualSearchInput.remove();
   }
 
   getDebugSnapshot(): { mode: GameMode; selectedSystemId: number; message: string; player: Pick<PlayerState, "docked" | "balance" | "fuel">; buttons: ButtonZone[]; mapFilters: MapFilterState } {
@@ -176,6 +181,8 @@ export class Game {
         this.mode = this.previousMode;
       } else {
         this.previousMode = this.mode;
+        this.helpSectionId = getHelpSectionForMode(this.mode);
+        this.helpPageIndex = 0;
         this.mode = "help";
         this.audio.play("ui");
       }
@@ -646,7 +653,7 @@ export class Game {
       } else {
         this.player = result.player;
         this.message = `Accepted: ${mission.title}`;
-        this.audio.play("missionAccepted");
+        this.audio.play(getUiSoundEvent("missionAccepted"));
         this.persist();
       }
       return;
@@ -671,7 +678,7 @@ export class Game {
     if (result.ok) {
       this.player = result.player;
       this.message = "Ship transfer complete";
-      this.audio.play("tradeOk");
+      this.audio.play(getUiSoundEvent("shipPurchase"));
       this.persist();
     } else {
       this.message = result.reason ?? "Ship transfer blocked";
@@ -700,13 +707,13 @@ export class Game {
       this.mapFilters = cycleMapFilterState(this.mapFilters, zoneId);
       this.mapSearchInput.value = "";
       this.message = "Map filters cleared";
-      this.audio.play("ui");
+      this.audio.play(getUiSoundEvent("filterCycle"));
       return;
     }
 
     this.mapFilters = cycleMapFilterState(this.mapFilters, zoneId);
 
-    this.audio.play("ui");
+    this.audio.play(getUiSoundEvent("filterCycle"));
   }
 
   private applyTradeResult(ok: boolean, player: PlayerState, reason?: string): void {
@@ -1064,7 +1071,7 @@ export class Game {
           } else {
             this.player = result.player;
             this.message = `Accepted: ${mission.title}`;
-            this.audio.play("missionAccepted");
+            this.audio.play(getUiSoundEvent("missionAccepted"));
             this.persist();
           }
         }
@@ -1106,6 +1113,8 @@ export class Game {
     if (zone.id === "controls") this.mode = "controls";
     if (zone.id === "help") {
       this.previousMode = this.mode;
+      this.helpSectionId = getHelpSectionForMode(this.mode);
+      this.helpPageIndex = 0;
       this.mode = "help";
     }
     if (zone.id === "back") this.mode = "start";
@@ -1114,6 +1123,7 @@ export class Game {
     if (zone.id === "touch-dock") this.handleDockCommand();
     if (zone.id === "touch-trade" && this.player.docked) this.openStationMode("trade");
     if (zone.id === "touch-equipment" && this.player.docked) this.openStationMode("equipment");
+    if (zone.id === "touch-repair" && this.player.docked) this.openStationMode("equipment");
     if (zone.id === "touch-shipyard" && this.player.docked) this.openStationMode("shipyard");
     if (zone.id === "touch-missions" && this.player.docked) this.openStationMode("missions");
     if (zone.id === "touch-menu") {
@@ -1280,6 +1290,38 @@ export class Game {
     return input;
   }
 
+  private createManualSearchInput(): HTMLInputElement {
+    const input = document.createElement("input");
+    input.type = "search";
+    input.placeholder = "Search manual";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.className = "manual-search-input";
+    input.hidden = true;
+    input.addEventListener("input", () => {
+      this.helpSearchQuery = input.value;
+      const first = searchHelpContent(this.helpSearchQuery)[0];
+      if (first) {
+        this.helpSectionId = first.id;
+        this.helpPageIndex = 0;
+      }
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        input.blur();
+        this.mode = this.previousMode;
+        this.audio.play("ui");
+        e.stopPropagation();
+      }
+      if (e.key === "Enter") {
+        input.blur();
+        e.stopPropagation();
+      }
+    });
+    document.body.appendChild(input);
+    return input;
+  }
+
   private syncMapSearchVisibility(): void {
     const isMap = this.mode === "map";
     const isHelp = this.mode === "help";
@@ -1295,6 +1337,17 @@ export class Game {
           this.mapSearchInput.value = "";
           this.mapFilters = { ...this.mapFilters, query: "" };
         }
+      }
+    }
+
+    if (this.manualSearchInput.hidden !== !isHelp) {
+      this.manualSearchInput.hidden = !isHelp;
+      if (isHelp) {
+        this.manualSearchInput.focus();
+      } else {
+        this.manualSearchInput.blur();
+        this.manualSearchInput.value = "";
+        this.helpSearchQuery = "";
       }
     }
   }
@@ -1379,6 +1432,7 @@ export class Game {
       equipmentCategoryFilter: this.equipmentCategoryFilter,
       helpSectionId: this.helpSectionId,
       helpPageIndex: this.helpPageIndex,
+      helpSearchQuery: this.helpSearchQuery,
       shipyardPage: this.shipyardPage,
       shipyardClassFilter: this.shipyardClassFilter,
     });

@@ -1,57 +1,43 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
-
 :root {
   color-scheme: dark;
 
-  /* Backgrounds */
-  --bg-deep: #020408;
-  --bg-surface: #0a0e14;
-  --bg-elevated: #121820;
-  --bg-glass: rgba(10, 14, 20, 0.7);
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
 
-  /* Accents */
-  --accent-pink: #ff007f;
-  --accent-teal: #00f2ff;
-  --accent-amber: #ffaa00;
-  --accent-violet: #8a2be2;
-  --accent-magenta: #ff00ff;
+  --vst-bg: #05070c;
+  --vst-surface-1: #0e1320;
+  --vst-surface-2: #161e2e;
+  --vst-surface-3: #1f2a3f;
+  --vst-surface-glass: rgba(14, 19, 32, 0.82);
+  --vst-surface-overlay: rgba(14, 19, 32, 0.7);
+  --vst-accent: #6ce3d6;
+  --vst-accent-2: #f5c062;
+  --vst-accent-violet: #a88cff;
+  --vst-warning: #f5a623;
+  --vst-danger: #ff5a5f;
+  --vst-success: #5bd66b;
+  --vst-info: #7aa7ff;
+  --vst-text: #e6ecf5;
+  --vst-text-muted: #8a93a6;
+  --vst-text-dim: #5f697d;
+  --vst-grid: #1e2638;
+  --vst-focus: #9ff0ff;
+  --vst-disabled: #3a4256;
+  --vst-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --vst-font-telemetry: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --vst-font-display: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --vst-radius-chip: 4px;
+  --vst-radius-control: 6px;
+  --vst-radius-panel: 8px;
+  --vst-focus-width: 3px;
+  --vst-focus-offset: 1px;
 
-  /* Functional */
-  --color-text-primary: #f0f4f8;
-  --color-text-secondary: #94a3b8;
-  --color-text-dim: #64748b;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
-
-  /* Neon Glows */
-  --glow-pink: 0 0 10px rgba(255, 0, 127, 0.5), 0 0 20px rgba(255, 0, 127, 0.2);
-  --glow-teal: 0 0 10px rgba(0, 242, 255, 0.5), 0 0 20px rgba(0, 242, 255, 0.2);
-  --glow-amber: 0 0 10px rgba(255, 170, 0, 0.5), 0 0 20px rgba(255, 170, 0, 0.2);
-
-  /* Spacing */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-
-  /* UI Atoms */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-full: 9999px;
-
-  /* Fonts */
-  --font-primary: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-accent: 'Space Grotesk', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-
-  background: var(--bg-deep);
-  color: var(--color-text-primary);
-  font-family: var(--font-primary);
+  background: var(--vst-bg);
+  color: var(--vst-text);
+  font-family: var(--vst-font-ui);
+  font-variant-numeric: tabular-nums;
 }
 
 * {
@@ -63,49 +49,96 @@ body,
 #app {
   width: 100%;
   height: 100%;
+  min-width: 320px;
+  min-height: 240px;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: var(--bg-deep);
+  background:
+    linear-gradient(180deg, rgba(108, 227, 214, 0.035), transparent 36%),
+    var(--vst-bg);
 }
 
 body {
   touch-action: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+:focus-visible {
+  outline: var(--vst-focus-width) solid var(--vst-focus);
+  outline-offset: var(--vst-focus-offset);
 }
 
 canvas {
   display: block;
   width: 100vw;
   height: 100vh;
-  background: var(--bg-deep);
+  max-width: 100vw;
+  max-height: 100vh;
+  background: var(--vst-bg);
   cursor: crosshair;
 }
 
-.map-search-input {
+.map-search-input,
+.manual-search-input {
   position: fixed;
-  left: 16%;
-  top: 16%;
-  width: min(240px, 34vw);
   height: 40px;
-  z-index: 2;
-  border: 1px solid var(--accent-teal);
-  background: var(--bg-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: var(--color-text-primary);
-  font-family: var(--font-mono);
+  z-index: 25;
+  border: 1px solid rgba(108, 227, 214, 0.68);
+  background: var(--vst-surface-glass);
+  color: var(--vst-text);
+  font-family: var(--vst-font-telemetry);
   font-size: 14px;
-  padding: 8px 16px;
+  padding: 8px 14px;
   outline: none;
-  border-radius: var(--radius-md);
-  transition: all 0.2s ease;
+  border-radius: var(--vst-radius-control);
+  box-shadow: inset 0 1px 0 rgba(230, 236, 245, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out, background-color 120ms ease-out;
 }
 
-.map-search-input:focus {
-  box-shadow: var(--glow-teal);
-  border-color: var(--color-text-primary);
+.map-search-input {
+  left: max(16px, 8vw);
+  top: max(58px, 12vh);
+  width: min(280px, 38vw);
 }
 
-.map-search-input[hidden] {
+.manual-search-input {
+  left: max(28px, 6vw);
+  top: max(72px, 10vh);
+  width: min(340px, 42vw);
+}
+
+.map-search-input:focus,
+.manual-search-input:focus {
+  border-color: var(--vst-focus);
+  box-shadow: 0 0 0 3px rgba(159, 240, 255, 0.22), inset 0 1px 0 rgba(230, 236, 245, 0.1);
+}
+
+.map-search-input[hidden],
+.manual-search-input[hidden] {
   display: none;
+}
+
+@media (max-width: 480px) {
+  .map-search-input,
+  .manual-search-input {
+    left: 16px;
+    top: 82px;
+    width: calc(100vw - 32px);
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
 }

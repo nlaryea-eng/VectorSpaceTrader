@@ -6,6 +6,8 @@ Current Release: **v0.3.0-beta — Content Systems Sprint**
 
 **Status:** This is a **desktop-first public demo beta**. It is not a v1 product, not an early access candidate, and is not yet mobile-certified.
 
+The current presentation layer includes the feature-flagged **Signal Glass** UI system: dark telemetry panels, compact HUD treatment, route/market/mission clarity labels, manual search, and mobile-improved layout hygiene. The legacy Canvas action path remains available through the UI flag while parity is verified.
+
 It is a clean-room project built with TypeScript, Canvas, and procedural Web Audio. It does not use source code, assets, ship designs, universe names, text, audio, or data tables from any protected third-party source-code archive.
 
 It is inspired by the broader tradition of classic vector space-trading and wireframe combat games, but it is not affiliated with, endorsed by, or derived from any protected third-party franchise or rights holder.
@@ -91,6 +93,7 @@ Touch controls are drawn directly on the canvas for pitch, yaw, throttle, fire, 
 - **Equipment Bay:** Upgrade catalog across weapons, cargo, fuel, shields, and specialized tools.
 - **Procedural Missions:** Diverse contract types (courier, medical, salvage, etc.) with deadlines, reputation effects, and legal risks.
 - **Pilot Manual:** Integrated contextual help content for all major systems.
+- **Signal Glass UI:** Feature-flagged visual system with design tokens, HUD shell, panel styling, searchable manual, route/market/mission clarity, restrained feedback, and responsive layout helpers.
 - **Persistence:** LocalStorage save/resume with versioned validation and migration safety.
 - **Aesthetics:** Minimalist wireframe rendering with optional phosphor glow and procedural Web Audio.
 - **Compliance:** Verified clean-room implementation with no external IP references.
@@ -118,7 +121,7 @@ All stations keep fuel and basic repair access, while other services vary by det
 
 ## Browser Smoke
 
-Run `npm run smoke` (or `npm run test:browser`) before a public demo pass. It launches the built app locally, verifies the first playable flow, checks the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
+Run `npm run smoke` (or `npm run test:browser`) before a public demo pass. It launches the built app locally, verifies the first playable flow, checks station hub, trade, missions, equipment, shipyard, manual search, settings/audio, map search/filter, the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
 
 ## Known Limitations
 

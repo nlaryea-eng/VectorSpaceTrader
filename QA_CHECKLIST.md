@@ -17,6 +17,20 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] Onboarding appears for a new run and can be dismissed cleanly.
 - [ ] Continue/load is available only when a valid save exists.
 - [ ] Save/load continuity preserves system, discovered systems, selected ship, balance, cargo, fuel, hull, equipment, missions, reputation, legal risk, and settings after page reload.
+- [ ] Signal Glass feature flag can be disabled without corrupting save data.
+
+## Signal Glass Design QA
+
+- [ ] Visual consistency: panels, controls, chips, status labels, and HUD use the Signal Glass token system.
+- [ ] Readability: telemetry values use tabular monospace numerals and remain readable on desktop and 390x844.
+- [ ] Control clarity: every unavailable station service, unaffordable item, locked mission, and blocked route explains why.
+- [ ] First-session guidance: docked station hub shows a recommended next action.
+- [ ] Map usability: search, CLASS filter, clear filter, route validity, range ring, and selected-system detail remain legible.
+- [ ] Trading clarity: held quantity, average basis or basis state, local price, signed BAL delta, and percent delta are visible for held cargo.
+- [ ] Mission clarity: reward, cargo, deadline slack, risk, reputation/legal effect, and acceptability state are visible before acceptance.
+- [ ] Equipment and shipyard comparison: installed/available/unavailable, affordability, stat deltas, and cargo overflow warnings are visible.
+- [ ] Accessibility: visible focus, Escape closes top layer, reduced motion is respected, state is not color-only, and touch targets are adequate.
+- [ ] Clean-room compliance: no new non-project names, assets, audio motifs, or copied visual signatures.
 
 ## Flight And Navigation
 
@@ -71,8 +85,8 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 ## Browser Smoke Tests
 
 - [ ] `npm run test:browser` passed locally with Chrome/Chromium.
-- [ ] 390×844 mobile viewport: verify touch controls and docked-hint overlap are not clipped.
-- [ ] Chrome desktop: launch, flight, dock, market, map, jump, combat, reload save.
+- [ ] 390×844 mobile viewport: verify touch controls, station hub, trade, map search, and docked-hint overlap are not clipped.
+- [ ] Chrome desktop: launch, station hub, recommended action, market, profit/loss display, missions, map search/filter/CLASS, equipment, shipyard, Pilot Manual search, settings/audio, reload save.
 - [ ] Firefox desktop: launch, flight, dock, market, map, jump, combat, reload save.
 - [ ] Safari desktop: launch, flight, dock, market, map, jump, combat, reload save.
 - [ ] Mobile Safari: touch launch, flight, dock, market, map, jump, combat, reload save.
