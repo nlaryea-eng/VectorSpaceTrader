@@ -12,6 +12,7 @@ export type GameMode =
   | "equipment"
   | "shipyard"
   | "missions"
+  | "settings"
   | "gameOver";
 
 export interface Vector3 {
@@ -259,6 +260,8 @@ export interface Meta {
 
 export interface Settings {
   muted: boolean;
+  sfxVolume: number;
+  musicVolume: number;
 }
 
 export interface SaveData {

@@ -1,4 +1,4 @@
-import { ProceduralAudio, type AmbientMode } from "./Audio";
+import { ModernAudio, type AmbientMode } from "./Audio";
 import { createEnemyShip, fireEnemyLaser, fireLaser, resolveProjectileHits, selectEnemyClass, updateEnemy } from "./Combat";
 import {
   applyEconomyDrift,
@@ -71,7 +71,7 @@ const HINT_MODES: Partial<Record<GameMode, HintId>> = {
 export class Game {
   private readonly input: Input;
   private readonly renderer: Renderer;
-  private readonly audio = new ProceduralAudio();
+  private readonly audio = new ModernAudio();
   private systems: StarSystem[] = generateUniverse(GAME_SEED);
   private economy: EconomyState = createEconomyState(this.systems);
   private market: MarketItem[] = generateDynamicMarket(this.systems[0], this.economy);
@@ -164,6 +164,7 @@ export class Game {
 
     if (this.input.consume("Escape")) {
       if (this.mode === "paused") this.mode = this.previousMode;
+      else if (this.mode === "settings") this.mode = "paused";
       else if (this.mode === "map" || this.mode === "trade" || this.mode === "equipment" || this.mode === "shipyard" || this.mode === "missions") {
         this.mode = this.player.docked ? "docked" : "flight";
       } else {
@@ -929,6 +930,43 @@ export class Game {
       this.previousMode = this.mode;
       this.mode = "paused";
     }
+    if (zone.id === "pause-resume") {
+      this.mode = this.previousMode;
+    }
+    if (zone.id === "pause-settings") {
+      this.mode = "settings";
+    }
+    if (zone.id === "pause-menu") {
+      this.mode = "start";
+    }
+    if (zone.id === "settings-back") {
+      this.mode = "paused";
+      this.persist();
+    }
+    if (zone.id === "settings-mute") {
+      this.audio.setMuted(!this.audio.isMuted());
+      this.persist();
+    }
+    if (zone.id === "settings-glow") {
+      this.phosphorGlow = !this.phosphorGlow;
+      this.persist();
+    }
+    if (zone.id === "settings-sfx-up") {
+      this.audio.setSfxVolume(this.audio.getSfxVolume() + 0.1);
+      this.persist();
+    }
+    if (zone.id === "settings-sfx-down") {
+      this.audio.setSfxVolume(this.audio.getSfxVolume() - 0.1);
+      this.persist();
+    }
+    if (zone.id === "settings-music-up") {
+      this.audio.setMusicVolume(this.audio.getMusicVolume() + 0.1);
+      this.persist();
+    }
+    if (zone.id === "settings-music-down") {
+      this.audio.setMusicVolume(this.audio.getMusicVolume() - 0.1);
+      this.persist();
+    }
     if (zone.id === "touch-up") this.player.orientation.pitch -= 0.08;
     if (zone.id === "touch-down") this.player.orientation.pitch += 0.08;
     if (zone.id === "touch-left") this.player.orientation.yaw -= 0.08;
@@ -971,7 +1009,13 @@ export class Game {
     this.economy = save.economy ?? createEconomyState(this.systems);
     this.player = save.player;
     this.meta = save.meta ?? { hasSeenOnboarding: false, dismissedHints: [] };
-    this.audio.setMuted(save.settings?.muted ?? false);
+
+    if (save.settings) {
+      this.audio.setMuted(save.settings.muted);
+      this.audio.setSfxVolume(save.settings.sfxVolume);
+      this.audio.setMusicVolume(save.settings.musicVolume);
+    }
+
     this.refreshMarket(true);
     this.refreshMissions();
     this.enemy = createEnemyShip(`contact-${this.player.currentSystemId}`, vec3(0, 0, 85), this.player.currentSystemId);
@@ -1015,7 +1059,11 @@ export class Game {
       player: this.player,
       economy: this.economy,
       meta: this.meta,
-      settings: { muted: this.audio.isMuted() },
+      settings: {
+        muted: this.audio.isMuted(),
+        sfxVolume: this.audio.getSfxVolume(),
+        musicVolume: this.audio.getMusicVolume()
+      },
       runStats: this.runStats
     };
     saveGame(data);
@@ -1119,6 +1167,8 @@ export class Game {
       isNewPersonalBest: this.isNewPersonalBest,
       activeHint: this.getActiveHint(),
       mapFilters: this.mapFilters,
+      sfxVolume: this.audio.getSfxVolume(),
+      musicVolume: this.audio.getMusicVolume(),
       selectedShipId: this.selectedShipId,
       equipmentPage: this.equipmentPage,
     });

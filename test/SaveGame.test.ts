@@ -68,7 +68,8 @@ function makeSave(): SaveData {
       equipment: { ...DEFAULT_EQUIPMENT },
       missionCargoUnits: 0
     },
-    runStats: createRunStats(0)
+    runStats: createRunStats(0),
+    settings: { muted: false, sfxVolume: 1.0, musicVolume: 0.6 }
   };
 }
 
@@ -79,7 +80,7 @@ describe("SaveGame meta and settings persistence", () => {
     const withMeta = {
       ...save,
       meta: { hasSeenOnboarding: true, dismissedHints: ["flight", "trade"] },
-      settings: { muted: true }
+      settings: { muted: true, sfxVolume: 0.8, musicVolume: 0.4 }
     };
     saveGame(withMeta, storage);
     const loaded = loadGame(storage);
@@ -87,16 +88,18 @@ describe("SaveGame meta and settings persistence", () => {
     expect(loaded!.meta?.hasSeenOnboarding).toBe(true);
     expect(loaded!.meta?.dismissedHints).toContain("flight");
     expect(loaded!.settings?.muted).toBe(true);
+    expect(loaded!.settings?.sfxVolume).toBe(0.8);
+    expect(loaded!.settings?.musicVolume).toBe(0.4);
   });
 
-  it("loads an old save without meta or settings (defaults to absent)", () => {
+  it("loads an old save without meta or settings (defaults are applied)", () => {
     const storage = new MemoryStorage();
     const save = makeSave(); // no meta, no settings
     saveGame(save, storage);
     const loaded = loadGame(storage);
     expect(loaded).not.toBeNull();
     expect(loaded!.meta).toBeUndefined();
-    expect(loaded!.settings).toBeUndefined();
+    expect(loaded!.settings).toEqual({ muted: false, sfxVolume: 1.0, musicVolume: 0.6 });
   });
 
   it("round-trips personal best inside meta", () => {
@@ -138,10 +141,12 @@ describe("SaveGame meta and settings persistence", () => {
     expect(deserializeSave(corrupted)).toBeNull();
   });
 
-  it("rejects invalid settings (missing muted field)", () => {
+  it("normalizes missing settings instead of rejecting", () => {
     const save = makeSave();
-    const corrupted = JSON.stringify({ ...save, settings: { volume: 0.5 } });
-    expect(deserializeSave(corrupted)).toBeNull();
+    const withPartialSettings = JSON.stringify({ ...save, settings: { muted: true } });
+    const loaded = deserializeSave(withPartialSettings);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.settings).toEqual({ muted: true, sfxVolume: 1.0, musicVolume: 0.6 });
   });
 });
 
@@ -299,5 +304,46 @@ describe("SaveGame migration", () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.player.activeMission?.cargoUnitsRequired).toBe(0);
     expect(loaded!.player.activeMission?.deadlineJumps).toBe(-1);
+  });
+
+  it("normalizes malformed settings during migration", () => {
+    const storage = new MemoryStorage();
+    const save = makeSave();
+    const rawOld = JSON.stringify({
+      ...save,
+      settings: {
+        muted: "maybe", // invalid type
+        sfxVolume: 1.5, // needs clamping
+        musicVolume: -0.2 // needs clamping
+      }
+    });
+    storage.setItem(SAVE_KEY, rawOld);
+
+    const loaded = loadGame(storage);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.settings).toEqual({
+      muted: false, // defaulted
+      sfxVolume: 1.0, // clamped
+      musicVolume: 0.0 // clamped
+    });
+  });
+
+  it("handles NaN in settings during migration", () => {
+    const storage = new MemoryStorage();
+    const save = makeSave();
+    const rawOld = JSON.stringify({
+      ...save,
+      settings: {
+        muted: true,
+        sfxVolume: NaN,
+        musicVolume: 0.5
+      }
+    });
+    storage.setItem(SAVE_KEY, rawOld);
+
+    const loaded = loadGame(storage);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.settings?.sfxVolume).toBe(1.0); // defaulted
+    expect(loaded!.settings?.musicVolume).toBe(0.5);
   });
 });

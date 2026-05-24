@@ -60,6 +60,7 @@ function migrateSaveData(value: unknown): SaveData | null {
   const migrated: SaveData = {
     ...(value as unknown as SaveData),
     player,
+    settings: normalizeSettings(value.settings),
     runStats: isRecord(value.runStats) ? (value.runStats as unknown as RunStats) : createRunStats(player.currentSystemId)
   };
 
@@ -112,7 +113,35 @@ function isValidMeta(value: unknown): value is Meta {
 
 function isValidSettings(value: unknown): value is Settings {
   if (!isRecord(value)) return false;
-  return typeof value.muted === "boolean";
+  return (
+    typeof value.muted === "boolean" &&
+    typeof value.sfxVolume === "number" &&
+    typeof value.musicVolume === "number"
+  );
+}
+
+function normalizeSettings(value: unknown): Settings {
+  const defaults: Settings = {
+    muted: false,
+    sfxVolume: 1.0,
+    musicVolume: 0.6
+  };
+
+  if (!isRecord(value)) return defaults;
+
+  const muted = typeof value.muted === "boolean" ? value.muted : defaults.muted;
+
+  let sfxVolume = defaults.sfxVolume;
+  if (typeof value.sfxVolume === "number" && !isNaN(value.sfxVolume)) {
+    sfxVolume = Math.max(0, Math.min(1, value.sfxVolume));
+  }
+
+  let musicVolume = defaults.musicVolume;
+  if (typeof value.musicVolume === "number" && !isNaN(value.musicVolume)) {
+    musicVolume = Math.max(0, Math.min(1, value.musicVolume));
+  }
+
+  return { muted, sfxVolume, musicVolume };
 }
 
 function isValidRunStats(value: unknown): value is RunStats {
