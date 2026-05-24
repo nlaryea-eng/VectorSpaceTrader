@@ -1,5 +1,5 @@
 import { getStationProfile } from "./StationServices";
-import type { EconomyType, GovernmentType, HazardTag, OpportunityTag, PlayerState, StarSystem, StationService } from "./types";
+import type { EconomyType, GovernmentType, HazardTag, OpportunityTag, PlayerState, StarSystem, StationService, SystemClassId } from "./types";
 
 export type DiscoveryFilter = "all" | "discovered" | "undiscovered";
 
@@ -11,6 +11,7 @@ export interface MapFilterState {
   opportunity: OpportunityTag | "all";
   discovery: DiscoveryFilter;
   service: StationService | "all";
+  systemClass: SystemClassId | "all";
 }
 
 export interface MapProjection {
@@ -25,7 +26,8 @@ export const DEFAULT_MAP_FILTERS: MapFilterState = {
   government: "all",
   opportunity: "all",
   discovery: "all",
-  service: "all"
+  service: "all",
+  systemClass: "all"
 };
 
 export function normalizeQuery(query: string): string {
@@ -47,6 +49,7 @@ export function matchesMapFilters(
   if (filters.economy !== "all" && system.economy !== filters.economy) return false;
   if (filters.government !== "all" && system.government !== filters.government) return false;
   if (filters.opportunity !== "all" && system.opportunityTag !== filters.opportunity) return false;
+  if (filters.systemClass !== "all" && system.profile.classId !== filters.systemClass) return false;
   if (filters.service !== "all" && !getStationProfile(system).services[filters.service]) return false;
 
   if (filters.discovery !== "all") {
@@ -74,7 +77,8 @@ export function hasActiveMapFilter(filters: MapFilterState): boolean {
     filters.government !== "all" ||
     filters.opportunity !== "all" ||
     filters.discovery !== "all" ||
-    filters.service !== "all"
+    filters.service !== "all" ||
+    filters.systemClass !== "all"
   );
 }
 

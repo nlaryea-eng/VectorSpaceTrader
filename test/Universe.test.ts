@@ -70,6 +70,15 @@ function systemAt(x: number, y: number): StarSystem {
       luxuries: 1,
       fuelCells: 1,
       alloys: 1
+    },
+    profile: {
+      classId: "garden",
+      localDescriptor: "quiet",
+      tradeHint: "Active exchange",
+      serviceHint: "Basic provisions",
+      missionHint: "Routine hauls",
+      travelCaution: "Clear lanes",
+      discoveryNote: "Early settlement"
     }
   };
 }

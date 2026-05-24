@@ -918,6 +918,7 @@ export class Renderer {
     const details = [
       { label: "DISTANCE", value: `${dist.toFixed(1)} LY` },
       { label: "FUEL REQ", value: `${fuel.toFixed(1)}`, color: fuel > state.player.fuel ? THEME.colors.danger : THEME.colors.accentAmber },
+      { label: "CLASS", value: discovered ? selected.profile.classId.toUpperCase() : "UNKNOWN" },
       { label: "ECONOMY", value: discovered ? selected.economy.toUpperCase() : "UNKNOWN" },
       { label: "HAZARD", value: discovered ? formatMapValue(selected.hazardTag).toUpperCase() : "UNKNOWN", color: discovered ? (selected.hazardLevel > 5 ? THEME.colors.danger : THEME.colors.success) : THEME.colors.textDim },
     ];
@@ -930,16 +931,22 @@ export class Renderer {
         const col = i % 2;
         const row = Math.floor(i / 2);
         const x = detailX + 12 + col * cellW;
-        const y = detailY + 42 + row * 22;
+        const y = detailY + 42 + row * 18;
         this.drawText(d.label, x, y, { size: 9, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
-        this.drawText(d.value, x + cellW - 12, y, { align: "right", size: 10, font: THEME.fonts.mono, color: d.color });
+        this.drawText(d.value, x + cellW - 12, y, { align: "right", size: 9, font: THEME.fonts.mono, color: d.color ?? THEME.colors.textPrimary });
       });
+      if (discovered) {
+        this.drawText(selected.profile.localDescriptor.toUpperCase(), detailX + 12, detailY + 42 + 3 * 18, { size: 9, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
+      }
     } else {
       details.forEach((d, i) => {
-        const dy = detailY + 64 + i * 32;
+        const dy = detailY + 64 + i * 28;
         this.drawText(d.label, detailX + 16, dy, { size: 10, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
-        this.drawText(d.value, detailX + detailW - 16, dy, { align: "right", size: 10, font: THEME.fonts.mono, color: d.color });
+        this.drawText(d.value, detailX + detailW - 16, dy, { align: "right", size: 10, font: THEME.fonts.mono, color: d.color ?? THEME.colors.textPrimary });
       });
+      if (discovered) {
+        this.drawText(selected.profile.localDescriptor.toUpperCase(), detailX + 16, detailY + 64 + 5 * 28, { size: 11, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
+      }
     }
 
     if (this.narrow) {

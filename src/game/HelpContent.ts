@@ -252,7 +252,8 @@ export const HELP_CONTENT: HelpSection[] = [
           "HAZ: Filter by hazard type (calm, debris, raider trace).",
           "ECO: Filter by economy (Agricultural, Industrial, etc).",
           "DISC: Filter by discovery state (discovered/undiscovered).",
-          "SVC: Filter by available services (Shipyard, Survey, etc)."
+          "SVC: Filter by available services (Shipyard, Survey, etc).",
+          "CLASS: Filter by system class (Cradle, Forge, etc)."
         ],
         tips: ["Use [CLR] to reset all active filters."]
       }

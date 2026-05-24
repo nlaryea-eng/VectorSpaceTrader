@@ -98,7 +98,6 @@ describe("Map Selection Logic", () => {
       expect(canJump(from, to, 2.0)).toBe(false);
     });
   });
-});
 
 function makeSystem(id: number, x: number, y: number): StarSystem {
   return {
@@ -115,9 +114,9 @@ function makeSystem(id: number, x: number, y: number): StarSystem {
     hazardTag: "calm",
     hazardLevel: 0,
     opportunityTag: "steadyDemand",
-    importHint: "computers",
+    importHint: "machinery",
     exportHint: "grain",
-    stationHint: "test berth",
+    stationHint: "test port",
     marketModifiers: {
       grain: 1,
       minerals: 1,
@@ -127,6 +126,16 @@ function makeSystem(id: number, x: number, y: number): StarSystem {
       luxuries: 1,
       fuelCells: 1,
       alloys: 1
+    },
+    profile: {
+      classId: "garden",
+      localDescriptor: "bustling",
+      tradeHint: "Active exchange",
+      serviceHint: "Basic provisions",
+      missionHint: "Routine hauls",
+      travelCaution: "Clear lanes",
+      discoveryNote: "Historic site"
     }
   };
 }
+});

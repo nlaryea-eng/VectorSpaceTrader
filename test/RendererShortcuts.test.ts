@@ -83,7 +83,7 @@ function stubState(mode: GameMode, docked = false): RenderState {
     pilotRank: { tier: 0, title: "Cadet" },
     isNewPersonalBest: false,
     activeHint: null,
-    mapFilters: { query: "", hazard: "all", economy: "all", government: "all", opportunity: "all", discovery: "all", service: "all" },
+    mapFilters: { query: "", hazard: "all", economy: "all", government: "all", opportunity: "all", discovery: "all", service: "all", systemClass: "all" },
     sfxVolume: 1,
     musicVolume: 0.6,
     selectedShipId: "vaskRelay",

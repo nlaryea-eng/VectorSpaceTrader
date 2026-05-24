@@ -1,6 +1,7 @@
 import { getPlayerShipStats } from "./Ships";
 import type { CommodityId, EconomyType, GovernmentType, HazardTag, MarketItem, OpportunityTag, PlayerState, StarSystem } from "./types";
 import { COMMODITIES } from "./Trading";
+import { generateWorldProfile } from "./WorldClasses";
 
 export const UNIVERSE_CONSTANTS = {
   systemCount: 128,
@@ -132,7 +133,8 @@ export function generateUniverse(seed: number, count: number = UNIVERSE_CONSTANT
       opportunityTag: metadata.opportunityTag,
       importHint: metadata.importHint,
       exportHint: metadata.exportHint,
-      stationHint: metadata.stationHint
+      stationHint: metadata.stationHint,
+      profile: metadata.profile
     });
   }
 
@@ -148,7 +150,7 @@ function createSystemMetadata(
   marketModifiers: Record<CommodityId, number>
 ): Pick<
   StarSystem,
-  "description" | "culture" | "government" | "hazardTag" | "hazardLevel" | "opportunityTag" | "importHint" | "exportHint" | "stationHint"
+  "description" | "culture" | "government" | "hazardTag" | "hazardLevel" | "opportunityTag" | "importHint" | "exportHint" | "stationHint" | "profile"
 > {
   const prng = new SeededPrng((seed + id * 1013 + techLevel * 97) >>> 0);
   const hazardTag = prng.pick(HAZARDS);
@@ -160,6 +162,7 @@ function createSystemMetadata(
   const exportHint = commodities[0].id;
   const importHint = commodities[commodities.length - 1].id;
   const description = `${economy} lanes around a ${stationHint}, known for ${formatTag(opportunityTag)} and ${formatTag(hazardTag)}.`;
+  const profile = generateWorldProfile(seed, id, economy, techLevel);
 
   return {
     description,
@@ -170,7 +173,8 @@ function createSystemMetadata(
     opportunityTag,
     importHint,
     exportHint,
-    stationHint
+    stationHint,
+    profile
   };
 }
 

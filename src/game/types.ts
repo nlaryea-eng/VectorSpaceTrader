@@ -28,6 +28,47 @@ export interface Orientation {
   roll: number;
 }
 
+export type SystemClassId =
+  | "cradle"
+  | "forge"
+  | "archive"
+  | "garden"
+  | "drift"
+  | "relay"
+  | "bastion"
+  | "quarry"
+  | "veil"
+  | "harbor"
+  | "clinic"
+  | "observatory"
+  | "freehold"
+  | "crucible"
+  | "reserve";
+
+export interface SystemClassDefinition {
+  id: SystemClassId;
+  displayName: string;
+  shortLabel: string;
+  description: string;
+  tradeBias: number;
+  missionBias: number;
+  serviceBias: number;
+  hazardBias: number;
+  discoveryNoteStyle: string;
+  mapHint: string;
+}
+
+export interface WorldProfile {
+  classId: SystemClassId;
+  localDescriptor: string;
+  tradeHint: string;
+  serviceHint: string;
+  missionHint: string;
+  travelCaution: string;
+  discoveryNote: string;
+  knownFor?: string;
+}
+
 export interface StarSystem {
   id: number;
   name: string;
@@ -46,6 +87,7 @@ export interface StarSystem {
   importHint: CommodityId;
   exportHint: CommodityId;
   stationHint: string;
+  profile: WorldProfile;
 }
 
 export type EconomyType =
