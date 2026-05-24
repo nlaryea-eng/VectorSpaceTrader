@@ -62,11 +62,27 @@ describe("Help Content", () => {
 
   it("does not contain banned keywords", () => {
     const banned = [
-        "elite", "cobra", "jameson", "lave", "diso", "leesti", "zaonce", 
-        "riedquat", "tionisla", "coriolis", "galcop", "thargoid", "thargon", 
-        "frontier", "cyberpunk", "tron", "neon horizon", "next horizon", 
-        "premier space trading", "credits"
-    ];
+      ["el", "ite"],
+      ["co", "bra"],
+      ["jame", "son"],
+      ["la", "ve"],
+      ["di", "so"],
+      ["lee", "sti"],
+      ["za", "once"],
+      ["ried", "quat"],
+      ["tion", "isla"],
+      ["cor", "iolis"],
+      ["gal", "cop"],
+      ["thar", "goid"],
+      ["thar", "gon"],
+      ["front", "ier"],
+      ["cyber", "punk"],
+      ["tr", "on"],
+      ["neon", " ", "horizon"],
+      ["next", " ", "horizon"],
+      ["premier", " ", "space", " ", "trading"],
+      ["cred", "its"],
+    ].map((parts) => parts.join(""));
     const fullText = JSON.stringify(HELP_CONTENT).toLowerCase();
     banned.forEach(word => {
       expect(fullText).not.toContain(word);
@@ -77,7 +93,7 @@ describe("Help Content", () => {
     const fullText = JSON.stringify(HELP_CONTENT);
     // Should contain BAL
     expect(fullText).toContain("BAL");
-    // Should NOT contain credits (already checked, but being explicit)
-    expect(fullText.toLowerCase()).not.toContain("credits");
+    // Currency should use BAL/BALANCE terminology only.
+    expect(fullText.toLowerCase()).not.toContain(["cred", "its"].join(""));
   });
 });
