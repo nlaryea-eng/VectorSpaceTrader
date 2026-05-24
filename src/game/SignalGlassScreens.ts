@@ -18,6 +18,7 @@ export interface StationRecommendation {
 export interface ServiceTile {
   id: "touch-trade" | "touch-missions" | "touch-shipyard" | "touch-equipment" | "touch-repair" | "help";
   label: string;
+  shortLabel: string;
   available: boolean;
   why: string;
 }
@@ -109,12 +110,12 @@ export function getStationRecommendation(
 export function getStationServiceTiles(system: StarSystem): ServiceTile[] {
   const profile = getStationProfile(system);
   return [
-    { id: "touch-trade", label: "Trade Market", available: profile.services.market, why: serviceWhy(profile, "market") },
-    { id: "touch-missions", label: "Mission Board", available: profile.services.missions, why: serviceWhy(profile, "missions") },
-    { id: "touch-shipyard", label: "Shipyard", available: profile.services.shipyard, why: serviceWhy(profile, "shipyard") },
-    { id: "touch-equipment", label: "Equipment", available: profile.services.equipment, why: serviceWhy(profile, "equipment") },
-    { id: "touch-repair", label: "Refuel / Repair", available: profile.services.fuel || profile.services.repair, why: "Fuel and hull service available." },
-    { id: "help", label: "Pilot Manual", available: true, why: "Reference layer available." }
+    { id: "touch-trade", label: "Trade Market", shortLabel: "MARKET", available: profile.services.market, why: serviceWhy(profile, "market") },
+    { id: "touch-missions", label: "Mission Board", shortLabel: "MISSIONS", available: profile.services.missions, why: serviceWhy(profile, "missions") },
+    { id: "touch-shipyard", label: "Shipyard", shortLabel: "SHIPYARD", available: profile.services.shipyard, why: serviceWhy(profile, "shipyard") },
+    { id: "touch-equipment", label: "Equipment", shortLabel: "EQUIPMENT", available: profile.services.equipment, why: serviceWhy(profile, "equipment") },
+    { id: "touch-repair", label: "Refuel / Repair", shortLabel: "REPAIR", available: profile.services.fuel || profile.services.repair, why: "Fuel and hull service available." },
+    { id: "help", label: "Pilot Manual", shortLabel: "MANUAL", available: true, why: "Reference layer available." }
   ];
 }
 

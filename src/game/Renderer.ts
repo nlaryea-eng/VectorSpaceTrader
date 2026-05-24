@@ -1232,7 +1232,7 @@ export class Renderer {
       const bw = (panelW - 32 - bgap * (cols - 1)) / cols;
       const bh = 36;
       const labels = this.signalGlassUi
-        ? getStationServiceTiles(system).map((tile) => [tile.id, tile.available ? tile.label.toUpperCase() : `${tile.label.toUpperCase()} LOCKED`] as [string, string])
+        ? getStationServiceTiles(system).map((tile) => [tile.id, tile.available ? tile.shortLabel : `${tile.shortLabel} LOCKED`] as [string, string])
         : [
             ["touch-trade", "MARKET"],
             ["touch-equipment", "EQUIPMENT"],
@@ -1257,7 +1257,7 @@ export class Renderer {
       const totalW = bw * 6 + bgap * 5;
       const startX = this.width / 2 - totalW / 2;
       const labels: Array<[string, string]> = tiles
-        ? tiles.map((tile) => [tile.id, tile.available ? tile.label.toUpperCase().replace("TRADE ", "") : "LOCKED"])
+        ? tiles.map((tile) => [tile.id, tile.available ? tile.shortLabel : "LOCKED"])
         : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"], ["help", "HELP"], ["touch-dock", "LAUNCH"]];
       labels.slice(0, 5).forEach(([id, label], index) => {
         this.button(id, label, startX + (bw + bgap) * index, y, bw, 42);

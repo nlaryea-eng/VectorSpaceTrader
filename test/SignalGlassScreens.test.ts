@@ -98,6 +98,19 @@ describe("Signal Glass screen helpers", () => {
     expect(tiles.every((tile) => tile.why.length > 0)).toBe(true);
   });
 
+  it("service tile shortLabels are stable and independent of label text", () => {
+    const tiles = getStationServiceTiles(systems[0]);
+    expect(tiles.map((tile) => tile.shortLabel)).toEqual([
+      "MARKET",
+      "MISSIONS",
+      "SHIPYARD",
+      "EQUIPMENT",
+      "REPAIR",
+      "MANUAL"
+    ]);
+    expect(tiles.find((t) => t.id === "touch-trade")?.shortLabel).toBe("MARKET");
+  });
+
   it("formats profit and loss badges with sign, BAL, and percent", () => {
     expect(formatDeltaBadge(4, 10, 15).text).toBe("+20 BAL / +50.0%");
     expect(formatDeltaBadge(4, 10, 5).text).toBe("-20 BAL / -50.0%");
