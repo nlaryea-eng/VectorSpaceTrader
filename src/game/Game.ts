@@ -35,6 +35,7 @@ import { getStationProfile, hasStationService } from "./StationServices";
 import { createInitialTransientState } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance } from "./Universe";
+import { HELP_CONTENT, type HelpSectionId } from "./HelpContent";
 import type {
   ButtonZone,
   EconomyState,
@@ -99,6 +100,8 @@ export class Game {
   private explosionEffect: ExplosionEffect | null = null;
   private runStats: RunStats = createRunStats(0);
   private meta: Meta = { hasSeenOnboarding: false, dismissedHints: [] };
+  private helpSectionId: HelpSectionId = "quickStart";
+  private helpPageIndex = 0;
   private isNewPersonalBest = false;
   private lastAmbientMode: AmbientMode = "none";
   private readonly mapSearchInput: HTMLInputElement;
@@ -159,6 +162,21 @@ export class Game {
     if (this.input.consume("KeyG")) {
       this.phosphorGlow = !this.phosphorGlow;
       this.message = this.phosphorGlow ? "Phosphor glow enabled" : "Crisp vector mode enabled";
+    }
+
+    if (this.input.consume("Slash") || this.input.consume("Slash")) {
+      if (this.mode === "help") {
+        this.mode = this.previousMode;
+      } else {
+        this.previousMode = this.mode;
+        this.mode = "help";
+        this.audio.play("ui");
+      }
+    }
+
+    if (this.mode === "help") {
+      this.updateHelp();
+      return;
     }
 
     if (this.mode === "start") {
@@ -257,6 +275,25 @@ export class Game {
     }
 
     this.updateFlight(dt);
+  }
+
+  private updateHelp(): void {
+    if (this.input.consume("Escape")) {
+      this.mode = this.previousMode;
+      this.audio.play("ui");
+      return;
+    }
+    if (this.input.consume("ArrowLeft") || this.input.consume("KeyA")) {
+      this.helpPageIndex = Math.max(0, this.helpPageIndex - 1);
+      this.audio.play("ui");
+    }
+    if (this.input.consume("ArrowRight") || this.input.consume("KeyD")) {
+      const section = HELP_CONTENT.find(s => s.id === this.helpSectionId);
+      if (section) {
+        this.helpPageIndex = Math.min(section.pages.length - 1, this.helpPageIndex + 1);
+        this.audio.play("ui");
+      }
+    }
   }
 
   private updateStart(): void {
@@ -935,10 +972,42 @@ export class Game {
       return;
     }
 
+    if (zone.id.startsWith("help-sidebar-")) {
+      this.helpSectionId = zone.id.slice("help-sidebar-".length) as HelpSectionId;
+      this.helpPageIndex = 0;
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "help-page-prev") {
+      this.helpPageIndex = Math.max(0, this.helpPageIndex - 1);
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "help-page-next") {
+      const section = HELP_CONTENT.find(s => s.id === this.helpSectionId);
+      if (section) {
+        this.helpPageIndex = Math.min(section.pages.length - 1, this.helpPageIndex + 1);
+        this.audio.play("ui");
+      }
+      return;
+    }
+
+    if (zone.id === "help-close") {
+      this.mode = this.previousMode;
+      this.audio.play("ui");
+      return;
+    }
+
     this.audio.play("ui");
     if (zone.id === "new") this.newGame();
     if (zone.id === "continue") this.continueGame();
     if (zone.id === "controls") this.mode = "controls";
+    if (zone.id === "help") {
+      this.previousMode = this.mode;
+      this.mode = "help";
+    }
     if (zone.id === "back") this.mode = "start";
     if (zone.id === "touch-fire") this.firePlayerLaser();
     if (zone.id === "touch-map") this.mode = "map";
@@ -1105,16 +1174,6 @@ export class Game {
     return input;
   }
 
-  private syncMapSearchInput(): void {
-    const visible = this.mode === "map";
-    this.mapSearchInput.hidden = !visible;
-    if (visible) {
-      this.mapSearchInput.value = this.mapFilters.query;
-    } else if (document.activeElement === this.mapSearchInput) {
-      this.mapSearchInput.blur();
-    }
-  }
-
   private resetTransientState(): void {
     const state = createInitialTransientState();
     this.respawnCountdown = state.respawnCountdown;
@@ -1192,8 +1251,9 @@ export class Game {
       musicVolume: this.audio.getMusicVolume(),
       selectedShipId: this.selectedShipId,
       equipmentPage: this.equipmentPage,
+      helpSectionId: this.helpSectionId,
+      helpPageIndex: this.helpPageIndex,
     });
-    this.syncMapSearchInput();
   }
 }
 

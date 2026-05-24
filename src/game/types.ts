@@ -3,6 +3,7 @@ import type { RunStats } from "./RunStats";
 export type GameMode =
   | "start"
   | "controls"
+  | "help"
   | "flight"
   | "docking"
   | "paused"

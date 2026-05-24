@@ -90,7 +90,9 @@ function stubState(mode: GameMode, docked = false): RenderState {
     sfxVolume: 1,
     musicVolume: 0.6,
     selectedShipId: "vaskRelay",
-    equipmentPage: 0
+    equipmentPage: 0,
+    helpSectionId: "quickStart",
+    helpPageIndex: 0
   };
 }
 

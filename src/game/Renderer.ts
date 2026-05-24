@@ -10,6 +10,7 @@ import type { RunStats } from "./RunStats";
 import type { HintId } from "./Onboarding";
 import { getPlayerShip, getPlayerShipStats, PLAYER_SHIPS } from "./Ships";
 import { getStationProfile } from "./StationServices";
+import { HELP_CONTENT, type HelpSectionId } from "./HelpContent";
 import type {
   ButtonZone,
   CommodityId,
@@ -64,6 +65,8 @@ export interface RenderState {
   musicVolume: number;
   selectedShipId: PlayerShipId;
   equipmentPage: number;
+  helpSectionId: HelpSectionId;
+  helpPageIndex: number;
 }
 
 interface ProjectedPoint {
@@ -128,7 +131,7 @@ export function getCompactTouchControlRects(width: number, height: number, docke
 export function getOnboardingHintY(mode: GameMode, height: number, barHeight: number, narrow: boolean, hasStatusMessage: boolean): number {
   if (narrow) {
     if (mode === "docked" || mode === "shipyard") {
-      return Math.max(150, height - 288);
+      return Math.max(150, height - 315);
     }
     if (mode === "trade" || mode === "equipment" || mode === "missions" || mode === "map") {
       return Math.max(150, height - 214);
@@ -204,6 +207,7 @@ export class Renderer {
       if (state.mode === "equipment") this.renderEquipment(state);
       if (state.mode === "shipyard") this.renderShipyard(state);
       if (state.mode === "missions") this.renderMissions(state);
+      if (state.mode === "help") this.renderHelp(state);
       if (state.mode === "settings") this.renderSettings(state);
       if (state.mode === "paused") this.renderPause(state);
       if (state.mode === "gameOver") this.renderGameOver(state);
@@ -226,6 +230,7 @@ export class Renderer {
       mode === "equipment" ||
       mode === "shipyard" ||
       mode === "missions" ||
+      mode === "help" ||
       mode === "settings" ||
       mode === "paused" ||
       mode === "gameOver" ||
@@ -256,6 +261,8 @@ export class Renderer {
       this.button("continue", "RESUME SESSION   [2]", btnX, nextY, btnW, btnH);
       nextY += btnGap;
     }
+    this.button("help", "PILOT MANUAL     [?]", btnX, nextY, btnW, btnH);
+    nextY += btnGap;
     this.button("controls", "SYSTEM OVERVIEW   [3]", btnX, nextY, btnW, btnH);
     const footer = this.narrow
       ? "ORIGINAL CODE, ASSETS, AND DATA"
@@ -998,7 +1005,7 @@ export class Renderer {
     if (this.narrow) {
       // Two-column grid of station service buttons that fits at 390px.
       const cols = 2;
-      const buttonsTop = panelY + panelH - 200;
+      const buttonsTop = panelY + panelH - 240;
       const bgap = 8;
       const bw = (panelW - 32 - bgap * (cols - 1)) / cols;
       const bh = 36;
@@ -1007,6 +1014,7 @@ export class Renderer {
         ["touch-equipment", "GEAR"],
         ["touch-shipyard", "SHIPS"],
         ["touch-missions", "MISSIONS"],
+        ["help", "HELP"],
       ];
       labels.forEach((entry, i) => {
         const col = i % cols;
@@ -1019,15 +1027,16 @@ export class Renderer {
       this.button("touch-dock", "LAUNCH", panelX + 16, launchY, panelW - 32, bh + 4);
     } else {
       const y = this.height * 0.67;
-      const bw = 90;
-      const bgap = 12;
-      const totalW = bw * 5 + bgap * 4;
+      const bw = 84;
+      const bgap = 10;
+      const totalW = bw * 6 + bgap * 5;
       const startX = this.width / 2 - totalW / 2;
       this.button("touch-trade", "MARKET", startX, y, bw, 42);
       this.button("touch-equipment", "GEAR", startX + (bw + bgap), y, bw, 42);
       this.button("touch-shipyard", "SHIPS", startX + (bw + bgap) * 2, y, bw, 42);
       this.button("touch-missions", "MISSIONS", startX + (bw + bgap) * 3, y, bw, 42);
-      this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * 4, y, bw, 42);
+      this.button("help", "HELP", startX + (bw + bgap) * 4, y, bw, 42);
+      this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * 5, y, bw, 42);
     }
   }
 
@@ -1473,6 +1482,107 @@ export class Renderer {
     });
   }
 
+  private renderHelp(state: RenderState): void {
+    const panelX = this.narrow ? 8 : this.width * 0.04;
+    const panelY = this.narrow ? 12 : this.height * 0.06;
+    const panelW = this.narrow ? this.width - 16 : this.width * 0.92;
+    const panelH = this.narrow ? this.height - 24 : this.height * 0.88;
+    this.panel(panelX, panelY, panelW, panelH);
+
+    const titleSize = this.narrow ? 18 : 28;
+    const titleY = panelY + (this.narrow ? 32 : 48);
+    this.drawText("PILOT MANUAL", this.width / 2, titleY, {
+      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
+    });
+
+    const sidebarW = this.narrow ? 110 : 220;
+    const sidebarX = panelX + 12;
+    const contentX = sidebarX + sidebarW + 16;
+    const contentW = panelW - sidebarW - 40;
+    const top = titleY + (this.narrow ? 28 : 64);
+
+    const sidebarRowH = this.narrow ? 22 : 30;
+    const sidebarFontSize = this.narrow ? 9 : 12;
+
+    HELP_CONTENT.forEach((section, index) => {
+      const y = top + index * sidebarRowH;
+      const selected = section.id === state.helpSectionId;
+      const rowY = y - sidebarRowH / 2;
+
+      if (selected || isPointInRect(state.mousePosition, sidebarX, rowY, sidebarW, sidebarRowH)) {
+        this.ctx.fillStyle = selected ? "rgba(255, 0, 127, 0.15)" : "rgba(0, 242, 255, 0.1)";
+        this.ctx.beginPath();
+        this.ctx.roundRect(sidebarX - 4, rowY, sidebarW, sidebarRowH, 4);
+        this.ctx.fill();
+        if (selected) {
+          this.ctx.strokeStyle = THEME.colors.accentPink;
+          this.ctx.lineWidth = 1;
+          this.ctx.stroke();
+        }
+      }
+
+      this.buttonZones.push({ id: `help-sidebar-${section.id}`, label: section.title, x: sidebarX, y: rowY, width: sidebarW, height: sidebarRowH });
+      this.drawText(section.title.toUpperCase(), sidebarX + 8, y + 4, {
+        color: selected ? THEME.colors.accentPink : THEME.colors.textPrimary,
+        size: sidebarFontSize,
+        font: THEME.fonts.accent
+      });
+    });
+
+    const activeSection = HELP_CONTENT.find((s) => s.id === state.helpSectionId)!;
+    const activePage = activeSection.pages[state.helpPageIndex] ?? activeSection.pages[0];
+
+    this.drawText(activeSection.title.toUpperCase(), contentX, top, {
+      color: THEME.colors.accentTeal, size: this.narrow ? 14 : 20, font: THEME.fonts.accent
+    });
+
+    this.drawText(activePage.heading.toUpperCase(), contentX, top + (this.narrow ? 24 : 36), {
+      color: THEME.colors.textPrimary, size: this.narrow ? 12 : 16, font: THEME.fonts.accent
+    });
+
+    let bodyY = top + (this.narrow ? 48 : 72);
+    const bodySize = this.narrow ? 10 : 13;
+    const bodyGap = this.narrow ? 14 : 20;
+    this.ctx.font = `${bodySize}px ${THEME.fonts.primary}`;
+    activePage.body.forEach((line) => {
+      const lines = wrapText(this.ctx, line, contentW);
+      lines.forEach((l) => {
+        this.drawText(l, contentX, bodyY, { size: bodySize, color: THEME.colors.textPrimary });
+        bodyY += bodyGap;
+      });
+      bodyY += 6;
+    });
+
+    if (activePage.tips && activePage.tips.length > 0) {
+      bodyY += 8;
+      this.drawText("PRO TIPS:", contentX, bodyY, { color: THEME.colors.accentAmber, size: this.narrow ? 10 : 12, font: THEME.fonts.accent });
+      bodyY += (this.narrow ? 18 : 24);
+      activePage.tips.forEach((tip) => {
+        const lines = wrapText(this.ctx, `· ${tip}`, contentW);
+        lines.forEach((l) => {
+          this.drawText(l, contentX, bodyY, { size: this.narrow ? 10 : 12, color: THEME.colors.accentAmber });
+          bodyY += (this.narrow ? 14 : 18);
+        });
+      });
+    }
+
+    const navY = panelY + panelH - 74;
+    const btnW = this.narrow ? 70 : 120;
+    const btnH = 30;
+    if (state.helpPageIndex > 0) {
+      this.button("help-page-prev", "PREV", contentX, navY, btnW, btnH);
+    }
+    if (state.helpPageIndex < activeSection.pages.length - 1) {
+      this.button("help-page-next", "NEXT", contentX + contentW - btnW, navY, btnW, btnH);
+    }
+
+    this.drawText(`PAGE ${state.helpPageIndex + 1} / ${activeSection.pages.length}`, contentX + contentW / 2, navY + 20, {
+      align: "center", size: 10, font: THEME.fonts.mono, color: THEME.colors.textDim
+    });
+
+    this.button("help-close", "CLOSE [Esc]", this.width / 2 - 75, panelY + panelH - 34, 150, 28);
+  }
+
   private renderPause(state: RenderState): void {
     const panelW = Math.min(360, this.width - 24);
     const panelH = this.short ? 240 : 280;
@@ -1490,10 +1600,11 @@ export class Renderer {
       align: "center", font: THEME.fonts.mono, size: 13, color: THEME.colors.accentAmber
     });
     const btnY = panelY + panelH - 110;
-    const btnW = Math.min(130, (panelW - 36) / 2);
-    this.button("pause-resume", "RESUME", this.width / 2 - btnW - 6, btnY, btnW, 38);
-    this.button("pause-settings", "SETTINGS", this.width / 2 + 6, btnY, btnW, 38);
-    this.button("pause-menu", "EXIT TO MENU", this.width / 2 - btnW, btnY + 48, btnW * 2, 38);
+    const btnW = Math.min(100, (panelW - 48) / 3);
+    this.button("pause-resume", "RESUME", panelX + 12, btnY, btnW, 38);
+    this.button("help", "HELP", panelX + 12 + btnW + 12, btnY, btnW, 38);
+    this.button("pause-settings", "CONFIG", panelX + 12 + (btnW + 12) * 2, btnY, btnW, 38);
+    this.button("pause-menu", "ABORT TO MAIN MENU", panelX + 12, btnY + 50, panelW - 24, 34);
   }
 
   private renderSettings(state: RenderState): void {
@@ -1588,12 +1699,15 @@ export class Renderer {
     if (pb > 0 || state.isNewPersonalBest) {
       const pbLabel = state.isNewPersonalBest ? "NEW PERSONAL BEST ESTABLISHED!" : `PERSONAL BEST: ${pb} BAL`;
       const pbColor = state.isNewPersonalBest ? THEME.colors.accentTeal : THEME.colors.success;
-      this.drawText(pbLabel, cx, row + 8, { align: "center", color: pbColor, size: 13, font: THEME.fonts.accent });
-    }
+      row += rowGap + 8;
+      this.drawText(pbLabel, cx, row, { align: "center", color: pbColor, size: 13, font: THEME.fonts.accent });
 
-    row = py + panelH - 64;
-    this.button("death-restart", "REINITIALIZE [R]", cx - 175, row, 160, 42);
-    this.button("death-menu", "ABORT TO MENU [Esc]", cx + 15, row, 160, 42);
+      const btnRowY = py + panelH - 64;
+      const gbw = 130;
+      this.button("death-restart", "RESTART [R]", cx - gbw * 1.5 - 16, btnRowY, gbw, 42);
+      this.button("help", "PILOT MANUAL", cx - gbw / 2, btnRowY, gbw, 42);
+      this.button("death-menu", "MENU [Esc]", cx + gbw / 2 + 16, btnRowY, gbw, 42);
+    }
   }
 
   private renderOnboardingHint(state: RenderState, hint: HintId): void {

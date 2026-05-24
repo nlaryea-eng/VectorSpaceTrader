@@ -237,6 +237,12 @@ async function browserSmoke() {
     writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-start.png"), await desktop.screenshot());
     await assertButton(desktop, "new");
 
+    await desktop.key("Slash"); await sleep(300);
+    await assertMode(desktop, "help");
+    writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-help-main.png"), await desktop.screenshot());
+    await desktop.key("Escape"); await sleep(300);
+    await assertMode(desktop, "start");
+
     await desktop.key("Digit1"); await sleep(400);
     await assertMode(desktop, "flight");
     await assertRealSaveExists(desktop);
@@ -271,6 +277,15 @@ async function browserSmoke() {
     writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-reload.png"), await desktop.screenshot());
     await desktop.key("Digit2"); await sleep(400);
     assert(["flight", "docked"].includes((await snapshot(desktop)).mode), "Continue did not restore a playable state");
+
+    await desktop.key("Escape"); await sleep(300);
+    await assertMode(desktop, "paused");
+    await desktop.key("Slash"); await sleep(300);
+    await assertMode(desktop, "help");
+    writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-help-pause.png"), await desktop.screenshot());
+    await desktop.key("Escape"); await sleep(300);
+    await assertMode(desktop, "paused");
+    await desktop.key("Enter"); await sleep(300);
 
     await desktop.close();
 
@@ -478,6 +493,7 @@ function codeToKey(code) {
   if (code === "Escape") return "Escape";
   if (code === "Space") return " ";
   if (code === "Enter") return "Enter";
+  if (code === "Slash") return "/";
   if (code === "ArrowLeft") return "ArrowLeft";
   if (code === "ArrowRight") return "ArrowRight";
   return code;
