@@ -125,7 +125,7 @@ export class Game {
     this.mapSearchInput.remove();
   }
 
-  getDebugSnapshot(): { mode: GameMode; selectedSystemId: number; message: string; player: Pick<PlayerState, "docked" | "balance" | "fuel">; buttons: ButtonZone[] } {
+  getDebugSnapshot(): { mode: GameMode; selectedSystemId: number; message: string; player: Pick<PlayerState, "docked" | "balance" | "fuel">; buttons: ButtonZone[]; mapFilters: MapFilterState } {
     return {
       mode: this.mode,
       selectedSystemId: this.selectedSystemId,
@@ -135,7 +135,8 @@ export class Game {
         balance: this.player.balance,
         fuel: this.player.fuel
       },
-      buttons: this.renderer.getButtons()
+      buttons: this.renderer.getButtons(),
+      mapFilters: this.mapFilters
     };
   }
 
@@ -150,6 +151,7 @@ export class Game {
   };
 
   private update(dt: number): void {
+    this.syncMapSearchVisibility();
     this.handleClick();
 
     if (this.input.consume("KeyU")) {
@@ -164,7 +166,7 @@ export class Game {
       this.message = this.phosphorGlow ? "Phosphor glow enabled" : "Crisp vector mode enabled";
     }
 
-    if (this.input.consume("Slash") || this.input.consume("Slash")) {
+    if (this.input.consume("Slash")) {
       if (this.mode === "help") {
         this.mode = this.previousMode;
       } else {
@@ -1170,8 +1172,33 @@ export class Game {
     input.addEventListener("input", () => {
       this.mapFilters = { ...this.mapFilters, query: input.value };
     });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "Escape") {
+        input.blur();
+        e.stopPropagation();
+      }
+    });
     document.body.appendChild(input);
     return input;
+  }
+
+  private syncMapSearchVisibility(): void {
+    const isMap = this.mode === "map";
+    const isHelp = this.mode === "help";
+    const shouldBeVisible = isMap;
+
+    if (this.mapSearchInput.hidden !== !shouldBeVisible) {
+      this.mapSearchInput.hidden = !shouldBeVisible;
+      if (shouldBeVisible) {
+        this.mapSearchInput.focus();
+      } else {
+        this.mapSearchInput.blur();
+        if (!isHelp) {
+          this.mapSearchInput.value = "";
+          this.mapFilters = { ...this.mapFilters, query: "" };
+        }
+      }
+    }
   }
 
   private resetTransientState(): void {

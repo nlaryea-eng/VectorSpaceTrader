@@ -263,10 +263,44 @@ async function browserSmoke() {
     await desktop.key("Escape"); await sleep(200);
     await desktop.key("KeyM"); await sleep(300);
     await assertMode(desktop, "map");
+    // Blur auto-focused search input so keyboard navigation works
+    await desktop.eval("document.querySelector('.map-search-input').blur()");
+    await sleep(100);
     const beforeMap = (await snapshot(desktop)).selectedSystemId;
     await desktop.key("KeyD"); await sleep(150);
     const afterMap = (await snapshot(desktop)).selectedSystemId;
     assert(afterMap !== beforeMap, "Map selection key did not change selected system");
+
+    // Map search regression tests
+    log("Checking map search functionality...");
+    const inputHidden = await desktop.eval("document.querySelector('.map-search-input').hidden");
+    assert(inputHidden === false, "Map search input should be visible in map mode");
+
+    await desktop.eval("const input = document.querySelector('.map-search-input'); input.focus(); input.value = 'Ara'; input.dispatchEvent(new Event('input'))");
+    await sleep(200);
+    const stateWithSearch = await snapshot(desktop);
+    assert(stateWithSearch.mapFilters.query === 'Ara', "Map search input did not update filters");
+
+    // Test that Slash in input doesn't open help
+    await desktop.key("Slash"); await sleep(200);
+    await assertMode(desktop, "map");
+    assert((await snapshot(desktop)).mapFilters.query === 'Ara', "Map search query should remain after Slash type (if handled correctly)");
+
+    // Test Help preservation
+    await desktop.eval("document.activeElement.blur()");
+    await sleep(100);
+    await desktop.key("Slash"); await sleep(300);
+    await assertMode(desktop, "help");
+    const inputHiddenInHelp = await desktop.eval("document.querySelector('.map-search-input').hidden");
+    assert(inputHiddenInHelp === true, "Map search input should be hidden in help mode");
+
+    await desktop.key("Escape"); await sleep(300);
+    await assertMode(desktop, "map");
+    const inputVisibleAgain = await desktop.eval("document.querySelector('.map-search-input').hidden");
+    assert(inputVisibleAgain === false, "Map search input should be visible again after help");
+    const queryPreserved = await desktop.eval("document.querySelector('.map-search-input').value");
+    assert(queryPreserved === 'Ara', "Map search query should be preserved after help");
+
     await desktop.key("KeyA"); await sleep(150);
 
     await desktop.navigate(smokeUrl);
