@@ -55,6 +55,7 @@ Touch controls are drawn directly on the canvas for pitch, yaw, throttle, fire, 
 - Four original enemy ship classes with distinct wireframe geometry and combat behavior.
 - Animated station docking corridor with original station geometry.
 - Equipment upgrades: Pulse Laser, Beam Laser, Cargo Expansion, Fuel Scoop, and Shield Booster.
+- Hull damage and station-side repair through the equipment bay.
 - Original procedural missions, reputation, legal-risk changes, dynamic economy drift, supply/demand changes, and price history.
 - Procedural Web Audio effects for lasers, hits, destruction, jumps, docking, trading, UI selection, and warnings.
 
@@ -78,6 +79,6 @@ Touch controls are drawn directly on the canvas for pitch, yaw, throttle, fire, 
 
 - Add richer multi-contact encounters and wing behavior.
 - Add stricter manual docking alignment and landing guidance.
-- Add repairs, equipment resale, and trade route history.
+- Add equipment resale and trade route history.
 - Add audio volume controls and accessibility settings.
 - Add more detailed map filtering and route plotting.
