@@ -17,6 +17,12 @@ npm test
 
 Open the local URL printed by Vite after `npm run dev`.
 
+## Public Demo
+
+After GitHub Pages is enabled for GitHub Actions, the public demo is published at:
+
+https://nlaryea-eng.github.io/VectorSpaceTrader/
+
 ## Controls
 
 - `ArrowUp` / `ArrowDown`: pitch

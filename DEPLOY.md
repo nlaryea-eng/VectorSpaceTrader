@@ -52,11 +52,29 @@ Opens a hot-reloading dev server at `http://localhost:5173` (default Vite port).
 The contents of `dist/` are a fully self-contained static site (one HTML file + hashed JS/CSS assets). Deploy them to any static hosting service:
 
 - **Netlify / Vercel**: point the publish directory to `dist`
-- **GitHub Pages**: copy `dist/` contents to the `gh-pages` branch
+- **GitHub Pages**: use the `Deploy GitHub Pages` Actions workflow, which builds with `VITE_BASE_PATH=/VectorSpaceTrader/` and deploys `dist/`
 - **Nginx / Apache**: serve `dist/` as the document root
 - **Any CDN**: upload `dist/` and set `index.html` as the default document
 
 No server-side runtime is required.
+
+## GitHub Pages
+
+The repository Pages URL is:
+
+```text
+https://nlaryea-eng.github.io/VectorSpaceTrader/
+```
+
+The deployment workflow lives at `.github/workflows/pages.yml`. It installs dependencies with `npm ci`, runs `npm run build`, uploads the generated `dist/` directory, and deploys it with the official GitHub Pages actions.
+
+The Vite base path is controlled by `VITE_BASE_PATH`. Local development and local builds default to `/`, while the GitHub Pages workflow sets:
+
+```bash
+VITE_BASE_PATH=/VectorSpaceTrader/
+```
+
+In GitHub, configure **Settings -> Pages -> Build and deployment -> Source** to **GitHub Actions**.
 
 ## Compliance String Search
 
