@@ -35,7 +35,7 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] Market buys and sells one unit with number keys and shifted number keys.
 - [ ] Market bulk buy/sell controls respect cargo capacity, available stock, owned cargo, and balance.
 - [ ] Fuel purchase works from the market and respects fuel capacity and balance.
-- [ ] Station dock screen clearly shows available and unavailable market, gear, shipyard, and mission services.
+- [ ] Station dock screen clearly shows available and unavailable market, equipment, shipyard, and mission services.
 - [ ] Equipment purchase works for available upgrades and blocks duplicate, unaffordable, or unstocked purchases.
 - [ ] Equipment paging works by click/touch and `N` / `P`.
 - [ ] Hull repair works from the equipment bay and handles full, partial, unaffordable, discounted, and already-full repair states.

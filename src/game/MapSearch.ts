@@ -1,5 +1,5 @@
 import { getStationProfile } from "./StationServices";
-import type { EconomyType, HazardTag, PlayerState, StarSystem, StationService } from "./types";
+import type { EconomyType, GovernmentType, HazardTag, OpportunityTag, PlayerState, StarSystem, StationService } from "./types";
 
 export type DiscoveryFilter = "all" | "discovered" | "undiscovered";
 
@@ -7,6 +7,8 @@ export interface MapFilterState {
   query: string;
   hazard: HazardTag | "all";
   economy: EconomyType | "all";
+  government: GovernmentType | "all";
+  opportunity: OpportunityTag | "all";
   discovery: DiscoveryFilter;
   service: StationService | "all";
 }
@@ -20,6 +22,8 @@ export const DEFAULT_MAP_FILTERS: MapFilterState = {
   query: "",
   hazard: "all",
   economy: "all",
+  government: "all",
+  opportunity: "all",
   discovery: "all",
   service: "all"
 };
@@ -41,6 +45,8 @@ export function matchesMapFilters(
   if (query && !system.name.toLowerCase().includes(query)) return false;
   if (filters.hazard !== "all" && system.hazardTag !== filters.hazard) return false;
   if (filters.economy !== "all" && system.economy !== filters.economy) return false;
+  if (filters.government !== "all" && system.government !== filters.government) return false;
+  if (filters.opportunity !== "all" && system.opportunityTag !== filters.opportunity) return false;
   if (filters.service !== "all" && !getStationProfile(system).services[filters.service]) return false;
 
   if (filters.discovery !== "all") {
@@ -65,6 +71,8 @@ export function hasActiveMapFilter(filters: MapFilterState): boolean {
     normalizeQuery(filters.query) !== "" ||
     filters.hazard !== "all" ||
     filters.economy !== "all" ||
+    filters.government !== "all" ||
+    filters.opportunity !== "all" ||
     filters.discovery !== "all" ||
     filters.service !== "all"
   );
@@ -111,19 +119,40 @@ export function getSystemAtProjectedMapPoint(
   mapH: number,
   universeWidth: number,
   universeHeight: number,
-  hitRadius = 8
+  player: Pick<PlayerState, "currentSystemId" | "discoveredSystemIds" | "fuel" | "shipId" | "equipment">,
+  filters: MapFilterState,
+  hitRadius = 12
 ): StarSystem | null {
   let closest: StarSystem | null = null;
   let minDist = hitRadius;
 
+  const current = systems.find(s => s.id === player.currentSystemId);
+
   for (const system of systems) {
     const point = projectSystemToMap(system, mapX, mapY, mapW, mapH, universeWidth, universeHeight);
     const dist = Math.hypot(clickX - point.x, clickY - point.y);
-    if (dist < minDist) {
-      minDist = dist;
-      closest = system;
+
+    if (dist < hitRadius) {
+      // Tie-breaking: if distances are close, prefer matched/discovered/in-range
+      let effectiveDist = dist;
+
+      const discovered = isSystemDiscovered(player, system.id);
+      const matched = matchesMapFilters(system, filters, player);
+      const inRange = current ? canJump(current, system, player.fuel, player) : false;
+
+      if (matched) effectiveDist -= 2;
+      if (discovered) effectiveDist -= 1;
+      if (inRange) effectiveDist -= 1;
+
+      if (effectiveDist < minDist) {
+        minDist = effectiveDist;
+        closest = system;
+      }
     }
   }
 
   return closest;
 }
+
+// Re-export canJump for hit testing
+import { canJump } from "./Universe";

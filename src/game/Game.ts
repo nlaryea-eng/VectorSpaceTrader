@@ -8,10 +8,10 @@ import {
   getLastKnownPrice,
   recordPriceHistory
 } from "./Economy";
-import { buyEquipment, DEFAULT_EQUIPMENT, getEquipmentKeys, getLaserProfile } from "./Equipment";
+import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT } from "./Equipment";
 import { Input } from "./Input";
 import { normalizeMapAction, normalizeMarketAction } from "./InputRouter";
-import { DEFAULT_MAP_FILTERS, type MapFilterState, selectAdjacentFilteredSystem } from "./MapSearch";
+import { DEFAULT_MAP_FILTERS, type MapFilterState, selectAdjacentFilteredSystem, getSystemAtProjectedMapPoint } from "./MapSearch";
 import { acceptMission, completeMission, decrementMissionDeadline, generateMissions } from "./Missions";
 import { dismissHint, shouldShowHint, type HintId } from "./Onboarding";
 import { clamp, distance, length, updateOrientation, updatePosition, updateVelocity, vec3 } from "./Physics";
@@ -34,12 +34,13 @@ import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID } from "./Sh
 import { getStationProfile, hasStationService } from "./StationServices";
 import { createInitialTransientState } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
-import { canJump, generateUniverse, getFuelRequired, getJumpDistance } from "./Universe";
+import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
 import { HELP_CONTENT, type HelpSectionId } from "./HelpContent";
 import type {
   ButtonZone,
   EconomyState,
   EquipmentId,
+  EquipmentCategory,
   GameMode,
   MarketItem,
   Meta,
@@ -86,6 +87,7 @@ export class Game {
   private selectedSystemId = 1;
   private selectedShipId: PlayerShipId = PLAYER_SHIPS[1].id;
   private equipmentPage = 0;
+  private equipmentCategoryFilter: EquipmentCategory | "all" = "all";
   private mapFilters: MapFilterState = { ...DEFAULT_MAP_FILTERS };
   private message = "";
   private lastTime = 0;
@@ -649,14 +651,20 @@ export class Game {
     }
   }
 
+  private getFilteredEquipmentKeys(): EquipmentId[] {
+    return EQUIPMENT
+      .filter(e => this.equipmentCategoryFilter === "all" || e.category === this.equipmentCategoryFilter)
+      .map(e => e.id);
+  }
+
   private getVisibleEquipmentKeys(): EquipmentId[] {
-    const keys = getEquipmentKeys();
+    const keys = this.getFilteredEquipmentKeys();
     const start = this.equipmentPage * EQUIPMENT_PAGE_SIZE;
     return keys.slice(start, start + EQUIPMENT_PAGE_SIZE);
   }
 
   private getEquipmentPageCount(): number {
-    return Math.max(1, Math.ceil(getEquipmentKeys().length / EQUIPMENT_PAGE_SIZE));
+    return Math.max(1, Math.ceil(this.getFilteredEquipmentKeys().length / EQUIPMENT_PAGE_SIZE));
   }
 
   private cycleMapFilter(zoneId: string): void {
@@ -676,6 +684,16 @@ export class Game {
     if (zoneId === "map-filter-economy") {
       const values: MapFilterState["economy"][] = ["all", "Agricultural", "Industrial", "Research", "Mining", "Periphery", "Trade Hub"];
       this.mapFilters = { ...this.mapFilters, economy: nextValue(values, this.mapFilters.economy) };
+    }
+
+    if (zoneId === "map-filter-government") {
+      const values: MapFilterState["government"][] = ["all", "Cooperative", "Council", "Syndicate", "Corporate", "Collective", "Independent"];
+      this.mapFilters = { ...this.mapFilters, government: nextValue(values, this.mapFilters.government) };
+    }
+
+    if (zoneId === "map-filter-opportunity") {
+      const values: MapFilterState["opportunity"][] = ["all", "steadyDemand", "shortHaul", "surveyData", "repairQueue", "contractFlow", "salvageTrace"];
+      this.mapFilters = { ...this.mapFilters, opportunity: nextValue(values, this.mapFilters.opportunity) };
     }
 
     if (zoneId === "map-filter-discovery") {
@@ -839,7 +857,54 @@ export class Game {
       return;
     }
 
-    if (zone.id.startsWith("map-system-")) {
+    if (zone && zone.id.startsWith("map-system-")) {
+      // We'll use more robust hit testing for map systems to handle close clusters.
+      // The button zones are still useful to know we clicked *somewhere* near systems,
+      // but we'll re-evaluate the closest/best candidate here.
+      const panelX = this.renderer.isNarrow() ? 8 : this.renderer.getWidth() * 0.08;
+      const panelY = this.renderer.isNarrow() ? 12 : this.renderer.getHeight() * 0.1;
+      const panelW = this.renderer.isNarrow() ? this.renderer.getWidth() - 16 : this.renderer.getWidth() * 0.84;
+      const titleY = panelY + (this.renderer.isNarrow() ? 26 : 40);
+
+      const mapX = this.renderer.isNarrow() ? panelX + 12 : this.renderer.getWidth() * 0.12;
+      const mapY = this.renderer.isNarrow() ? titleY + 18 : this.renderer.getHeight() * 0.23;
+      const mapW = this.renderer.isNarrow() ? panelW - 24 : this.renderer.getWidth() * 0.54;
+      const mapH = this.renderer.isNarrow() ? this.renderer.getHeight() * 0.42 : this.renderer.getHeight() * 0.56;
+
+      const target = getSystemAtProjectedMapPoint(
+        this.systems,
+        click.x,
+        click.y,
+        mapX,
+        mapY,
+        mapW,
+        mapH,
+        UNIVERSE_CONSTANTS.width,
+        UNIVERSE_CONSTANTS.height,
+        this.player,
+        this.mapFilters,
+        20 // Larger hit radius for re-evaluation
+      );
+
+      if (target) {
+        this.selectedSystemId = target.id;
+        const current = this.systems[this.player.currentSystemId];
+        this.audio.play("ui");
+
+        if (target.id === current.id) {
+          this.message = "Already in this system";
+        } else if (!canJump(current, target, this.player.fuel, this.player)) {
+          const withinRange = getJumpDistance(current, target) <= getPlayerShipStats(this.player).maxJumpRange;
+          this.message = withinRange ? "Insufficient fuel — buy fuel first" : "Out of jump range";
+        } else {
+          this.message = `${target.name} selected — press Enter or JUMP to travel`;
+        }
+        return;
+      }
+    }
+
+    if (zone && zone.id.startsWith("map-system-")) {
+      // Fallback if the robust search failed for some reason (shouldn't happen)
       const systemId = parseInt(zone.id.slice("map-system-".length), 10);
       const current = this.systems[this.player.currentSystemId];
       const target = this.systems[systemId];
@@ -926,6 +991,18 @@ export class Game {
 
     if (zone.id === "equip-page-next") {
       this.equipmentPage = Math.min(this.getEquipmentPageCount() - 1, this.equipmentPage + 1);
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "equip-category-cycle") {
+      const categories: (EquipmentCategory | "all")[] = [
+        "all", "ship", "cargo", "hull", "weapon", "shield", "fuel", "range",
+        "efficiency", "navigation", "survey", "salvage", "defensive", "repair",
+        "mission", "utility"
+      ];
+      this.equipmentCategoryFilter = nextValue(categories, this.equipmentCategoryFilter);
+      this.equipmentPage = 0;
       this.audio.play("ui");
       return;
     }
@@ -1278,6 +1355,7 @@ export class Game {
       musicVolume: this.audio.getMusicVolume(),
       selectedShipId: this.selectedShipId,
       equipmentPage: this.equipmentPage,
+      equipmentCategoryFilter: this.equipmentCategoryFilter,
       helpSectionId: this.helpSectionId,
       helpPageIndex: this.helpPageIndex,
     });

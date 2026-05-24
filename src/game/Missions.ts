@@ -1,189 +1,19 @@
-import type { EquipmentId, Mission, MissionType, PlayerState, StarSystem, StationService } from "./types";
+import type { Mission, PlayerState, StarSystem } from "./types";
 import { getAvailableCargoCapacity } from "./Trading";
-import { getJumpDistance } from "./Universe";
+import { canJump } from "./Universe";
 import type { StationProfile } from "./StationServices";
+import { createMissionId } from "./MissionIds";
+import { generateMissionOffer } from "./MissionGenerator";
 
-interface MissionTemplate {
-  type: MissionType;
-  typeLabel: string;
-  title: string;
-  cargoLabel: string;
-  briefing: (origin: StarSystem, destination: StarSystem) => string;
-  baseReward: number;
-  reputationChange: number;
-  legalRiskChange: number;
-  failureReputationChange: number;
-  failureLegalRiskChange: number;
-  cargoUnitsRequired: number;
-  deadlineJumps: number;
-  riskLevel: number;
-  requiredEquipment?: EquipmentId;
-  minReputation?: number;
-  requiredService?: StationService;
-}
+const MISSION_VERSION = 4;
+const BOARD_SIZE_MIN = 6;
+const BOARD_SIZE_MAX = 12;
+const MAX_CANDIDATES = 40;
 
-const TEMPLATES: MissionTemplate[] = [
-  {
-    type: "courier",
-    typeLabel: "Courier",
-    title: "Sealed Wafer Run",
-    cargoLabel: "sealed wafer",
-    briefing: (origin, destination) => `Carry a sealed wafer from ${origin.name} to ${destination.name}.`,
-    baseReward: 130,
-    reputationChange: 3,
-    legalRiskChange: 0,
-    failureReputationChange: -2,
-    failureLegalRiskChange: 0,
-    cargoUnitsRequired: 1,
-    deadlineJumps: 5,
-    riskLevel: 1
-  },
-  {
-    type: "fragile",
-    typeLabel: "Fragile",
-    title: "Soft Crate Transfer",
-    cargoLabel: "soft crates",
-    briefing: (_origin, destination) => `Deliver shock-packed soft crates to ${destination.name}.`,
-    baseReward: 210,
-    reputationChange: 4,
-    legalRiskChange: 0,
-    failureReputationChange: -3,
-    failureLegalRiskChange: 0,
-    cargoUnitsRequired: 3,
-    deadlineJumps: 5,
-    riskLevel: 2
-  },
-  {
-    type: "urgent",
-    typeLabel: "Urgent",
-    title: "Hot Clock Dispatch",
-    cargoLabel: "dispatch case",
-    briefing: (_origin, destination) => `Move a time-stamped dispatch case to ${destination.name}.`,
-    baseReward: 260,
-    reputationChange: 5,
-    legalRiskChange: 0,
-    failureReputationChange: -4,
-    failureLegalRiskChange: 1,
-    cargoUnitsRequired: 1,
-    deadlineJumps: 3,
-    riskLevel: 3
-  },
-  {
-    type: "medical",
-    typeLabel: "Relief",
-    title: "Clinic Packet Lift",
-    cargoLabel: "clinic packets",
-    briefing: (_origin, destination) => `Deliver compact clinic packets to a port ward at ${destination.name}.`,
-    baseReward: 230,
-    reputationChange: 5,
-    legalRiskChange: -1,
-    failureReputationChange: -4,
-    failureLegalRiskChange: 0,
-    cargoUnitsRequired: 4,
-    deadlineJumps: 4,
-    riskLevel: 2
-  },
-  {
-    type: "survey",
-    typeLabel: "Survey",
-    title: "Quiet Lane Scan",
-    cargoLabel: "no cargo",
-    briefing: (_origin, destination) => `Scan quiet lane markers around ${destination.name}.`,
-    baseReward: 190,
-    reputationChange: 4,
-    legalRiskChange: 0,
-    failureReputationChange: -2,
-    failureLegalRiskChange: 0,
-    cargoUnitsRequired: 0,
-    deadlineJumps: 6,
-    riskLevel: 2,
-    requiredEquipment: "laneGlassScanner",
-    requiredService: "survey"
-  },
-  {
-    type: "passenger",
-    typeLabel: "Passenger",
-    title: "Cabin Seat Charter",
-    cargoLabel: "cabin seat",
-    briefing: (_origin, destination) => `Carry a single charter seat to ${destination.name}.`,
-    baseReward: 280,
-    reputationChange: 5,
-    legalRiskChange: 0,
-    failureReputationChange: -4,
-    failureLegalRiskChange: 0,
-    cargoUnitsRequired: 2,
-    deadlineJumps: 5,
-    riskLevel: 2,
-    minReputation: 2
-  },
-  {
-    type: "salvage",
-    typeLabel: "Salvage",
-    title: "Loose Panel Recovery",
-    cargoLabel: "recovered panels",
-    briefing: (_origin, destination) => `Recover marked panels from the approach track near ${destination.name}.`,
-    baseReward: 300,
-    reputationChange: 4,
-    legalRiskChange: 1,
-    failureReputationChange: -2,
-    failureLegalRiskChange: 1,
-    cargoUnitsRequired: 2,
-    deadlineJumps: 6,
-    riskLevel: 3,
-    requiredEquipment: "salvageTongs",
-    requiredService: "salvage"
-  },
-  {
-    type: "supply",
-    typeLabel: "Supply",
-    title: "Berth Supply Run",
-    cargoLabel: "berth stores",
-    briefing: (origin, destination) => `Move berth stores from ${origin.name} to ${destination.name}.`,
-    baseReward: 170,
-    reputationChange: 3,
-    legalRiskChange: 0,
-    failureReputationChange: -2,
-    failureLegalRiskChange: 0,
-    cargoUnitsRequired: 5,
-    deadlineJumps: 7,
-    riskLevel: 1
-  },
-  {
-    type: "restricted",
-    typeLabel: "Restricted",
-    title: "Sealed Hold Notice",
-    cargoLabel: "sealed parcels",
-    briefing: (_origin, destination) => `Carry sealed parcels to ${destination.name}; port records will be sparse.`,
-    baseReward: 360,
-    reputationChange: 3,
-    legalRiskChange: 2,
-    failureReputationChange: -3,
-    failureLegalRiskChange: 2,
-    cargoUnitsRequired: 2,
-    deadlineJumps: 4,
-    riskLevel: 4,
-    requiredService: "restrictedContracts"
-  },
-  {
-    type: "reputation",
-    typeLabel: "Trusted",
-    title: "Known-Hand Charter",
-    cargoLabel: "charter parcel",
-    briefing: (_origin, destination) => `Take a known-hand charter parcel to ${destination.name}.`,
-    baseReward: 430,
-    reputationChange: 6,
-    legalRiskChange: -1,
-    failureReputationChange: -5,
-    failureLegalRiskChange: 1,
-    cargoUnitsRequired: 1,
-    deadlineJumps: 5,
-    riskLevel: 3,
-    minReputation: 6
-  }
-];
+import { EQUIPMENT } from "./Equipment";
 
 export function generateMissions(
-  seed: number,
+  universeSeed: number,
   current: StarSystem,
   systems: StarSystem[],
   player: PlayerState,
@@ -191,49 +21,97 @@ export function generateMissions(
 ): Mission[] {
   if (station && !station.services.missions) return [];
 
-  const candidates = systems
-    .filter((system) => system.id !== current.id)
-    .sort((a, b) => getJumpDistance(current, a) - getJumpDistance(current, b));
-
-  const availableCargo = getAvailableCargoCapacity(player);
   const density = station?.missionDensity ?? 1;
+  const targetCount = Math.max(BOARD_SIZE_MIN, Math.min(BOARD_SIZE_MAX, Math.round(8 * density)));
 
-  return TEMPLATES
-    .filter((template) => !template.requiredService || station?.services[template.requiredService] || !station)
-    .filter((template) => template.cargoUnitsRequired <= availableCargo || template.cargoUnitsRequired === 0)
-    .slice(0, Math.max(6, Math.round(8 * density)))
-    .map((template, index) => {
-      const offset = Math.abs(seed + current.id * 5 + index * 7 + template.baseReward) % Math.max(1, candidates.length);
-      const destination = candidates[offset] ?? candidates[0] ?? current;
-      const distance = getJumpDistance(current, destination);
-      const hazardBonus = destination.hazardLevel * 18 + template.riskLevel * 12;
-      const riskBonus = Math.max(0, player.legalRisk) * 6;
-      const reputationBonus = Math.max(0, player.reputation) * 2;
-      const reward = Math.round(template.baseReward + distance * 9 + hazardBonus + riskBonus + reputationBonus);
-      const riskLevel = Math.min(5, template.riskLevel + Math.floor(destination.hazardLevel / 3));
+  // Deterministic board seed
+  const boardSeed = BigInt(universeSeed) + BigInt(current.id) * BigInt(1000) + BigInt(MISSION_VERSION) * BigInt(1000000);
 
-      return {
-        id: `${current.id}-${destination.id}-${template.type}-${seed % 997}`,
-        type: template.type,
-        typeLabel: template.typeLabel,
-        title: template.title,
-        briefing: template.briefing(current, destination),
-        originSystemId: current.id,
-        destinationSystemId: destination.id,
-        reward,
-        reputationChange: template.reputationChange,
-        legalRiskChange: template.legalRiskChange,
-        failureReputationChange: template.failureReputationChange,
-        failureLegalRiskChange: template.failureLegalRiskChange,
-        cargoUnitsRequired: template.cargoUnitsRequired,
-        cargoLabel: template.cargoLabel,
-        deadlineJumps: template.deadlineJumps,
-        riskLabel: getRiskLabel(riskLevel),
-        riskLevel,
-        requiredEquipment: template.requiredEquipment,
-        minReputation: template.minReputation
-      };
-    });
+  const offers: Mission[] = [];
+  let candidateIndex = 0;
+
+  while (offers.length < targetCount && candidateIndex < MAX_CANDIDATES) {
+    const missionValue = boardSeed + BigInt(candidateIndex);
+    const missionId = createMissionId(MISSION_VERSION, missionValue);
+
+    const offer = generateMissionOffer(missionId, {
+      seed: universeSeed,
+      origin: current,
+      systems,
+      player
+    }, MISSION_VERSION);
+
+    if (offer) {
+      const requirementsMet = (!offer.requiredEquipment || player.equipment[offer.requiredEquipment]) &&
+                             (!offer.requiredCategory || hasEquipmentInCategory(player, offer.requiredCategory));
+      const reputationMet = offer.minReputation === undefined || player.reputation >= offer.minReputation;
+
+      // For starter station, initially only accept 1-jump missions until we have at least 3
+      const starterConstraint = current.id === 0 && offers.length < 3
+        ? canJump(current, systems[offer.destinationSystemId], player.fuel, player)
+        : true;
+
+      if (requirementsMet && reputationMet && starterConstraint) {
+        offers.push(offer);
+      }
+    }
+    candidateIndex++;
+  }
+
+  // Starter station fallback if too few offers
+  if (current.id === 0 && offers.length < 3) {
+    // Specifically target nearby systems for guaranteed reachable missions
+    const nearby = systems
+      .filter(s => s.id !== current.id && canJump(current, s, player.fuel, player))
+      .sort((a, b) => {
+        const distA = Math.hypot(a.x - current.x, a.y - current.y);
+        const distB = Math.hypot(b.x - current.x, b.y - current.y);
+        return distA - distB;
+      })
+      .slice(0, 10);
+
+    for (let i = 0; i < 3 - offers.length; i++) {
+        const target = nearby[i % nearby.length] ?? systems[1]; // Fallback to system 1 if nothing in range
+        const fallbackValue = boardSeed + BigInt(2000 + i);
+        const fallbackId = createMissionId(MISSION_VERSION, fallbackValue);
+
+        // We use a custom generator context for fallback to force the destination
+        const offer = generateMissionOffer(fallbackId, {
+            seed: universeSeed,
+            origin: current,
+            systems: systems.map(s => s.id === target.id ? target : s), // Ensure target is in there
+            player
+        }, MISSION_VERSION);
+
+        // If even fallback fails (e.g. cargo), try a very basic courier mission
+        if (offer && canJump(current, systems[offer.destinationSystemId], player.fuel, player)) {
+            offers.push(offer);
+        } else {
+             // Hard-coded starter safe mission if all else fails
+             offers.push({
+                 id: fallbackId,
+                 type: "courier",
+                 typeLabel: "Courier",
+                 title: "Priority Wafer",
+                 briefing: `Carry a data wafer to ${target.name}.`,
+                 originSystemId: current.id,
+                 destinationSystemId: target.id,
+                 reward: 150,
+                 reputationChange: 2,
+                 legalRiskChange: 0,
+                 failureReputationChange: -2,
+                 failureLegalRiskChange: 1,
+                 cargoUnitsRequired: 1,
+                 cargoLabel: "data wafer",
+                 deadlineJumps: 10,
+                 riskLabel: "low",
+                 riskLevel: 1
+             });
+        }
+    }
+  }
+
+  return offers;
 }
 
 export interface AcceptMissionResult {
@@ -251,6 +129,10 @@ export function acceptMission(player: PlayerState, mission: Mission): AcceptMiss
     return { ok: false, reason: `Requires ${formatEquipmentName(mission.requiredEquipment)}`, player };
   }
 
+  if (mission.requiredCategory && !hasEquipmentInCategory(player, mission.requiredCategory)) {
+    return { ok: false, reason: `Requires ${mission.requiredCategory} equipment`, player };
+  }
+
   const available = getAvailableCargoCapacity(player);
   if (mission.cargoUnitsRequired > 0 && available < mission.cargoUnitsRequired) {
     return {
@@ -265,11 +147,15 @@ export function acceptMission(player: PlayerState, mission: Mission): AcceptMiss
     player: {
       ...player,
       activeMissionId: mission.id,
-      activeMission: mission,
+      activeMission: mission, // Snapshot
       missionCargoUnits: mission.cargoUnitsRequired,
       legalRisk: Math.max(0, mission.legalRiskChange > 0 ? player.legalRisk + 1 : player.legalRisk)
     }
   };
+}
+
+function hasEquipmentInCategory(player: PlayerState, category: string): boolean {
+  return EQUIPMENT.some(e => e.category === category && player.equipment[e.id]);
 }
 
 export function completeMission(player: PlayerState, mission: Mission): PlayerState {
@@ -317,14 +203,7 @@ export function decrementMissionDeadline(player: PlayerState): DeadlineResult {
   };
 }
 
-function getRiskLabel(riskLevel: number): string {
-  if (riskLevel <= 1) return "low";
-  if (riskLevel <= 2) return "standard";
-  if (riskLevel <= 3) return "elevated";
-  if (riskLevel <= 4) return "high";
-  return "severe";
-}
-
-function formatEquipmentName(id: EquipmentId): string {
+function formatEquipmentName(id: string | undefined): string {
+  if (!id) return "unknown equipment";
   return id.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
 }

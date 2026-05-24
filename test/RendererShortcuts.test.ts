@@ -13,6 +13,7 @@ import { describe, expect, it, beforeAll } from "vitest";
 
 import { Renderer, type RenderState } from "../src/game/Renderer";
 import type { GameMode, PlayerState } from "../src/game/types";
+import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 
 function stubPlayer(docked: boolean): PlayerState {
   return {
@@ -35,12 +36,7 @@ function stubPlayer(docked: boolean): PlayerState {
     docked,
     legalRisk: 0,
     reputation: 0,
-    equipment: {
-      pulseLaser: true, beamLaser: false, cargoExpansion: false, fuelScoop: false,
-      shieldBooster: false, laneGlassScanner: false, arcSpoolDrive: false,
-      foldedHoldGrid: false, fieldPatchDrones: false, quietShieldMatrix: false,
-      thriftBurnRegulator: false, routeAbacus: false, salvageTongs: false,
-    }
+    equipment: { ...DEFAULT_EQUIPMENT }
   };
 }
 
@@ -73,12 +69,12 @@ function stubState(mode: GameMode, docked = false): RenderState {
     explosionEffect: null,
     previousPrices: {},
     runStats: {
-      systemsVisited: [],
+      totalBalEarned: 0,
       jumpsCompleted: 0,
+      systemsVisited: [],
       missionsCompleted: 0,
       missionsFailed: 0,
       enemiesDestroyed: 0,
-      totalBalEarned: 0,
       timePlayed: 0,
       causeOfDeath: ""
     },
@@ -86,11 +82,12 @@ function stubState(mode: GameMode, docked = false): RenderState {
     pilotRank: { tier: 0, title: "Cadet" },
     isNewPersonalBest: false,
     activeHint: null,
-    mapFilters: { query: "", hazard: "all", economy: "all", discovery: "all", service: "all" },
+    mapFilters: { query: "", hazard: "all", economy: "all", government: "all", opportunity: "all", discovery: "all", service: "all" },
     sfxVolume: 1,
     musicVolume: 0.6,
     selectedShipId: "vaskRelay",
     equipmentPage: 0,
+    equipmentCategoryFilter: "all",
     helpSectionId: "quickStart",
     helpPageIndex: 0
   };

@@ -15,6 +15,7 @@ import type {
   ButtonZone,
   CommodityId,
   EconomyState,
+  EquipmentCategory,
   GameMode,
   MarketItem,
   Meta,
@@ -65,6 +66,7 @@ export interface RenderState {
   musicVolume: number;
   selectedShipId: PlayerShipId;
   equipmentPage: number;
+  equipmentCategoryFilter: EquipmentCategory | "all";
   helpSectionId: HelpSectionId;
   helpPageIndex: number;
 }
@@ -186,6 +188,14 @@ export class Renderer {
   }
 
   /** True when the viewport is phone-sized; UI must reflow. */
+  getWidth(): number {
+    return this.width;
+  }
+
+  getHeight(): number {
+    return this.height;
+  }
+
   isNarrow(): boolean {
     return this.narrow;
   }
@@ -828,6 +838,8 @@ export class Renderer {
     this.ctx.setLineDash([]);
     this.ctx.restore();
 
+    const labeledPoints: Array<{ x: number; y: number }> = [];
+
     for (const system of state.systems) {
       const point = projectSystemToMap(system, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
       const isCurrent = system.id === current.id;
@@ -861,10 +873,23 @@ export class Renderer {
 
       this.ctx.globalAlpha = 1;
 
-      if (isCurrent || isSelected || nearby || (matched && activeFilter)) {
-        this.drawText(system.name, point.x + 12, point.y, {
-          align: "left", size: 11, font: THEME.fonts.mono, color: discovered ? THEME.colors.textPrimary : THEME.colors.textDim
-        });
+      // Robust labeling with clutter reduction
+      let labelPriority = 0;
+      if (isCurrent || isSelected) labelPriority = 3;
+      else if (matched && activeFilter) labelPriority = 2;
+      else if (nearby) labelPriority = 1;
+
+      if (labelPriority > 0) {
+        const tooClose = labeledPoints.some((p) => Math.abs(p.x - point.x) < 48 && Math.abs(p.y - point.y) < 15);
+        if (!tooClose || labelPriority >= 3) {
+          this.drawText(system.name, point.x + 12, point.y, {
+            align: "left",
+            size: 11,
+            font: THEME.fonts.mono,
+            color: discovered ? THEME.colors.textPrimary : THEME.colors.textDim
+          });
+          labeledPoints.push(point);
+        }
       }
 
       const hitR = 12;
@@ -925,6 +950,30 @@ export class Renderer {
     const filterY = this.narrow ? mapY - 8 : this.height * 0.18;
     this.drawText(`Systems: ${matches.length}/${state.systems.length}`, mapX, filterY, {
       align: "left", color: THEME.colors.textSecondary, size: 11, font: THEME.fonts.mono
+    });
+
+    // Map filters row
+    const filters = [
+      { id: "map-filter-hazard", label: "HAZ", value: state.mapFilters.hazard },
+      { id: "map-filter-economy", label: "ECO", value: state.mapFilters.economy },
+      { id: "map-filter-government", label: "GOV", value: state.mapFilters.government },
+      { id: "map-filter-opportunity", label: "OPP", value: state.mapFilters.opportunity },
+      { id: "map-filter-discovery", label: "DISC", value: state.mapFilters.discovery },
+      { id: "map-filter-service", label: "SVC", value: state.mapFilters.service },
+      { id: "map-filter-clear", label: "CLEAR", value: "" }
+    ];
+
+    const fbW = this.narrow ? 38 : 60;
+    const fbH = this.narrow ? 24 : 28;
+    const fbGap = this.narrow ? 4 : 8;
+    const fbY = this.narrow ? mapY + mapH + 8 : mapY + mapH + 12;
+    const fbStartX = mapX;
+
+    filters.forEach((f, i) => {
+      const fx = fbStartX + i * (fbW + fbGap);
+      const active = f.id === "map-filter-clear" ? false : f.value !== "all";
+      const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
+      this.button(f.id, label, fx, fbY, fbW, fbH);
     });
   }
 
@@ -1011,7 +1060,7 @@ export class Renderer {
       const bh = 36;
       const labels: Array<[string, string]> = [
         ["touch-trade", "MARKET"],
-        ["touch-equipment", "GEAR"],
+        ["touch-equipment", "EQUIPMENT"],
         ["touch-shipyard", "SHIPS"],
         ["touch-missions", "MISSIONS"],
         ["help", "HELP"],
@@ -1032,7 +1081,7 @@ export class Renderer {
       const totalW = bw * 6 + bgap * 5;
       const startX = this.width / 2 - totalW / 2;
       this.button("touch-trade", "MARKET", startX, y, bw, 42);
-      this.button("touch-equipment", "GEAR", startX + (bw + bgap), y, bw, 42);
+      this.button("touch-equipment", "EQUIPMENT", startX + (bw + bgap), y, bw, 42);
       this.button("touch-shipyard", "SHIPS", startX + (bw + bgap) * 2, y, bw, 42);
       this.button("touch-missions", "MISSIONS", startX + (bw + bgap) * 3, y, bw, 42);
       this.button("help", "HELP", startX + (bw + bgap) * 4, y, bw, 42);
@@ -1177,10 +1226,14 @@ export class Renderer {
     });
 
     const profile = getStationProfile(state.systems[state.player.currentSystemId]);
+    const filteredEquipment = state.equipmentCategoryFilter === "all"
+      ? EQUIPMENT
+      : EQUIPMENT.filter((e) => e.category === state.equipmentCategoryFilter);
+
     const pageSize = this.narrow ? 5 : 8;
-    const pageCount = Math.max(1, Math.ceil(EQUIPMENT.length / pageSize));
-    const page = Math.min(state.equipmentPage, pageCount - 1);
-    const visibleEquipment = EQUIPMENT.slice(page * pageSize, page * pageSize + pageSize);
+    const pageCount = Math.max(1, Math.ceil(filteredEquipment.length / pageSize));
+    const page = Math.max(0, Math.min(state.equipmentPage, pageCount - 1));
+    const visibleEquipment = filteredEquipment.slice(page * pageSize, page * pageSize + pageSize);
 
     const left = this.narrow ? panelX + 12 : this.width * 0.14;
     const top = titleY + (this.narrow ? 36 : this.height * 0.26 - titleY);
@@ -1204,7 +1257,7 @@ export class Renderer {
       }
 
       this.buttonZones.push({ id: `equip-row-${index}`, label: item.name, x: left, y: rowY, width: rowW, height: rowH });
-      this.drawText(`${index + 1}`, left, y, { color: THEME.colors.textDim, font: THEME.fonts.mono, size: 12 });
+      this.drawText(`${index + 1 + page * pageSize}`, left, y, { color: THEME.colors.textDim, font: THEME.fonts.mono, size: 12 });
       const nameSize = this.narrow ? 12 : 14;
       this.drawText(item.name.toUpperCase(), left + 22, y, {
         color: installed ? THEME.colors.accentTeal : THEME.colors.textPrimary, font: THEME.fonts.accent, size: nameSize
@@ -1231,8 +1284,11 @@ export class Renderer {
       color: THEME.colors.accentTeal, size: 11, font: THEME.fonts.mono
     });
 
-    if (page > 0) this.button("equip-page-prev", "PREV", left + (this.narrow ? rowW - 168 : 240), pageY - 18, 80, 32);
-    if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + (this.narrow ? rowW - 84 : 332), pageY - 18, 80, 32);
+    const catLabel = `CAT: ${state.equipmentCategoryFilter.toUpperCase()}`;
+    this.button("equip-category-cycle", catLabel, left + (this.narrow ? rowW - 252 : 440), pageY - 18, 100, 32);
+
+    if (page > 0) this.button("equip-page-prev", "PREV", left + (this.narrow ? rowW - 148 : 548), pageY - 18, 70, 32);
+    if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + (this.narrow ? rowW - 74 : 626), pageY - 18, 70, 32);
 
     const repairY = pageY + (this.narrow ? 56 : 44);
     const missing = state.player.maxHull - state.player.hull;

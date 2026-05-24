@@ -4,14 +4,29 @@ import { getPlayerShipStats } from "../src/game/Ships";
 import type { PlayerState } from "../src/game/types";
 
 describe("Equipment", () => {
-  it("defines unique priced equipment with real descriptions", () => {
+  it("defines unique priced equipment with real descriptions for all 15 categories", () => {
     const ids = new Set(EQUIPMENT.map((item) => item.id));
     expect(ids.size).toBe(EQUIPMENT.length);
-    expect(EQUIPMENT.length).toBeGreaterThanOrEqual(13);
+    expect(EQUIPMENT.length).toBeGreaterThanOrEqual(75);
+
+    const categories = new Set(EQUIPMENT.map(item => item.category));
+    expect(categories.size).toBe(15);
+
     for (const item of EQUIPMENT) {
       expect(item.price).toBeGreaterThan(0);
       expect(item.description.trim()).not.toBe("");
+      expect(item.effect).toBeDefined();
     }
+  });
+
+  it("ensures each category has at least 5 items", () => {
+    const categories: Record<string, number> = {};
+    EQUIPMENT.forEach(e => {
+      categories[e.category] = (categories[e.category] || 0) + 1;
+    });
+    Object.values(categories).forEach(count => {
+      expect(count).toBeGreaterThanOrEqual(5);
+    });
   });
 
   it("prevents equipment purchase without enough BAL", () => {
@@ -22,7 +37,7 @@ describe("Equipment", () => {
   });
 
   it("cargo expansion increases capacity", () => {
-    const result = buyEquipment(makePlayer({ balance: 1000 }), "cargoExpansion");
+    const result = buyEquipment(makePlayer({ balance: 1000, equipment: { ...DEFAULT_EQUIPMENT, cargoExpansion: false } }), "cargoExpansion");
 
     expect(result.ok).toBe(true);
     expect(result.player.cargoCapacity).toBe(35);
@@ -52,7 +67,8 @@ describe("Equipment", () => {
         thriftBurnRegulator: true,
         foldedHoldGrid: true,
         quietShieldMatrix: true,
-        fieldPatchDrones: true
+        fieldPatchDrones: true,
+        alloyPlating: true
       }
     });
     const stats = getPlayerShipStats(player);
@@ -61,6 +77,7 @@ describe("Equipment", () => {
     expect(stats.fuelUseModifier).toBeLessThan(1);
     expect(stats.cargoCapacity).toBe(30);
     expect(stats.maxShield).toBe(120);
+    expect(stats.maxHull).toBe(150); // 100 + 50 from alloyPlating
     expect(stats.repairCostModifier).toBeLessThan(1);
   });
 });

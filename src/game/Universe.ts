@@ -214,31 +214,6 @@ export function canJump(from: StarSystem, to: StarSystem, fuel: number, player?:
   return distance <= maxRange && fuel >= getFuelRequired(from, to, player);
 }
 
-export function getSystemAtMapPoint(
-  systems: StarSystem[],
-  clickX: number,
-  clickY: number,
-  mapX: number,
-  mapY: number,
-  mapW: number,
-  mapH: number,
-  hitRadius: number = 8
-): StarSystem | null {
-  let closest: StarSystem | null = null;
-  let minDist = hitRadius;
-
-  for (const system of systems) {
-    const sx = mapX + (system.x / 96) * mapW;
-    const sy = mapY + (system.y / 72) * mapH;
-    const dist = Math.hypot(clickX - sx, clickY - sy);
-    if (dist < minDist) {
-      minDist = dist;
-      closest = system;
-    }
-  }
-
-  return closest;
-}
 
 export function generateMarket(system: StarSystem): MarketItem[] {
   return COMMODITIES.map((commodity) => {

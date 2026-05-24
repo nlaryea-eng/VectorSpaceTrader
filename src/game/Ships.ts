@@ -152,25 +152,53 @@ export function getPlayerShipStats(player: Pick<PlayerState, "shipId" | "equipme
   return getStatsForShip(normalizeShipId(player.shipId), player.equipment);
 }
 
-export function getStatsForShip(shipId: PlayerShipId, equipment: EquipmentState): PlayerShipStats {
+import { EQUIPMENT } from "./Equipment";
+
+export function getStatsForShip(shipId: PlayerShipId, equipmentState: EquipmentState): PlayerShipStats {
   const ship = getPlayerShip(shipId);
-  const cargoBonus = (equipment.cargoExpansion ? 15 : 0) + (equipment.foldedHoldGrid ? 10 : 0);
-  const shieldBonus = (equipment.shieldBooster ? 30 : 0) + (equipment.quietShieldMatrix ? 20 : 0);
-  const fuelCapacityBonus = equipment.arcSpoolDrive ? 0.7 : 0;
-  const rangeBonus = (equipment.arcSpoolDrive ? 3.2 : 0) + (equipment.routeAbacus ? 1.4 : 0);
-  const fuelUseModifier = ship.fuelUseModifier * (equipment.thriftBurnRegulator ? 0.86 : 1);
+
+  let cargoBonus = 0;
+  let shieldBonus = 0;
+  let shieldRechargeBonus = 0;
+  let fuelCapacityBonus = 0;
+  let rangeBonus = 0;
+  let fuelUseModifier = ship.fuelUseModifier;
+  let repairCostModifier = 1;
+  let speedModifier = ship.speedModifier;
+  let handlingModifier = ship.handlingModifier;
+  let combatDamageModifier = ship.combatDamageModifier;
+
+  EQUIPMENT.forEach(item => {
+    if (equipmentState[item.id]) {
+      const e = item.effect;
+      if (e.cargo) cargoBonus += e.cargo;
+      if (e.shield) shieldBonus += e.shield;
+      if (e.shieldRecharge) shieldRechargeBonus += e.shieldRecharge;
+      if (e.fuelCapacity) fuelCapacityBonus += e.fuelCapacity;
+      if (e.jumpRange) rangeBonus += e.jumpRange;
+      if (e.fuelUse) fuelUseModifier *= e.fuelUse;
+      if (e.repairCost) repairCostModifier *= e.repairCost;
+      if (e.speed) speedModifier *= e.speed;
+      if (e.handling) handlingModifier *= e.handling;
+      // Note: hull bonus is applied as a fixed amount to maxHull, but ships might have different bases.
+      // We'll treat it as additive to the base hull.
+    }
+  });
+
+  const hullBonus = EQUIPMENT.reduce((acc, item) =>
+    equipmentState[item.id] ? acc + (item.effect.hull ?? 0) : acc, 0);
 
   return {
-    maxHull: ship.maxHull,
+    maxHull: ship.maxHull + hullBonus,
     maxShield: ship.maxShield + shieldBonus,
     cargoCapacity: ship.cargoCapacity + cargoBonus,
     fuelCapacity: Number((ship.fuelCapacity + fuelCapacityBonus).toFixed(1)),
     maxJumpRange: Number((BASE_JUMP_RANGE * ship.jumpRangeModifier + rangeBonus).toFixed(2)),
     fuelUseModifier: Number(fuelUseModifier.toFixed(3)),
-    speedModifier: ship.speedModifier,
-    handlingModifier: ship.handlingModifier,
-    combatDamageModifier: ship.combatDamageModifier,
-    repairCostModifier: equipment.fieldPatchDrones ? 0.75 : 1
+    speedModifier: Number(speedModifier.toFixed(3)),
+    handlingModifier: Number(handlingModifier.toFixed(3)),
+    combatDamageModifier: Number(combatDamageModifier.toFixed(3)),
+    repairCostModifier: Number(repairCostModifier.toFixed(3))
   };
 }
 

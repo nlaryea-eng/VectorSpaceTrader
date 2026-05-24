@@ -125,20 +125,39 @@ export type OpportunityTag =
   | "contractFlow"
   | "salvageTrace";
 
+export type EquipmentCategory =
+  | "ship"
+  | "cargo"
+  | "hull"
+  | "weapon"
+  | "shield"
+  | "fuel"
+  | "range"
+  | "efficiency"
+  | "navigation"
+  | "survey"
+  | "salvage"
+  | "defensive"
+  | "repair"
+  | "mission"
+  | "utility";
+
 export type EquipmentId =
-  | "pulseLaser"
-  | "beamLaser"
-  | "cargoExpansion"
-  | "fuelScoop"
-  | "shieldBooster"
-  | "laneGlassScanner"
-  | "arcSpoolDrive"
-  | "foldedHoldGrid"
-  | "fieldPatchDrones"
-  | "quietShieldMatrix"
-  | "thriftBurnRegulator"
-  | "routeAbacus"
-  | "salvageTongs";
+  | "pulseLaser" | "beamLaser" | "ribbonLance" | "needleEmitter" | "burstRepeater"
+  | "cargoExpansion" | "foldedHoldGrid" | "modularRack" | "densityCompressor" | "vaultSleeve"
+  | "shieldBooster" | "quietShieldMatrix" | "staticFieldGen" | "pulseAbsorber" | "fluxCapacitor"
+  | "fuelScoop" | "thriftBurnRegulator" | "reserveCell" | "flowOptimizer" | "ionFilter"
+  | "laneGlassScanner" | "routeAbacus" | "arcSpoolDrive" | "pathVectorLogic" | "stellarCompass" | "driftStabilizer"
+  | "fieldPatchDrones" | "salvageTongs" | "surveyMast" | "wreckProbe" | "dataSiphon" | "salvageLoom"
+  | "reinforcedRibs" | "alloyPlating" | "impactBuffer" | "stressBraces" | "tensileWeb"
+  | "engineTuning" | "gyroStabilizer" | "reactionThruster" | "inertialDampener" | "vectorNozzle"
+  | "coolingFin" | "heatSink" | "powerRegulator" | "energyCycle" | "circuitBreaker"
+  | "signalJammer" | "decoyLauncher" | "chaffDispenser" | "flareArray" | "stealthCoating"
+  | "autoRepairBot" | "naniteGel" | "weldKit" | "sealantFoam" | "componentSpare"
+  | "contractLog" | "priorityTransceiver" | "secureLockbox" | "diplomaticSeal" | "cargoScanner"
+  | "tradeLedger" | "marketLink" | "pricePredictor" | "routePlotter" | "dockingComputer"
+  | "hazardSensor" | "weatherRadar" | "debrisShield" | "patrolTracker" | "raiderAlarm"
+  | "jumpBooster" | "rangeExtender" | "warpSpool" | "voidSails" | "gravityAnchor";
 
 export type EquipmentState = Record<EquipmentId, boolean>;
 
@@ -154,8 +173,10 @@ export type MissionType =
   | "restricted"
   | "reputation";
 
+import type { MissionId } from "./MissionIds";
+
 export interface Mission {
-  id: string;
+  id: MissionId;
   type: MissionType;
   typeLabel: string;
   title: string;
@@ -173,6 +194,7 @@ export interface Mission {
   riskLabel: string;
   riskLevel: number;
   requiredEquipment?: EquipmentId;
+  requiredCategory?: EquipmentCategory;
   minReputation?: number;
 }
 

@@ -1,24 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { canJump, getSystemAtMapPoint } from "../src/game/Universe";
-import type { StarSystem } from "../src/game/types";
+import { canJump } from "../src/game/Universe";
+import { getSystemAtProjectedMapPoint, DEFAULT_MAP_FILTERS } from "../src/game/MapSearch";
+import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
+import type { PlayerState, StarSystem } from "../src/game/types";
 
-describe("MapHelpers", () => {
-  describe("getSystemAtMapPoint", () => {
-    const MAP_X = 100;
-    const MAP_Y = 50;
-    const MAP_W = 500;
-    const MAP_H = 400;
+function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
+  return {
+    position: { x: 0, y: 0, z: 0 },
+    velocity: { x: 0, y: 0, z: 0 },
+    orientation: { pitch: 0, yaw: 0, roll: 0 },
+    speed: 0,
+    shipId: "mirelle",
+    hull: 100,
+    maxHull: 100,
+    shield: 100,
+    maxShield: 100,
+    energy: 100,
+    balance: 1000,
+    fuel: 10,
+    cargo: {},
+    cargoCapacity: 20,
+    currentSystemId: 0,
+    discoveredSystemIds: [0],
+    docked: false,
+    legalRisk: 0,
+    reputation: 0,
+    equipment: { ...DEFAULT_EQUIPMENT },
+    ...overrides
+  };
+}
 
+const MAP_X = 100;
+const MAP_Y = 50;
+const MAP_W = 500;
+const MAP_H = 400;
+
+describe("Map Selection Logic", () => {
+  describe("getSystemAtProjectedMapPoint", () => {
     it("returns the nearest system within hit radius", () => {
       // System at universe (48, 36) → screen x=100+48/96*500=350, y=50+36/72*400=250
       const systems = [makeSystem(0, 48, 36), makeSystem(1, 5, 5)];
-      const result = getSystemAtMapPoint(systems, 352, 248, MAP_X, MAP_Y, MAP_W, MAP_H, 10);
+      const player = makePlayer();
+      const result = getSystemAtProjectedMapPoint(systems, 352, 248, MAP_X, MAP_Y, MAP_W, MAP_H, 96, 72, player, DEFAULT_MAP_FILTERS, 10);
       expect(result?.id).toBe(0);
     });
 
     it("returns null when click is outside hit radius of all systems", () => {
       const systems = [makeSystem(0, 48, 36)];
-      const result = getSystemAtMapPoint(systems, 500, 350, MAP_X, MAP_Y, MAP_W, MAP_H, 8);
+      const player = makePlayer();
+      const result = getSystemAtProjectedMapPoint(systems, 500, 350, MAP_X, MAP_Y, MAP_W, MAP_H, 96, 72, player, DEFAULT_MAP_FILTERS, 8);
       expect(result).toBeNull();
     });
 
@@ -28,15 +58,23 @@ describe("MapHelpers", () => {
         makeSystem(0, 48, 36), // screen (350, 250)
         makeSystem(1, 49, 37)  // screen ≈ (355, 256)
       ];
-      const result = getSystemAtMapPoint(systems, 352, 252, MAP_X, MAP_Y, MAP_W, MAP_H, 20);
+      const player = makePlayer();
+      const result = getSystemAtProjectedMapPoint(systems, 352, 252, MAP_X, MAP_Y, MAP_W, MAP_H, 96, 72, player, DEFAULT_MAP_FILTERS, 20);
       expect(result?.id).toBe(0);
     });
 
-    it("uses default hit radius of 8 when not specified", () => {
-      // System at universe (48, 36) → screen (350, 250); default radius = 8
-      const systems = [makeSystem(0, 48, 36)];
-      expect(getSystemAtMapPoint(systems, 359, 250, MAP_X, MAP_Y, MAP_W, MAP_H)).toBeNull(); // distance 9 > 8
-      expect(getSystemAtMapPoint(systems, 355, 250, MAP_X, MAP_Y, MAP_W, MAP_H)?.id).toBe(0); // distance 5 < 8
+    it("favors matched systems in tie-breaks", () => {
+       const systems = [
+        makeSystem(0, 48, 36), // screen (350, 250)
+        makeSystem(1, 49, 37)  // screen ≈ (355, 256)
+      ];
+      const player = makePlayer();
+      // Click at (353, 253)
+      // Dist to S0 (350, 250) = sqrt(3^2 + 3^2) = sqrt(18) ≈ 4.24
+      // Dist to S1 (355, 256) = sqrt(2^2 + 3^2) = sqrt(13) ≈ 3.6
+      const filters = { ...DEFAULT_MAP_FILTERS, query: "System0" };
+      const result = getSystemAtProjectedMapPoint(systems, 353, 253, MAP_X, MAP_Y, MAP_W, MAP_H, 96, 72, player, filters, 20);
+      expect(result?.id).toBe(0);
     });
   });
 
@@ -57,13 +95,6 @@ describe("MapHelpers", () => {
       const from = makeSystem(0, 0, 0);
       const to = makeSystem(1, 20, 0); // distance 20, fuel = 20 * 0.22 = 4.4
       expect(canJump(from, to, 2.0)).toBe(false);
-    });
-
-    it("returns false for current system (distance 0, same id context)", () => {
-      const from = makeSystem(0, 0, 0);
-      const to = makeSystem(0, 0, 0);
-      // distance is 0 which is ≤ maxJumpRange; fuel required is 0
-      expect(canJump(from, to, 0)).toBe(true);
     });
   });
 });

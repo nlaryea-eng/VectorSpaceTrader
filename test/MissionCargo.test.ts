@@ -131,9 +131,11 @@ describe("MissionCargo", () => {
   });
 });
 
+import { createMissionId } from "../src/game/MissionIds";
+
 function makeMission(overrides: Partial<Mission> = {}): Mission {
   return {
-    id: "test-mission",
+    id: createMissionId(0, 1n),
     type: "courier",
     typeLabel: "Courier",
     title: "Test Run",

@@ -1,5 +1,4 @@
 import { PLAYER_SHIPS } from "./Ships";
-import { EQUIPMENT } from "./Equipment";
 import { RANK_THRESHOLDS } from "./Rank";
 
 export type HelpSectionId =
@@ -48,7 +47,7 @@ export const HELP_CONTENT: HelpSection[] = [
           "Use W/S to manage throttle and Arrow keys to steer.",
           "Approach the station and press D to dock when in range."
         ],
-        tips: ["Docking is free and refills your oxygen."]
+        tips: ["Docking is free and refills your oxygen systems."]
       },
       {
         heading: "First Trade",
@@ -57,7 +56,7 @@ export const HELP_CONTENT: HelpSection[] = [
           "Buy low-cost commodities like Grain or Minerals.",
           "Jump to a nearby system [M] to find a better sell price."
         ],
-        tips: ["Check the price trend indicators in the market."]
+        tips: ["Check the price trend indicators in the market panel."]
       }
     ]
   },
@@ -75,7 +74,8 @@ export const HELP_CONTENT: HelpSection[] = [
           "SPACE — Fire active laser",
           "D — Dock / Launch command",
           "M — Universe Map toggle"
-        ]
+        ],
+        tips: ["Touch controls are available on mobile-sized screens."]
       },
       {
         heading: "Station & Menu",
@@ -88,7 +88,8 @@ export const HELP_CONTENT: HelpSection[] = [
           "H — Quick Repair (Equipment)",
           "ENTER — Confirm / Jump",
           "ESCAPE — Back / Pause"
-        ]
+        ],
+        tips: ["Use N / P to cycle pages in the Equipment bay."]
       }
     ]
   },
@@ -104,7 +105,8 @@ export const HELP_CONTENT: HelpSection[] = [
           "Complete missions for BAL and Reputation.",
           "Upgrade your ship's equipment to handle longer hauls.",
           "Purchase specialized hulls for specific roles."
-        ]
+        ],
+        tips: ["A balanced approach to trade and contracts is recommended."]
       }
     ]
   },
@@ -121,6 +123,14 @@ export const HELP_CONTENT: HelpSection[] = [
           "Energy levels affect how often you can fire your lasers."
         ],
         tips: ["Fuel scoops can recover fuel while in flight."]
+      },
+      {
+        heading: "Engine Management",
+        body: [
+          "High speeds make turning more difficult due to inertia.",
+          "Tuned thrusters and stabilizers improve handling.",
+          "Use roll [Q/E] to align with system planes."
+        ]
       }
     ]
   },
@@ -134,8 +144,9 @@ export const HELP_CONTENT: HelpSection[] = [
         body: [
           "Maintain a distance of less than 80 units from a station.",
           "Engage the docking corridor with [D].",
-          "Auto-docking will handle the final approach."
-        ]
+          "The auto-docking computer handles the final approach."
+        ],
+        tips: ["Docking is restricted if local security is hostile."]
       }
     ]
   },
@@ -150,6 +161,16 @@ export const HELP_CONTENT: HelpSection[] = [
           "Availability of services depends on the station profile.",
           "Market Hubs offer advanced equipment and shipyards.",
           "Research stations often provide specialized survey gear."
+        ],
+        tips: ["Starter stations always provide basic refuel and repair."]
+      },
+      {
+        heading: "Service Profiles",
+        body: [
+          "Shipwrights: Best selection of hulls and advanced gear.",
+          "Repair Coops: Discounted maintenance and hull work.",
+          "Contract Offices: Higher density of mission offers.",
+          "Unstable Ports: High risk, but high reward salvage work."
         ]
       }
     ]
@@ -167,6 +188,14 @@ export const HELP_CONTENT: HelpSection[] = [
           "Cargo capacity limits how much you can carry."
         ],
         tips: ["Some missions require free cargo space."]
+      },
+      {
+        heading: "Market Insight",
+        body: [
+          "Discovered systems show detailed market data on the map.",
+          "Price trend indicators help identify profit opportunities.",
+          "Equipment like the Trade Ledger stores historical data."
+        ]
       }
     ]
   },
@@ -176,13 +205,31 @@ export const HELP_CONTENT: HelpSection[] = [
     summary: "Contracts and opportunities.",
     pages: [
       {
+        heading: "Contract Generation",
+        body: [
+          "Missions are generated deterministically at each station.",
+          "Every offer is route-validated to ensure it is reachable.",
+          "Accepting a mission snapshots all details and requirements."
+        ],
+        tips: ["If a mission requires 3 jumps and has a 5-jump deadline, you have 2 jumps of slack."]
+      },
+      {
         heading: "Contract Types",
         body: [
-          "Courier: Transport data or small items with no cargo cost.",
+          "Courier: Transport small data wafers with no cargo cost.",
           "Haulage: Move specific quantities of goods for a fee.",
-          "Urgent: Higher rewards but strict jump deadlines."
+          "Urgent: Higher rewards but very strict jump deadlines.",
+          "Relief: High-priority medical supplies to struggling ports."
+        ]
+      },
+      {
+        heading: "Requirements",
+        body: [
+          "Some missions require specialized equipment like Salvage Tongs.",
+          "High-value contracts may be gated by your Reputation.",
+          "Reserved cargo space reduces your normal trading capacity."
         ],
-        tips: ["Only one active mission can be held at a time."]
+        tips: ["Deliver before the deadline or face reputation penalties."]
       }
     ]
   },
@@ -195,9 +242,20 @@ export const HELP_CONTENT: HelpSection[] = [
         heading: "The Universe Map",
         body: [
           "Use [A/D] or Arrow keys to cycle through systems.",
-          "Filtered search helps find specific economies or services.",
-          "Discovered systems show detailed market data."
-        ]
+          "The search field filters systems by name.",
+          "The teal ring indicates your maximum jump range."
+        ],
+        tips: ["Click near a system to select it; nearby/matched targets are prioritized."]
+      },
+      {
+        heading: "Filtering",
+        body: [
+          "HAZ: Filter by hazard type (calm, debris, raider trace).",
+          "ECO: Filter by economy (Agricultural, Industrial, etc).",
+          "DISC: Filter by discovery state (discovered/undiscovered).",
+          "SVC: Filter by available services (Shipyard, Survey, etc)."
+        ],
+        tips: ["Use [CLR] to reset all active filters."]
       }
     ]
   },
@@ -208,15 +266,25 @@ export const HELP_CONTENT: HelpSection[] = [
     pages: [
       {
         heading: "Ship Manifest",
-        body: PLAYER_SHIPS.map(s => `${s.name}: ${s.role}. ${s.description}`)
+        body: PLAYER_SHIPS.map(s => `${s.name}: ${s.role}.`)
+      },
+      {
+        heading: "Performance Stats",
+        body: [
+          "Hull/Shield: Total survival capacity.",
+          "Cargo: Total units available for trade/missions.",
+          "Reach: Maximum jump distance (LY) per jump.",
+          "Efficiency: Fuel consumed per unit of distance."
+        ]
       },
       {
         heading: "Purchasing",
         body: [
           "Ensure you have enough BAL for the new hull.",
           "Cargo must be clear if the new ship has less capacity.",
-          "Equipment is preserved during ship transfers."
-        ]
+          "Installed equipment is preserved during ship transfers."
+        ],
+        tips: ["Fuel is clamped to the new tank size upon transfer."]
       }
     ]
   },
@@ -226,14 +294,29 @@ export const HELP_CONTENT: HelpSection[] = [
     summary: "Hardware upgrades.",
     pages: [
       {
-        heading: "Available Gear",
-        body: EQUIPMENT.map(e => `${e.name}: ${e.description}`)
+        heading: "Equipment Bay",
+        body: [
+          "Upgrades are grouped into categories like Cargo, Shield, or Weapon.",
+          "Advanced and Specialist gear is only found in high-tech hubs.",
+          "Installed items provide passive or active bonuses to your ship."
+        ],
+        tips: ["Use category filters to navigate the expanded catalog."]
+      },
+      {
+        heading: "Categories",
+        body: [
+          "Weapon: Pulse, Beam, and Burst laser arrays.",
+          "Efficiency: Reduces energy drain and improves cooling.",
+          "Navigation: Extends reach and improves route plotting.",
+          "Repair: Automated drones and hull sealant foam."
+        ]
       },
       {
         heading: "Maintenance",
         body: [
-          "Repairs can be handled at any station with Gear services.",
-          "Advanced equipment is only found in high-tech hubs."
+          "Repairs can be handled at any station with Equipment services.",
+          "Drones can reduce the cost of station repairs.",
+          "Some hulls support self-healing nanite gel coatings."
         ]
       }
     ]
@@ -248,8 +331,9 @@ export const HELP_CONTENT: HelpSection[] = [
         body: [
           "Monitor shield and hull integrity during combat.",
           "Lasers consume energy with every discharge.",
-          "Combat encounters are simplified in this public demo."
-        ]
+          "Target lead indicators help align your shots."
+        ],
+        tips: ["Avoid raider trace systems if your shields are low."]
       }
     ]
   },
@@ -262,7 +346,7 @@ export const HELP_CONTENT: HelpSection[] = [
         heading: "Progression",
         body: [
           "Rank is calculated from BAL earned, missions, and combat.",
-          "Current thresholds:"
+          "Higher ranks represent your status in the sector."
         ],
         tips: RANK_THRESHOLDS.map(r => `${r.title}: ${r.score} Score`)
       }
@@ -277,7 +361,17 @@ export const HELP_CONTENT: HelpSection[] = [
         heading: "Influence",
         body: [
           "Successful missions increase your reputation.",
-          "Higher reputation may unlock better contracts in the future."
+          "Higher reputation unlocks Trusted and specialist contracts.",
+          "Failing a mission deadline results in a reputation penalty."
+        ],
+        tips: ["Reputation is sector-wide and persists across stations."]
+      },
+      {
+        heading: "Recovery",
+        body: [
+          "Low reputation can be improved by taking low-value courier jobs.",
+          "Some equipment can boost reputation gains from all work.",
+          "Reputation affects the quality and pay of available offers."
         ]
       }
     ]
@@ -290,8 +384,18 @@ export const HELP_CONTENT: HelpSection[] = [
       {
         heading: "Risk Management",
         body: [
-          "Some activities or cargo may increase your legal risk.",
+          "Some activities or restricted cargo increase your legal risk.",
+          "Restricted contracts pay more but carry higher risk of fines.",
           "High risk attracts unwanted attention from local patrols."
+        ],
+        tips: ["Some equipment like the Signal Jammer can mitigate risk."]
+      },
+      {
+        heading: "Consequences",
+        body: [
+          "Risk increases the likelihood of hostile security encounters.",
+          "Some high-tech ports may deny services to high-risk pilots.",
+          "Risk can be lowered by completing legal, high-reputation work."
         ]
       }
     ]
@@ -305,9 +409,10 @@ export const HELP_CONTENT: HelpSection[] = [
         heading: "Persistence",
         body: [
           "The game saves automatically after major transactions.",
-          "Data is stored in your browser's local storage.",
-          "Clearing browser data will reset your progress."
-        ]
+          "Active mission details are snapshotted into your save file.",
+          "Data is stored in your browser's local storage."
+        ],
+        tips: ["Clearing browser data will reset your progress."]
       }
     ]
   },
@@ -320,7 +425,7 @@ export const HELP_CONTENT: HelpSection[] = [
         heading: "Current Status",
         body: [
           "This is a desktop-first public demo candidate.",
-          "Mobile layout is functional but not yet certified.",
+          "The sector contains 128 deterministic systems.",
           "Systems and content are actively being expanded."
         ]
       }

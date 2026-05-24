@@ -3,6 +3,7 @@ import { DEFAULT_EQUIPMENT } from "./Equipment";
 import { normalizeOnboardingMeta } from "./Onboarding";
 import { createRunStats, type RunStats } from "./RunStats";
 import { applyPlayerShipStats, isPlayerShipId, normalizeShipId } from "./Ships";
+import { isValidMissionId, createMissionId } from "./MissionIds";
 
 export const SAVE_KEY = "vector-space-trader:v1";
 
@@ -230,9 +231,10 @@ function isValidPlayerState(value: unknown): value is PlayerState {
   return isValidCargo(value.cargo as CargoHold);
 }
 
+
 function isValidMission(value: unknown): value is Mission {
   if (!isRecord(value)) return false;
-  if (typeof value.id !== "string" || typeof value.type !== "string") return false;
+  if (typeof value.id !== "string" || !isValidMissionId(value.id) || typeof value.type !== "string") return false;
   if (typeof value.typeLabel !== "string" || typeof value.title !== "string" || typeof value.briefing !== "string") return false;
   if (typeof value.originSystemId !== "number" || value.originSystemId < 0) return false;
   if (typeof value.destinationSystemId !== "number" || value.destinationSystemId < 0) return false;
@@ -248,11 +250,17 @@ function isValidMission(value: unknown): value is Mission {
   return true;
 }
 
+
 function migrateMission(value: Mission): Mission {
   const raw = value as unknown as Record<string, unknown>;
   const type = typeof raw.type === "string" ? raw.type : "courier";
+  const id = typeof raw.id === "string" && isValidMissionId(raw.id)
+    ? (raw.id as Mission["id"])
+    : createMissionId(0, BigInt(Math.floor(Math.random() * 1000000))); // Fallback for old missions
+
   return {
     ...value,
+    id,
     typeLabel: typeof raw.typeLabel === "string" ? raw.typeLabel : type,
     failureReputationChange: typeof raw.failureReputationChange === "number" ? raw.failureReputationChange : -2,
     failureLegalRiskChange: typeof raw.failureLegalRiskChange === "number" ? raw.failureLegalRiskChange : 1,
