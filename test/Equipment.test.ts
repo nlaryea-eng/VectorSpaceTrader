@@ -14,22 +14,22 @@ describe("Equipment", () => {
     }
   });
 
-  it("prevents equipment purchase without enough credits", () => {
-    const result = buyEquipment(makePlayer({ credits: 1 }), "beamLaser");
+  it("prevents equipment purchase without enough BAL", () => {
+    const result = buyEquipment(makePlayer({ balance: 1 }), "beamLaser");
 
     expect(result.ok).toBe(false);
-    expect(result.reason).toBe("Not enough credits");
+    expect(result.reason).toBe("Not enough BAL");
   });
 
   it("cargo expansion increases capacity", () => {
-    const result = buyEquipment(makePlayer({ credits: 1000 }), "cargoExpansion");
+    const result = buyEquipment(makePlayer({ balance: 1000 }), "cargoExpansion");
 
     expect(result.ok).toBe(true);
     expect(result.player.cargoCapacity).toBe(35);
   });
 
   it("beam laser changes laser damage and energy cost", () => {
-    const result = buyEquipment(makePlayer({ credits: 1000 }), "beamLaser");
+    const result = buyEquipment(makePlayer({ balance: 1000 }), "beamLaser");
     const profile = getLaserProfile(result.player);
 
     expect(profile.label).toBe("Beam Laser");
@@ -77,7 +77,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 1000,
+    balance: 1000,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

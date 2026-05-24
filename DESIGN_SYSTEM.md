@@ -1,7 +1,7 @@
-# Neon Horizon Design System (2026 Edition)
+# Vector Space Trader Design System (2026 Edition)
 
 ## Visual Identity
-The visual identity of Neon Horizon combines a deep dark-mode foundation with high-contrast neon accents, glassmorphism, and premium SaaS-level polish.
+The visual identity of Vector Space Trader combines a deep dark-mode foundation with high-contrast vector accents, glassy overlays, and compact cockpit readability.
 
 ### Color Tokens
 - **Background Deep:** `#020408` (Primary background)

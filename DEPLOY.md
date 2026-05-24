@@ -78,15 +78,4 @@ In GitHub, configure **Settings -> Pages -> Build and deployment -> Source** to 
 
 ## Compliance String Search
 
-Run this search to verify no prohibited terms appear in source files:
-
-```bash
-grep -RniE \
-  "elite|cobra|jameson|lave|diso|leesti|zaonce|riedquat|tionisla|coriolis|galcop|thargoid|thargon|frontier" \
-  . \
-  --exclude-dir=node_modules \
-  --exclude-dir=dist \
-  --exclude-dir=.git
-```
-
-Matches inside `COMPLIANCE.md` and `2026-05-24_compliance-review.md` are expected audit records and are not violations. Any match in source code, UI text, or generated content is a violation.
+The CI workflow owns the project compliance scan. Historical audit records are allowed only in the `assessment/` compliance files and workflow command text. Any match in source code, tests, UI text, CSS, package metadata, or generated playable content is a release blocker.

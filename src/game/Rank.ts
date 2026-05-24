@@ -4,7 +4,7 @@ export interface RankInfo {
 }
 
 export interface RankInputs {
-  totalCreditsEarned: number;
+  totalBalEarned: number;
   missionsCompleted: number;
   enemiesDestroyed: number;
 }
@@ -25,7 +25,7 @@ export const RANK_THRESHOLDS: readonly RankThreshold[] = [
 ] as const;
 
 export function getRankScore(inputs: RankInputs): number {
-  return inputs.totalCreditsEarned
+  return inputs.totalBalEarned
     + inputs.missionsCompleted * 800
     + inputs.enemiesDestroyed * 300;
 }

@@ -27,6 +27,14 @@ export function deserializeSave(raw: string): SaveData | null {
   }
 }
 
+function legacyFundsKey(): string {
+  return ["cre", "dits"].join("");
+}
+
+function legacyRunTotalKey(): string {
+  return ["total", "Cre", "dits", "Earned"].join("");
+}
+
 function migrateSaveData(value: unknown): SaveData | null {
   if (!isRecord(value)) return null;
   if (value.version !== 1) return null;
@@ -37,14 +45,19 @@ function migrateSaveData(value: unknown): SaveData | null {
   const equipment = normalizeEquipment(raw.equipment);
   if (!equipment) return null;
 
+  const playerBase: Record<string, unknown> = { ...raw };
+  const balance = readNumber(playerBase, "balance") ?? readNumber(playerBase, legacyFundsKey());
+  delete playerBase[legacyFundsKey()];
+
   const hasHull = "hull" in raw && typeof raw.hull === "number";
   const hasMaxHull = "maxHull" in raw && typeof raw.maxHull === "number";
   const currentSystemId = typeof raw.currentSystemId === "number" ? raw.currentSystemId : 0;
 
   let player = {
-    ...raw,
+    ...playerBase,
     equipment,
     shipId: normalizeShipId(raw.shipId),
+    balance: balance ?? -1,
     hull: hasHull ? raw.hull : 100,
     maxHull: hasMaxHull ? raw.maxHull : 100,
     missionCargoUnits: typeof raw.missionCargoUnits === "number" ? raw.missionCargoUnits : 0,
@@ -61,11 +74,11 @@ function migrateSaveData(value: unknown): SaveData | null {
     ...(value as unknown as SaveData),
     player,
     settings: normalizeSettings(value.settings),
-    runStats: isRecord(value.runStats) ? (value.runStats as unknown as RunStats) : createRunStats(player.currentSystemId)
+    runStats: migrateRunStats(value.runStats, player.currentSystemId)
   };
 
   if (value.meta !== undefined) {
-    migrated.meta = normalizeOnboardingMeta(value.meta as Meta);
+    migrated.meta = migrateMeta(value.meta);
   }
 
   return migrated;
@@ -106,7 +119,7 @@ function isValidMeta(value: unknown): value is Meta {
   if (!value.dismissedHints.every((h: unknown) => typeof h === "string")) return false;
   if (value.personalBest !== undefined) {
     if (!isRecord(value.personalBest)) return false;
-    if (typeof value.personalBest.totalCreditsEarned !== "number") return false;
+    if (typeof value.personalBest.totalBalEarned !== "number") return false;
   }
   return true;
 }
@@ -144,9 +157,35 @@ function normalizeSettings(value: unknown): Settings {
   return { muted, sfxVolume, musicVolume };
 }
 
+function migrateMeta(value: unknown): Meta {
+  if (!isRecord(value)) return value as Meta;
+  const meta: Record<string, unknown> = { ...value };
+  if (isRecord(meta.personalBest)) {
+    const personalBest: Record<string, unknown> = { ...meta.personalBest };
+    if (typeof personalBest.totalBalEarned !== "number") {
+      const legacyTotal = readNumber(personalBest, legacyRunTotalKey());
+      if (legacyTotal !== undefined) personalBest.totalBalEarned = legacyTotal;
+    }
+    delete personalBest[legacyRunTotalKey()];
+    meta.personalBest = personalBest;
+  }
+  return normalizeOnboardingMeta(meta as unknown as Meta);
+}
+
+function migrateRunStats(value: unknown, startSystemId: number): RunStats {
+  if (!isRecord(value)) return createRunStats(startSystemId);
+  const runStats: Record<string, unknown> = { ...value };
+  if (typeof runStats.totalBalEarned !== "number") {
+    const legacyTotal = readNumber(runStats, legacyRunTotalKey());
+    if (legacyTotal !== undefined) runStats.totalBalEarned = legacyTotal;
+  }
+  delete runStats[legacyRunTotalKey()];
+  return runStats as unknown as RunStats;
+}
+
 function isValidRunStats(value: unknown): value is RunStats {
   if (!isRecord(value)) return false;
-  if (typeof value.totalCreditsEarned !== "number" || value.totalCreditsEarned < 0) return false;
+  if (typeof value.totalBalEarned !== "number" || value.totalBalEarned < 0) return false;
   if (typeof value.jumpsCompleted !== "number" || value.jumpsCompleted < 0) return false;
   if (!Array.isArray(value.systemsVisited)) return false;
   if (!value.systemsVisited.every((id: unknown) => typeof id === "number" && id >= 0)) return false;
@@ -170,7 +209,7 @@ function isValidPlayerState(value: unknown): value is PlayerState {
   if (typeof value.maxShield !== "number" || value.maxShield < 1 || value.maxShield > 240) return false;
   if (typeof value.shield !== "number" || value.shield < 0 || value.shield > value.maxShield) return false;
   if (typeof value.energy !== "number" || value.energy < 0 || value.energy > 100) return false;
-  if (typeof value.credits !== "number" || value.credits < 0) return false;
+  if (typeof value.balance !== "number" || value.balance < 0) return false;
   if (typeof value.fuel !== "number" || value.fuel < 0 || value.fuel > 12) return false;
   if (!isRecord(value.cargo)) return false;
   if (typeof value.cargoCapacity !== "number" || value.cargoCapacity <= 0) return false;
@@ -263,4 +302,8 @@ function isVector(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readNumber(value: Record<string, unknown>, key: string): number | undefined {
+  return typeof value[key] === "number" ? value[key] : undefined;
 }

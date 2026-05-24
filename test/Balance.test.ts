@@ -12,7 +12,7 @@ describe("Sprint 4 balance invariants", () => {
   it("starter can refuel and repair at the start station", () => {
     const systems = generateUniverse(492017);
     const profile = getStationProfile(systems[0]);
-    const player = makePlayer({ fuel: 7, hull: 90, credits: 100 });
+    const player = makePlayer({ fuel: 7, hull: 90, balance: 100 });
 
     expect(profile.services.fuel).toBe(true);
     expect(profile.services.repair).toBe(true);
@@ -35,7 +35,7 @@ describe("Sprint 4 balance invariants", () => {
   it("has an affordable early upgrade and a reachable first ship path", () => {
     const systems = generateUniverse(492017);
     const player = makePlayer();
-    const affordableUpgrade = EQUIPMENT.find((item) => item.id !== "pulseLaser" && item.price <= player.credits);
+    const affordableUpgrade = EQUIPMENT.find((item) => item.id !== "pulseLaser" && item.price <= player.balance);
     const firstPaidShip = PLAYER_SHIPS.find((ship) => ship.price > 0)!;
     const missions = generateMissions(492017, systems[0], systems, player, getStationProfile(systems[0]));
     const completableRewards = missions
@@ -44,7 +44,7 @@ describe("Sprint 4 balance invariants", () => {
       .sort((a, b) => b - a);
 
     expect(affordableUpgrade).toBeDefined();
-    expect(player.credits + completableRewards.slice(0, 2).reduce((total, reward) => total + reward, 0)).toBeGreaterThanOrEqual(firstPaidShip.price);
+    expect(player.balance + completableRewards.slice(0, 2).reduce((total, reward) => total + reward, 0)).toBeGreaterThanOrEqual(firstPaidShip.price);
   });
 
   it("does not create same-station buy/sell balance profit", () => {
@@ -52,25 +52,25 @@ describe("Sprint 4 balance invariants", () => {
     const economy = createEconomyState(systems);
     const market = generateDynamicMarket(systems[0], economy);
     const item = market[0];
-    const player = makePlayer({ credits: 1000 });
+    const player = makePlayer({ balance: 1000 });
     const bought = buyCommodity(player, item, 1);
     expect(bought.ok).toBe(true);
     const sold = sellCommodity(bought.player, item, 1);
 
     expect(sold.ok).toBe(true);
-    expect(sold.player.credits).toBe(player.credits);
+    expect(sold.player.balance).toBe(player.balance);
   });
 
   it("keeps balances, cargo, and hull nonnegative through common outcomes", () => {
     const systems = generateUniverse(492017);
-    const player = makePlayer({ credits: 0, cargo: { grain: 1 }, hull: 1 });
+    const player = makePlayer({ balance: 0, cargo: { grain: 1 }, hull: 1 });
     const mission = generateMissions(492017, systems[0], systems, makePlayer(), getStationProfile(systems[0]))[0];
-    const completed = completeMission(makePlayer({ credits: 0, activeMission: mission, activeMissionId: mission.id }), mission);
+    const completed = completeMission(makePlayer({ balance: 0, activeMission: mission, activeMissionId: mission.id }), mission);
 
-    expect(player.credits).toBeGreaterThanOrEqual(0);
+    expect(player.balance).toBeGreaterThanOrEqual(0);
     expect(player.cargo.grain).toBeGreaterThanOrEqual(0);
     expect(player.hull).toBeGreaterThanOrEqual(0);
-    expect(completed.credits).toBeGreaterThanOrEqual(0);
+    expect(completed.balance).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -86,7 +86,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 1000,
+    balance: 1000,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

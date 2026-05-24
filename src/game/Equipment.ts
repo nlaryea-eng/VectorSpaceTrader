@@ -53,8 +53,8 @@ export function buyEquipment(player: PlayerState, equipmentId: EquipmentId, stat
     return { ok: false, reason: `${definition.name} is not stocked here`, player };
   }
 
-  if (player.credits < definition.price) {
-    return { ok: false, reason: "Not enough credits", player };
+  if (player.balance < definition.price) {
+    return { ok: false, reason: "Not enough BAL", player };
   }
 
   const equipment = { ...player.equipment, [equipmentId]: true };
@@ -62,7 +62,7 @@ export function buyEquipment(player: PlayerState, equipmentId: EquipmentId, stat
     ok: true,
     player: applyEquipmentEffects({
       ...player,
-      credits: player.credits - definition.price,
+      balance: player.balance - definition.price,
       equipment
     })
   };

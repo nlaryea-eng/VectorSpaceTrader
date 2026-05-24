@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { getPilotRank, getRankScore, RANK_THRESHOLDS } from "../src/game/Rank";
 import type { RankInputs } from "../src/game/Rank";
 
-function inputs(totalCreditsEarned: number, missionsCompleted = 0, enemiesDestroyed = 0): RankInputs {
-  return { totalCreditsEarned, missionsCompleted, enemiesDestroyed };
+function inputs(totalBalEarned: number, missionsCompleted = 0, enemiesDestroyed = 0): RankInputs {
+  return { totalBalEarned, missionsCompleted, enemiesDestroyed };
 }
 
 describe("RANK_THRESHOLDS", () => {
@@ -30,7 +30,7 @@ describe("RANK_THRESHOLDS", () => {
 });
 
 describe("getRankScore", () => {
-  it("returns only credits when no missions or kills", () => {
+  it("returns only BAL score when no missions or kills", () => {
     expect(getRankScore(inputs(1000))).toBe(1000);
   });
 
@@ -102,7 +102,7 @@ describe("getPilotRank", () => {
   });
 
   it("typical 10-minute run reaches at least tier 2", () => {
-    // ~3000 credits earned + 2 missions in a short demo run
+    // About 3000 BAL earned plus 2 missions in a short demo run.
     const rank = getPilotRank(inputs(3000, 2, 1));
     expect(rank.tier).toBeGreaterThanOrEqual(2);
   });

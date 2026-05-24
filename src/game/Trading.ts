@@ -16,8 +16,8 @@ export function repairHull(player: PlayerState, stationModifier = 1): TradeResul
   const missing = player.maxHull - player.hull;
   if (missing <= 0) return fail("Hull is already at full integrity", player);
   const costPerHull = Math.max(1, REPAIR_COST_PER_HULL * getPlayerShipStats(player).repairCostModifier * stationModifier);
-  const affordable = Math.floor(player.credits / costPerHull);
-  if (affordable <= 0) return fail("Not enough credits for hull repair", player);
+  const affordable = Math.floor(player.balance / costPerHull);
+  if (affordable <= 0) return fail("Not enough BAL for hull repair", player);
   const repairAmount = Math.min(missing, affordable);
   const cost = Math.ceil(repairAmount * costPerHull);
   return {
@@ -25,7 +25,7 @@ export function repairHull(player: PlayerState, stationModifier = 1): TradeResul
     player: {
       ...player,
       hull: Math.min(player.maxHull, player.hull + repairAmount),
-      credits: player.credits - cost
+      balance: player.balance - cost
     }
   };
 }
@@ -55,8 +55,8 @@ export function getAvailableCargoCapacity(player: PlayerState): number {
 
 export function getBulkBuyQuantity(player: PlayerState, item: MarketItem): number {
   const free = Math.max(0, getAvailableCargoCapacity(player));
-  const byCredits = item.price > 0 ? Math.floor(player.credits / item.price) : item.quantity;
-  return Math.min(free, byCredits, item.quantity);
+  const byBalance = item.price > 0 ? Math.floor(player.balance / item.price) : item.quantity;
+  return Math.min(free, byBalance, item.quantity);
 }
 
 export function getBulkSellQuantity(player: PlayerState, item: MarketItem): number {
@@ -79,13 +79,13 @@ export function buyCommodity(player: PlayerState, item: MarketItem, quantity: nu
   if (getTotalOccupiedCargo(player) + amount > player.cargoCapacity) return fail("Cargo hold is full", player);
 
   const totalCost = item.price * amount;
-  if (player.credits < totalCost) return fail("Not enough credits", player);
+  if (player.balance < totalCost) return fail("Not enough BAL", player);
 
   return {
     ok: true,
     player: {
       ...player,
-      credits: player.credits - totalCost,
+      balance: player.balance - totalCost,
       cargo: {
         ...player.cargo,
         [item.id]: (player.cargo[item.id] ?? 0) + amount
@@ -113,7 +113,7 @@ export function sellCommodity(player: PlayerState, item: MarketItem, quantity: n
     ok: true,
     player: {
       ...player,
-      credits: player.credits + item.price * amount,
+      balance: player.balance + item.price * amount,
       cargo: nextCargo
     }
   };
@@ -126,13 +126,13 @@ export function buyFuel(player: PlayerState, units: number): TradeResult {
   if (player.fuel + amount > fuelCapacity) return fail("Fuel tank is full", player);
 
   const cost = Math.ceil(amount * TRADE_CONSTANTS.fuelPrice);
-  if (player.credits < cost) return fail("Not enough credits", player);
+  if (player.balance < cost) return fail("Not enough BAL", player);
 
   return {
     ok: true,
     player: {
       ...player,
-      credits: player.credits - cost,
+      balance: player.balance - cost,
       fuel: Number((player.fuel + amount).toFixed(1))
     }
   };

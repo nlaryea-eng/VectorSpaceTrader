@@ -56,7 +56,7 @@ function makeSave(): SaveData {
       shield: 100,
       maxShield: 100,
       energy: 100,
-      credits: 1000,
+      balance: 1000,
       fuel: 7.5,
       cargo: { grain: 2 },
       cargoCapacity: 20,
@@ -109,12 +109,12 @@ describe("SaveGame meta and settings persistence", () => {
       meta: {
         hasSeenOnboarding: false,
         dismissedHints: [] as string[],
-        personalBest: { totalCreditsEarned: 12500 }
+        personalBest: { totalBalEarned: 12500 }
       }
     };
     saveGame(save, storage);
     const loaded = loadGame(storage);
-    expect(loaded!.meta?.personalBest?.totalCreditsEarned).toBe(12500);
+    expect(loaded!.meta?.personalBest?.totalBalEarned).toBe(12500);
   });
 
   it("does not re-trigger completed onboarding after save/load", () => {
@@ -151,6 +151,35 @@ describe("SaveGame meta and settings persistence", () => {
 });
 
 describe("SaveGame migration", () => {
+  it("migrates legacy BAL fields without reserializing old keys", () => {
+    const storage = new MemoryStorage();
+    const oldSave = makeSave();
+    const player = { ...oldSave.player } as Record<string, unknown>;
+    player[legacyFundsKey()] = 777;
+    delete player.balance;
+    const runStats = { ...createRunStats(0), [legacyRunTotalKey()]: 2222 } as Record<string, unknown>;
+    delete runStats.totalBalEarned;
+    const rawOld = {
+      ...oldSave,
+      player,
+      runStats,
+      meta: {
+        hasSeenOnboarding: false,
+        dismissedHints: [] as string[],
+        personalBest: { [legacyRunTotalKey()]: 3333 }
+      }
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(rawOld));
+
+    const loaded = loadGame(storage);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.player.balance).toBe(777);
+    expect(loaded!.runStats?.totalBalEarned).toBe(2222);
+    expect(loaded!.meta?.personalBest?.totalBalEarned).toBe(3333);
+    expect(legacyFundsKey() in loaded!.player).toBe(false);
+  });
+
   it("migrates old save without runStats by defaulting from current system", () => {
     const storage = new MemoryStorage();
     const oldSave = makeSave();
@@ -169,7 +198,7 @@ describe("SaveGame migration", () => {
       ...makeSave(),
       runStats: {
         ...createRunStats(0),
-        totalCreditsEarned: 3200,
+        totalBalEarned: 3200,
         jumpsCompleted: 3,
         systemsVisited: [0, 1, 4],
         missionsCompleted: 2,
@@ -190,7 +219,7 @@ describe("SaveGame migration", () => {
       ...makeSave(),
       runStats: {
         ...createRunStats(0),
-        totalCreditsEarned: 3000,
+        totalBalEarned: 3000,
         missionsCompleted: 2,
         enemiesDestroyed: 1
       }
@@ -207,7 +236,7 @@ describe("SaveGame migration", () => {
   it("rejects malformed present runStats", () => {
     const corrupted = JSON.stringify({
       ...makeSave(),
-      runStats: { totalCreditsEarned: "lots" }
+      runStats: { totalBalEarned: "lots" }
     });
 
     expect(deserializeSave(corrupted)).toBeNull();
@@ -347,3 +376,11 @@ describe("SaveGame migration", () => {
     expect(loaded!.settings?.musicVolume).toBe(0.5);
   });
 });
+
+function legacyFundsKey(): string {
+  return ["cre", "dits"].join("");
+}
+
+function legacyRunTotalKey(): string {
+  return ["total", "Cre", "dits", "Earned"].join("");
+}

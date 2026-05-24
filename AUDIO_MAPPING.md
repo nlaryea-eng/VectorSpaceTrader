@@ -1,4 +1,4 @@
-# Neon Horizon Audio Mapping
+# Vector Space Trader Audio Mapping
 
 ## Audio Identity
 A polished cinematic synthwave soundscape. Atmospheric, immersive, and low-fatigue.

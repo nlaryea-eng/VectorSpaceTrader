@@ -20,7 +20,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 50,
     maxShield: 100,
     energy: 100,
-    credits: 500,
+    balance: 500,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,
@@ -105,48 +105,48 @@ describe("applyDamage (enemy ship)", () => {
 // ── repair ───────────────────────────────────────────────────────────────────
 
 describe("repairHull", () => {
-  it("restores hull when credits are sufficient", () => {
-    const player = makePlayer({ hull: 60, maxHull: 100, credits: 500 });
+  it("restores hull when BAL is sufficient", () => {
+    const player = makePlayer({ hull: 60, maxHull: 100, balance: 500 });
     const result = repairHull(player);
     expect(result.ok).toBe(true);
     expect(result.player.hull).toBe(100);
-    expect(result.player.credits).toBe(500 - 40 * REPAIR_COST_PER_HULL);
+    expect(result.player.balance).toBe(500 - 40 * REPAIR_COST_PER_HULL);
   });
 
-  it("partially repairs when credits are limited", () => {
-    const creditsFor10 = 10 * REPAIR_COST_PER_HULL;
-    const player = makePlayer({ hull: 60, maxHull: 100, credits: creditsFor10 });
+  it("partially repairs when BAL is limited", () => {
+    const balanceFor10 = 10 * REPAIR_COST_PER_HULL;
+    const player = makePlayer({ hull: 60, maxHull: 100, balance: balanceFor10 });
     const result = repairHull(player);
     expect(result.ok).toBe(true);
     expect(result.player.hull).toBe(70);
-    expect(result.player.credits).toBe(0);
+    expect(result.player.balance).toBe(0);
   });
 
-  it("fails when credits are zero", () => {
-    const player = makePlayer({ hull: 50, maxHull: 100, credits: 0 });
+  it("fails when BAL is zero", () => {
+    const player = makePlayer({ hull: 50, maxHull: 100, balance: 0 });
     const result = repairHull(player);
     expect(result.ok).toBe(false);
   });
 
   it("fails when hull is already full", () => {
-    const player = makePlayer({ hull: 100, maxHull: 100, credits: 1000 });
+    const player = makePlayer({ hull: 100, maxHull: 100, balance: 1000 });
     const result = repairHull(player);
     expect(result.ok).toBe(false);
   });
 
   it("never exceeds maxHull", () => {
-    const player = makePlayer({ hull: 99, maxHull: 100, credits: 10000 });
+    const player = makePlayer({ hull: 99, maxHull: 100, balance: 10000 });
     const result = repairHull(player);
     expect(result.player.hull).toBeLessThanOrEqual(player.maxHull);
   });
 
   it("costs correct amount per missing hull point", () => {
     const missing = 20;
-    const player = makePlayer({ hull: 100 - missing, maxHull: 100, credits: 1000 });
+    const player = makePlayer({ hull: 100 - missing, maxHull: 100, balance: 1000 });
     const costBefore = calcRepairCost(player);
     expect(costBefore).toBe(missing * REPAIR_COST_PER_HULL);
     const result = repairHull(player);
-    expect(result.player.credits).toBe(player.credits - missing * REPAIR_COST_PER_HULL);
+    expect(result.player.balance).toBe(player.balance - missing * REPAIR_COST_PER_HULL);
   });
 });
 
@@ -173,7 +173,7 @@ describe("save/load hull persistence", () => {
       shield: 80,
       maxShield: 100,
       energy: 100,
-      credits: 500,
+      balance: 500,
       fuel: 7.5,
       cargo: {},
       cargoCapacity: 20,

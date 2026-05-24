@@ -195,7 +195,7 @@ export function buyShip(player: PlayerState, shipId: PlayerShipId): TradeResult 
   if (targetId === normalizeShipId(player.shipId)) {
     return { ok: false, reason: "Current ship already active", player };
   }
-  if (player.credits < target.price) {
+  if (player.balance < target.price) {
     return { ok: false, reason: "Not enough BAL for this hull", player };
   }
 
@@ -214,7 +214,7 @@ export function buyShip(player: PlayerState, shipId: PlayerShipId): TradeResult 
   const purchased: PlayerState = {
     ...player,
     shipId: targetId,
-    credits: player.credits - target.price,
+    balance: player.balance - target.price,
     maxHull: nextStats.maxHull,
     hull: Math.min(nextStats.maxHull, Math.round(nextStats.maxHull * hullRatio)),
     maxShield: nextStats.maxShield,

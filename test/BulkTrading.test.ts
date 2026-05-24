@@ -40,37 +40,37 @@ describe("BulkTrading helpers", () => {
 
   describe("getBulkBuyQuantity", () => {
     it("returns quantity limited by market supply", () => {
-      const player = makePlayer({ credits: 10000, cargoCapacity: 20 });
+      const player = makePlayer({ balance: 10000, cargoCapacity: 20 });
       const item = makeItem({ quantity: 5, price: 10 });
       expect(getBulkBuyQuantity(player, item)).toBe(5);
     });
 
-    it("returns quantity limited by available credits", () => {
-      const player = makePlayer({ credits: 30, cargoCapacity: 20 });
+    it("returns quantity limited by available BAL", () => {
+      const player = makePlayer({ balance: 30, cargoCapacity: 20 });
       const item = makeItem({ quantity: 20, price: 10 });
       expect(getBulkBuyQuantity(player, item)).toBe(3);
     });
 
     it("returns quantity limited by free cargo space", () => {
-      const player = makePlayer({ credits: 10000, cargo: { grain: 17 }, cargoCapacity: 20 });
+      const player = makePlayer({ balance: 10000, cargo: { grain: 17 }, cargoCapacity: 20 });
       const item = makeItem({ quantity: 20, price: 10 });
       expect(getBulkBuyQuantity(player, item)).toBe(3);
     });
 
     it("accounts for mission cargo when calculating free space", () => {
-      const player = makePlayer({ credits: 10000, missionCargoUnits: 5, cargoCapacity: 20 });
+      const player = makePlayer({ balance: 10000, missionCargoUnits: 5, cargoCapacity: 20 });
       const item = makeItem({ quantity: 20, price: 10 });
       expect(getBulkBuyQuantity(player, item)).toBe(15);
     });
 
     it("returns zero when hold is full", () => {
-      const player = makePlayer({ credits: 10000, cargo: { grain: 20 }, cargoCapacity: 20 });
+      const player = makePlayer({ balance: 10000, cargo: { grain: 20 }, cargoCapacity: 20 });
       const item = makeItem({ quantity: 10, price: 10 });
       expect(getBulkBuyQuantity(player, item)).toBe(0);
     });
 
-    it("returns zero when credits are insufficient for one unit", () => {
-      const player = makePlayer({ credits: 5, cargoCapacity: 20 });
+    it("returns zero when BAL is insufficient for one unit", () => {
+      const player = makePlayer({ balance: 5, cargoCapacity: 20 });
       const item = makeItem({ quantity: 10, price: 10 });
       expect(getBulkBuyQuantity(player, item)).toBe(0);
     });
@@ -117,7 +117,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 1000,
+    balance: 1000,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

@@ -27,38 +27,71 @@ export class ModernAudio {
   private sfxVolume = 1.0;
   private musicVolume = 0.6;
   private unavailable = false;
+  /** Set true once AudioContext.resume() has resolved on a real user gesture. */
+  private resumed = false;
 
   private ambientMode: AmbientMode = "none";
+  private pendingAmbient: AmbientMode = "none";
   private ambientGain: GainNode | null = null;
   private ambientOscillators: OscillatorNode[] = [];
   private ambientCleanupTimers = new Set<ReturnType<typeof setTimeout>>();
 
   unlock(): void {
-    if (this.unavailable || this.context) return;
-    try {
-      const audioWindow = window as AudioWindow;
-      const AudioContextCtor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
-      if (!AudioContextCtor) {
+    if (this.unavailable) return;
+    if (!this.context) {
+      try {
+        const audioWindow = window as AudioWindow;
+        const AudioContextCtor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+        if (!AudioContextCtor) {
+          this.unavailable = true;
+          return;
+        }
+        this.context = new AudioContextCtor();
+
+        this.masterGain = this.context.createGain();
+        this.masterGain.connect(this.context.destination);
+
+        this.sfxGain = this.context.createGain();
+        this.sfxGain.connect(this.masterGain);
+
+        this.musicGain = this.context.createGain();
+        this.musicGain.connect(this.masterGain);
+
+        this.updateGains();
+      } catch {
         this.unavailable = true;
         return;
       }
-      this.context = new AudioContextCtor();
+    }
 
-      this.masterGain = this.context.createGain();
-      this.masterGain.connect(this.context.destination);
-
-      this.sfxGain = this.context.createGain();
-      this.sfxGain.connect(this.masterGain);
-
-      this.musicGain = this.context.createGain();
-      this.musicGain.connect(this.masterGain);
-
-      this.updateGains();
-      void this.context.resume();
-      } catch {
-      this.unavailable = true;
+    // Always retry resume() — the first attempt may have been before a real
+    // gesture (Chrome/Safari then leave the context "suspended"). When resume
+    // finally succeeds, drain any pending ambient layer the game asked for.
+    if (!this.context || this.resumed) {
+      if (this.resumed && this.pendingAmbient !== this.ambientMode) {
+        this.applyAmbient(this.pendingAmbient);
       }
+      return;
+    }
+
+    const ctx = this.context;
+    const resumePromise = ctx.resume();
+    const onResumed = () => {
+      // Only treat as resumed when state is genuinely "running". Some browsers
+      // resolve resume() while still suspended; in that case we wait.
+      if (ctx.state === "running") {
+        this.resumed = true;
+        if (this.pendingAmbient !== this.ambientMode) {
+          this.applyAmbient(this.pendingAmbient);
+        }
       }
+    };
+    if (resumePromise && typeof resumePromise.then === "function") {
+      resumePromise.then(onResumed).catch(() => { /* ignore: will retry on next gesture */ });
+    } else {
+      onResumed();
+    }
+  }
   private updateGains(): void {
     if (!this.context || !this.masterGain || !this.sfxGain || !this.musicGain) return;
     const now = this.context.currentTime;
@@ -100,9 +133,17 @@ export class ModernAudio {
   }
 
   setAmbient(mode: AmbientMode): void {
+    this.pendingAmbient = mode;
+    // Only start ambient layers once the AudioContext is genuinely running.
+    // Otherwise the browser logs autoplay warnings and the layer plays silent.
+    if (!this.context || !this.resumed) return;
     if (mode === this.ambientMode) return;
-    this.ambientMode = mode;
+    this.applyAmbient(mode);
+  }
+
+  private applyAmbient(mode: AmbientMode): void {
     if (!this.context || !this.musicGain) return;
+    this.ambientMode = mode;
     this.stopAmbientLayer();
     if (mode !== "none") {
       this.startAmbientLayer(mode);
@@ -110,7 +151,9 @@ export class ModernAudio {
   }
 
   play(event: SoundEvent): void {
-    if (this.muted || !this.context || !this.sfxGain) return;
+    // Skip SFX until a real gesture has unlocked the context. Suppresses
+    // Chrome's "The AudioContext was not allowed to start" warnings on launch.
+    if (this.muted || !this.context || !this.sfxGain || !this.resumed) return;
 
     const now = this.context.currentTime;
     const profile = soundProfile(event);
@@ -122,6 +165,11 @@ export class ModernAudio {
     } else {
       this.playTone(now, profile.type, profile.startFrequency, profile.endFrequency, profile.duration, profile.gain);
     }
+  }
+
+  /** Test/diagnostic helper — true once AudioContext.resume() has succeeded. */
+  isResumed(): boolean {
+    return this.resumed;
   }
 
   private playTone(

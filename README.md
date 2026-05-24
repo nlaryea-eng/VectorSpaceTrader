@@ -2,9 +2,9 @@
 
 Vector Space Trader is an original browser-based vector space-trading game.
 
-It is a clean-room project built with TypeScript, Canvas, and procedural Web Audio. It does not use source code, assets, ship designs, universe names, text, audio, or data tables from Elite or any Elite-related source-code archive.
+It is a clean-room project built with TypeScript, Canvas, and procedural Web Audio. It does not use source code, assets, ship designs, universe names, text, audio, or data tables from any protected third-party source-code archive.
 
-It is inspired by the broader tradition of classic 1980s space trading and wireframe combat games, but it is not affiliated with, endorsed by, or derived from Elite, Acornsoft, Bell & Braben, Frontier Developments, or any related rights holder.
+It is inspired by the broader tradition of classic vector space-trading and wireframe combat games, but it is not affiliated with, endorsed by, or derived from any protected third-party franchise or rights holder.
 
 ## Install, Run, Test
 
@@ -13,6 +13,7 @@ npm install
 npm run dev
 npm run build
 npm test
+npm run test:browser
 ```
 
 Open the local URL printed by Vite after `npm run dev`.
@@ -88,11 +89,15 @@ All stations keep fuel and basic repair access, while other services vary by det
 ## Recent Changes
 
 ### Compliance hardening pass:
-- Renamed “Frontier” economy type to “Periphery”.
+- Renamed the trademark-adjacent economy type to “Periphery”.
 - Rotated procedural universe seed.
-- Replaced HUD “CR” label with “BAL”.
+- Replaced the old HUD currency shorthand with “BAL”.
 - Confirmed build and test suite pass.
 - Maintained clean-room implementation with original code, procedural audio, and original wireframe assets.
+
+## Browser Smoke
+
+Run `npm run test:browser` before a public demo pass. It launches the built app locally, verifies the first playable flow, checks the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
 
 ## Known Limitations
 

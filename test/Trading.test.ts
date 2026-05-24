@@ -12,20 +12,20 @@ describe("Trading", () => {
     expect(result.player).toEqual(player);
   });
 
-  it("cannot buy without enough credits", () => {
-    const player = makePlayer({ credits: 2 });
+  it("cannot buy without enough BAL", () => {
+    const player = makePlayer({ balance: 2 });
     const result = buyCommodity(player, grain, 1);
 
     expect(result.ok).toBe(false);
-    expect(result.reason).toBe("Not enough credits");
+    expect(result.reason).toBe("Not enough BAL");
   });
 
-  it("selling increases credits and decreases cargo", () => {
-    const player = makePlayer({ credits: 50, cargo: { grain: 3 } });
+  it("selling increases balance and decreases cargo", () => {
+    const player = makePlayer({ balance: 50, cargo: { grain: 3 } });
     const result = sellCommodity(player, grain, 2);
 
     expect(result.ok).toBe(true);
-    expect(result.player.credits).toBe(64);
+    expect(result.player.balance).toBe(64);
     expect(result.player.cargo.grain).toBe(1);
   });
 });
@@ -52,7 +52,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 100,
+    balance: 100,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

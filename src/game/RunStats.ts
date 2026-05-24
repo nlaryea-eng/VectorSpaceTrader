@@ -1,5 +1,5 @@
 export interface RunStats {
-  totalCreditsEarned: number;
+  totalBalEarned: number;
   jumpsCompleted: number;
   systemsVisited: number[];
   missionsCompleted: number;
@@ -11,7 +11,7 @@ export interface RunStats {
 
 export function createRunStats(startSystemId = 0): RunStats {
   return {
-    totalCreditsEarned: 0,
+    totalBalEarned: 0,
     jumpsCompleted: 0,
     systemsVisited: [startSystemId],
     missionsCompleted: 0,
@@ -22,9 +22,9 @@ export function createRunStats(startSystemId = 0): RunStats {
   };
 }
 
-export function addCreditsEarned(stats: RunStats, amount: number): RunStats {
+export function addBalEarned(stats: RunStats, amount: number): RunStats {
   if (amount <= 0) return stats;
-  return { ...stats, totalCreditsEarned: stats.totalCreditsEarned + amount };
+  return { ...stats, totalBalEarned: stats.totalBalEarned + amount };
 }
 
 export function recordJump(stats: RunStats, systemId: number): RunStats {

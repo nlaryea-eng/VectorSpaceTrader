@@ -200,7 +200,7 @@ export interface PlayerState {
   shield: number;
   maxShield: number;
   energy: number;
-  credits: number;
+  balance: number;
   fuel: number;
   cargo: CargoHold;
   cargoCapacity: number;
@@ -249,7 +249,7 @@ export interface Projectile {
 }
 
 export interface PersonalBest {
-  totalCreditsEarned: number;
+  totalBalEarned: number;
 }
 
 export interface Meta {

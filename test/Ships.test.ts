@@ -21,7 +21,7 @@ describe("Ships", () => {
   });
 
   it("blocks ship purchase without enough BAL", () => {
-    const result = buyShip(makePlayer({ credits: 10 }), "vaskRelay");
+    const result = buyShip(makePlayer({ balance: 10 }), "vaskRelay");
 
     expect(result.ok).toBe(false);
     expect(result.reason).toContain("BAL");
@@ -32,7 +32,7 @@ describe("Ships", () => {
       shipId: "vannicHold",
       cargoCapacity: 52,
       cargo: { grain: 20 },
-      credits: 10000
+      balance: 10000
     });
 
     const result = buyShip(player, "vaskRelay");
@@ -42,7 +42,7 @@ describe("Ships", () => {
   });
 
   it("preserves hull and shield ratios after purchase", () => {
-    const player = makePlayer({ hull: 50, maxHull: 100, shield: 25, maxShield: 100, credits: 10000 });
+    const player = makePlayer({ hull: 50, maxHull: 100, shield: 25, maxShield: 100, balance: 10000 });
     const result = buyShip(player, "brontWard");
 
     expect(result.ok).toBe(true);
@@ -54,7 +54,7 @@ describe("Ships", () => {
 
   it("keeps installed equipment compatible and reflected in stats", () => {
     const player = makePlayer({
-      credits: 10000,
+      balance: 10000,
       equipment: { ...DEFAULT_EQUIPMENT, cargoExpansion: true, shieldBooster: true }
     });
     const result = buyShip(player, "talemRange");
@@ -97,7 +97,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 1000,
+    balance: 1000,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

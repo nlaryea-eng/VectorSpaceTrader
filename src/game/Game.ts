@@ -19,7 +19,7 @@ import { getPilotRank, type RankInfo } from "./Rank";
 import { Renderer } from "./Renderer";
 import type { ExplosionEffect } from "./Renderer";
 import {
-  addCreditsEarned,
+  addBalEarned,
   advanceTimePlayed,
   createRunStats,
   recordEnemyDestroyed,
@@ -36,6 +36,7 @@ import { createInitialTransientState } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance } from "./Universe";
 import type {
+  ButtonZone,
   EconomyState,
   EquipmentId,
   GameMode,
@@ -119,6 +120,20 @@ export class Game {
     cancelAnimationFrame(this.animationFrame);
     this.input.detach();
     this.mapSearchInput.remove();
+  }
+
+  getDebugSnapshot(): { mode: GameMode; selectedSystemId: number; message: string; player: Pick<PlayerState, "docked" | "balance" | "fuel">; buttons: ButtonZone[] } {
+    return {
+      mode: this.mode,
+      selectedSystemId: this.selectedSystemId,
+      message: this.message,
+      player: {
+        docked: this.player.docked,
+        balance: this.player.balance,
+        fuel: this.player.fuel
+      },
+      buttons: this.renderer.getButtons()
+    };
   }
 
   private readonly loop = (time: number): void => {
@@ -357,9 +372,9 @@ export class Game {
   }
 
   private finalizeDeathStats(): void {
-    const currentBest = this.meta.personalBest?.totalCreditsEarned ?? 0;
-    if (this.runStats.totalCreditsEarned > currentBest) {
-      this.meta = { ...this.meta, personalBest: { totalCreditsEarned: this.runStats.totalCreditsEarned } };
+    const currentBest = this.meta.personalBest?.totalBalEarned ?? 0;
+    if (this.runStats.totalBalEarned > currentBest) {
+      this.meta = { ...this.meta, personalBest: { totalBalEarned: this.runStats.totalBalEarned } };
       this.isNewPersonalBest = true;
     }
     this.persist();
@@ -432,14 +447,14 @@ export class Game {
       return;
     }
 
-    const prevCredits = this.player.credits;
+    const prevBalance = this.player.balance;
     const result =
       action.type === "sellCommodity" ? sellCommodity(this.player, item, 1) : buyCommodity(this.player, item, 1);
 
     if (result.ok) {
       if (action.type === "sellCommodity") {
-        const revenue = result.player.credits - prevCredits;
-        if (revenue > 0) this.runStats = addCreditsEarned(this.runStats, revenue);
+        const revenue = result.player.balance - prevBalance;
+        if (revenue > 0) this.runStats = addBalEarned(this.runStats, revenue);
       }
       const quantityDelta = action.type === "sellCommodity" ? 1 : -1;
       this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, quantityDelta);
@@ -457,7 +472,7 @@ export class Game {
   private doBulkBuy(item: MarketItem): void {
     const qty = getBulkBuyQuantity(this.player, item);
     if (qty <= 0) {
-      this.applyTradeResult(false, this.player, "Cannot buy: no credits, cargo space, or market supply");
+      this.applyTradeResult(false, this.player, "Cannot buy: no BAL, cargo space, or market supply");
       return;
     }
     const result = buyCommodity(this.player, item, qty);
@@ -482,11 +497,11 @@ export class Game {
       this.applyTradeResult(false, this.player, `None of ${item.name} in hold`);
       return;
     }
-    const prevCredits = this.player.credits;
+    const prevBalance = this.player.balance;
     const result = sellCommodity(this.player, item, qty);
     if (result.ok) {
-      const revenue = result.player.credits - prevCredits;
-      if (revenue > 0) this.runStats = addCreditsEarned(this.runStats, revenue);
+      const revenue = result.player.balance - prevBalance;
+      if (revenue > 0) this.runStats = addBalEarned(this.runStats, revenue);
       this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, qty);
       this.player = {
         ...result.player,
@@ -748,7 +763,7 @@ export class Game {
     const active = this.player.activeMission;
     if (!active || active.destinationSystemId !== systemId) return;
 
-    this.runStats = addCreditsEarned(this.runStats, active.reward);
+    this.runStats = addBalEarned(this.runStats, active.reward);
     this.runStats = recordMissionCompleted(this.runStats);
     this.player = completeMission(this.player, active);
     this.message = `Mission complete: ${active.title}`;
@@ -815,6 +830,12 @@ export class Game {
       return;
     }
 
+    if (zone.id === "trade-fuel") {
+      const result = buyFuel(this.player, 0.5);
+      this.applyTradeResult(result.ok, result.player, result.reason);
+      return;
+    }
+
     if (zone.id.startsWith("trade-row-")) {
       const index = parseInt(zone.id.slice("trade-row-".length), 10);
       const item = this.market[index];
@@ -825,12 +846,12 @@ export class Game {
         } else if (isBulk) {
           this.doBulkBuy(item);
         } else {
-          const prevCredits = this.player.credits;
+          const prevBalance = this.player.balance;
           const result = click.shiftKey ? sellCommodity(this.player, item, 1) : buyCommodity(this.player, item, 1);
           if (result.ok) {
             if (click.shiftKey) {
-              const revenue = result.player.credits - prevCredits;
-              if (revenue > 0) this.runStats = addCreditsEarned(this.runStats, revenue);
+              const revenue = result.player.balance - prevBalance;
+              if (revenue > 0) this.runStats = addBalEarned(this.runStats, revenue);
             }
             const delta = click.shiftKey ? 1 : -1;
             this.economy = applyTradeToEconomy(this.economy, this.player.currentSystemId, item.id, delta);
@@ -1136,7 +1157,7 @@ export class Game {
       this.market.map((item) => [item.id, getLastKnownPrice({ ...this.economy, priceHistory }, systemId, item.id)])
     );
     const pilotRank: RankInfo = getPilotRank({
-      totalCreditsEarned: this.runStats.totalCreditsEarned,
+      totalBalEarned: this.runStats.totalBalEarned,
       missionsCompleted: this.runStats.missionsCompleted,
       enemiesDestroyed: this.runStats.enemiesDestroyed,
     });
@@ -1188,7 +1209,7 @@ function createInitialPlayer(): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 1000,
+    balance: 1000,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

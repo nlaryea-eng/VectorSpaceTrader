@@ -275,7 +275,7 @@ export function acceptMission(player: PlayerState, mission: Mission): AcceptMiss
 export function completeMission(player: PlayerState, mission: Mission): PlayerState {
   return {
     ...player,
-    credits: player.credits + mission.reward,
+    balance: player.balance + mission.reward,
     reputation: player.reputation + mission.reputationChange,
     legalRisk: Math.max(0, player.legalRisk + mission.legalRiskChange),
     activeMissionId: undefined,

@@ -57,11 +57,11 @@ describe("MissionCargo", () => {
 
   describe("completeMission", () => {
     it("releases mission cargo on completion", () => {
-      const player = makePlayer({ missionCargoUnits: 3, credits: 0 });
+      const player = makePlayer({ missionCargoUnits: 3, balance: 0 });
       const mission = makeMission({ reward: 200, cargoUnitsRequired: 3 });
       const result = completeMission(player, mission);
       expect(result.missionCargoUnits).toBe(0);
-      expect(result.credits).toBe(200);
+      expect(result.balance).toBe(200);
       expect(result.activeMission).toBeUndefined();
     });
 
@@ -166,7 +166,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     shield: 100,
     maxShield: 100,
     energy: 100,
-    credits: 1000,
+    balance: 1000,
     fuel: 7.5,
     cargo: {},
     cargoCapacity: 20,

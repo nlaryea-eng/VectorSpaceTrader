@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  addCreditsEarned,
+  addBalEarned,
   advanceTimePlayed,
   createRunStats,
   formatTimePlayed,
@@ -14,7 +14,7 @@ import {
 describe("createRunStats", () => {
   it("initializes all counters to zero", () => {
     const stats = createRunStats(0);
-    expect(stats.totalCreditsEarned).toBe(0);
+    expect(stats.totalBalEarned).toBe(0);
     expect(stats.jumpsCompleted).toBe(0);
     expect(stats.missionsCompleted).toBe(0);
     expect(stats.missionsFailed).toBe(0);
@@ -33,27 +33,27 @@ describe("createRunStats", () => {
   });
 });
 
-describe("addCreditsEarned", () => {
+describe("addBalEarned", () => {
   it("adds positive revenue", () => {
     const s = createRunStats();
-    expect(addCreditsEarned(s, 500).totalCreditsEarned).toBe(500);
+    expect(addBalEarned(s, 500).totalBalEarned).toBe(500);
   });
 
   it("accumulates across multiple calls", () => {
     let s = createRunStats();
-    s = addCreditsEarned(s, 200);
-    s = addCreditsEarned(s, 350);
-    expect(s.totalCreditsEarned).toBe(550);
+    s = addBalEarned(s, 200);
+    s = addBalEarned(s, 350);
+    expect(s.totalBalEarned).toBe(550);
   });
 
   it("ignores zero amounts", () => {
     const s = createRunStats();
-    expect(addCreditsEarned(s, 0).totalCreditsEarned).toBe(0);
+    expect(addBalEarned(s, 0).totalBalEarned).toBe(0);
   });
 
   it("ignores negative amounts", () => {
     const s = createRunStats();
-    expect(addCreditsEarned(s, -100).totalCreditsEarned).toBe(0);
+    expect(addBalEarned(s, -100).totalBalEarned).toBe(0);
   });
 });
 
@@ -168,14 +168,14 @@ describe("formatTimePlayed", () => {
 describe("run reset semantics", () => {
   it("createRunStats produces a fresh slate", () => {
     let s = createRunStats(0);
-    s = addCreditsEarned(s, 9999);
+    s = addBalEarned(s, 9999);
     s = recordJump(s, 1);
     s = recordJump(s, 2);
     s = recordMissionCompleted(s);
     s = recordEnemyDestroyed(s);
 
     const fresh = createRunStats(0);
-    expect(fresh.totalCreditsEarned).toBe(0);
+    expect(fresh.totalBalEarned).toBe(0);
     expect(fresh.jumpsCompleted).toBe(0);
     expect(fresh.missionsCompleted).toBe(0);
     expect(fresh.enemiesDestroyed).toBe(0);

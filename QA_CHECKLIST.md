@@ -68,6 +68,7 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 
 ## Browser Smoke Tests
 
+- [ ] `npm run test:browser` passed locally with Chrome/Chromium.
 - [ ] Chrome desktop: launch, flight, dock, market, map, jump, combat, reload save.
 - [ ] Firefox desktop: launch, flight, dock, market, map, jump, combat, reload save.
 - [ ] Safari desktop: launch, flight, dock, market, map, jump, combat, reload save.
@@ -81,4 +82,5 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] `npm run type-check` passed.
 - [ ] `npm test` passed.
 - [ ] `npm run build` passed.
+- [ ] `npm run test:browser` passed.
 - [ ] Any manual QA failures are documented with reproduction steps before release.

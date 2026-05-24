@@ -34,10 +34,10 @@ export function normalizeOnboardingMeta<T extends HasOnboarding>(state: T): T {
 }
 
 export const HINT_TEXT: Readonly<Record<HintId, string>> = {
-  flight:   "Fly with arrow keys or W/S. Press Space to fire. Approach the station and press D to dock.  [Enter to dismiss]",
-  docking:  "Docked: T for market, E for gear, Y for shipyard, R for missions, D to launch again.  [Enter to dismiss]",
-  trade:    "Click a commodity to buy. Shift+click to sell. Buy low in one system, sell high in another.  [Enter to dismiss]",
-  map:      "Press M for the map. Search by name or cycle filters, then select a system and press Enter.  [Enter to dismiss]",
-  missions: "Accept a contract and jump to the destination to complete it for a reward.  [Enter to dismiss]",
-  shipyard: "Compare hulls at shipyard stations. Clear cargo overflow before buying a smaller ship.  [Enter to dismiss]",
+  flight:   "Fly with arrows or W/S. Space fires. Approach the station and press D to dock.  [Enter to dismiss]",
+  docking:  "Docked: T market, E gear, Y ships, R missions, D launch.  [Enter to dismiss]",
+  trade:    "Tap a row to buy. Shift+click sells. Press F to buy fuel here.  [Enter to dismiss]",
+  map:      "A/D or arrows pick a system. Enter jumps. Esc closes the map.  [Enter to dismiss]",
+  missions: "Accept a contract here, then jump to its destination to complete it.  [Enter to dismiss]",
+  shipyard: "1-6 picks a hull. Enter buys. Clear cargo overflow first if needed.  [Enter to dismiss]",
 };
