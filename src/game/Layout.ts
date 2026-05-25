@@ -32,6 +32,8 @@ export interface ResponsiveUiProfile {
   compactHud: boolean;
   mapFiltersAsSheet: boolean;
   fontScale: number;
+  /** False when a fine pointer (mouse/trackpad) is detected — suppresses on-screen touch overlays. */
+  showTouchControls: boolean;
 }
 
 export const BREAKPOINTS = {
@@ -147,7 +149,8 @@ export function getResponsiveUiProfile(size: ViewportSize, fontScalePreference =
     minTouchTarget: compact ? 44 : 32,
     compactHud: compact,
     mapFiltersAsSheet: compact,
-    fontScale
+    fontScale,
+    showTouchControls: shouldShowTouchControls()
   };
 }
 
@@ -162,6 +165,27 @@ export function getMapFilterBounds(size: ViewportSize): PanelBounds {
 export function respectsReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Returns false when the primary pointer device is fine (mouse or trackpad)
+ * and the browser reports no touch capability, meaning on-screen touch
+ * controls are not needed and should be hidden.
+ *
+ * Decision priority:
+ *  1. `navigator.maxTouchPoints > 0` → always show (device has a touch screen)
+ *  2. `(pointer: fine)` media query → hide when only a fine pointer is present
+ *  3. Falls back to true (show controls) when neither API is available
+ */
+export function shouldShowTouchControls(): boolean {
+  if (typeof window === "undefined") return true;
+  // Any touch capability: prefer showing controls (covers mobile and hybrid devices).
+  if (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) return true;
+  // No touch points — hide when primary pointer is fine (desktop mouse/trackpad).
+  if (typeof window.matchMedia === "function") {
+    return !window.matchMedia("(pointer: fine)").matches;
+  }
+  return true; // safe default: show controls when detection is unavailable
 }
 
 export function assertLayerOrder(layers: Record<string, number> = UI_LAYERS): boolean {

@@ -2,7 +2,7 @@ import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
 import { getPanelChromeLayout, getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
-import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
+import { isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
 import { getLegalRiskLabel, getReputationLabel } from "./Reputation";
@@ -18,6 +18,7 @@ import {
   classifyEquipment,
   formatDeltaBadge,
   getEquipmentAffordability,
+  getEquipmentDisplayOrder,
   getMissionCardState,
   getRouteValidity,
   getShipComparison,
@@ -86,6 +87,10 @@ export interface RenderState {
   helpSearchQuery?: string;
   shipyardPage: number;
   shipyardClassFilter: ShipClassId | "all";
+  /** False when a fine pointer device is detected — suppresses on-screen touch overlay in flight. */
+  showTouchControls: boolean;
+  /** True when the compact map filter sheet is expanded (mobile only). */
+  mapFilterSheetOpen: boolean;
 }
 
 interface ProjectedPoint {
@@ -102,6 +107,7 @@ interface ProjectedPoint {
 const NARROW_BREAKPOINT = 720;
 const SHORT_BREAKPOINT = 640;
 const NARROW_TOUCH_AREA = 176;
+const HELP_HOVER_FILL = "rgba(108, 227, 214, 0.08)";
 
 export function getCompactTouchControlRects(width: number, height: number, docked: boolean): ButtonZone[] {
   const size = width <= 420 ? 36 : 40;
@@ -419,7 +425,7 @@ export class Renderer {
       this.renderCockpitOverlay(state);
       if (this.signalGlassUi) this.renderSignalGlassHud(state);
       else this.renderHud(state);
-      this.renderTouchControls(state);
+      if (state.showTouchControls) this.renderTouchControls(state);
       if (state.playerHitFlash > 0) this.renderHitFlash(state.playerHitFlash);
       if (state.message) {
         if (this.signalGlassUi) this.renderSignalGlassToast(state.message);
@@ -990,8 +996,16 @@ export class Renderer {
     return row.y + row.height / 2 + 4;
   }
 
-  private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string): void {
-    this.drawText(title, chrome.titleRow.x + chrome.titleRow.width / 2, this.rowTextY(chrome.titleRow), {
+  /**
+   * @param titleAvailableWidth Optional override for the horizontal span used to center the title.
+   *   Pass `chrome.titleRow.width - chrome.headerActionRow.width - 8` on compact viewports where
+   *   the action row overlaps the right portion of the title row (e.g. docked screen on mobile).
+   */
+  private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string, titleAvailableWidth?: number): void {
+    const titleCenterX = titleAvailableWidth != null
+      ? chrome.titleRow.x + titleAvailableWidth / 2
+      : chrome.titleRow.x + chrome.titleRow.width / 2;
+    this.drawText(title, titleCenterX, this.rowTextY(chrome.titleRow), {
       align: "center",
       size: this.narrow ? 18 : 24,
       color: THEME.colors.textPrimary,
@@ -1038,23 +1052,65 @@ export class Renderer {
     });
   }
 
-  private drawDisabledControl(label: string, x: number, y: number, width: number, height: number, color = THEME.colors.textDim): void {
-    this.ctx.fillStyle = "rgba(14, 19, 32, 0.42)";
+  /**
+   * Primary CTA button: accent-filled background at 18 % alpha + 1.5 px cyan border.
+   * Used for LAUNCH on the Station Hub so it reads as the dominant action.
+   * Pushes a buttonZone so InputRouter can route clicks normally.
+   */
+  private drawPrimaryButton(id: string, label: string, x: number, y: number, width: number, height: number): void {
+    this.buttonZones.push({ id, label, x, y, width, height });
+
+    this.ctx.save();
+    this.ctx.fillStyle = SIGNAL_GLASS_THEME.colors.accent;
+    this.ctx.globalAlpha = 0.18;
     this.ctx.beginPath();
     this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
     this.ctx.fill();
-    this.ctx.strokeStyle = "rgba(95, 105, 125, 0.45)";
-    this.ctx.lineWidth = 1;
+    this.ctx.restore();
+
+    this.ctx.strokeStyle = SIGNAL_GLASS_THEME.colors.accent;
+    this.ctx.lineWidth = 1.5;
     this.ctx.beginPath();
     this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
     this.ctx.stroke();
-    this.drawText(label, x + width / 2, y + height / 2 + 4, {
+
+    this.drawText(label, x + width / 2, y + height / 2, {
       align: "center",
-      color,
-      size: this.narrow ? 10 : 11,
+      color: SIGNAL_GLASS_THEME.colors.accent,
+      size: Math.min(13, Math.max(9, height * 0.32)),
       font: THEME.fonts.accent
     });
   }
+
+  /**
+   * Draws a small status chip centered on (x, y) — used in equipment rows.
+   * tokenColor is the full-opacity token (e.g. THEME.colors.success).
+   * The chip background is the token at 22 % alpha; text is the token at full opacity.
+   * Returns the pixel width of the chip so callers can adjust layout.
+   */
+  private drawChip(x: number, y: number, label: string, tokenColor: string, rightAligned = false): number {
+    const chipH = this.narrow ? 16 : 18;
+    const padX = 6;
+    const fontSize = this.narrow ? 9 : 10;
+    this.ctx.font = `${fontSize}px ${THEME.fonts.mono}`;
+    const textW = this.ctx.measureText(label).width;
+    const chipW = Math.ceil(textW + padX * 2);
+    const chipX = rightAligned ? x - chipW : x;
+    const chipY = y - chipH / 2;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.22;
+    this.ctx.fillStyle = tokenColor;
+    this.ctx.beginPath();
+    this.ctx.roundRect(chipX, chipY, chipW, chipH, SIGNAL_GLASS_THEME.radius.chip);
+    this.ctx.fill();
+    this.ctx.restore();
+
+    this.drawText(label, chipX + padX, y, { color: tokenColor, size: fontSize, font: THEME.fonts.mono });
+    return chipW;
+  }
+
+
 
   private renderMap(state: RenderState): void {
     const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "map");
@@ -1237,43 +1293,81 @@ export class Renderer {
       this.button("map-jump", "ENGAGE JUMP DRIVE [Enter]", detailX, chrome.footerPrimaryActionRow.y, Math.min(detailW, 280), chrome.footerPrimaryActionRow.height);
     }
 
-    // Map filters row
-    const filters = [
+    // Map filters
+    const filterDefs = [
       { id: "map-filter-hazard", label: "HAZ", value: state.mapFilters.hazard },
       { id: "map-filter-economy", label: "ECO", value: state.mapFilters.economy },
       { id: "map-filter-government", label: "GOV", value: state.mapFilters.government },
       { id: "map-filter-opportunity", label: "OPP", value: state.mapFilters.opportunity },
       { id: "map-filter-discovery", label: "DISC", value: state.mapFilters.discovery },
       { id: "map-filter-service", label: "SVC", value: state.mapFilters.service },
-      { id: "map-filter-systemClass", label: this.narrow ? "CL" : "CLASS", value: state.mapFilters.systemClass },
+      { id: "map-filter-systemClass", label: "CLASS", value: state.mapFilters.systemClass },
       { id: "map-filter-clear", label: "CLEAR", value: "" }
     ];
 
     if (this.narrow) {
-      const cols = 4;
-      const fbGap = 4;
-      const fbH = 26;
-      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (cols - 1)) / cols);
-      const fbStartX = chrome.footerSecondaryActionRow.x;
-      const firstY = chrome.footerSecondaryActionRow.y;
-      filters.forEach((f, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const fx = fbStartX + col * (fbW + fbGap);
-        const fy = firstY + row * (fbH + fbGap);
-        const active = f.id === "map-filter-clear" ? false : f.value !== "all";
-        const baseLabel = f.id === "map-filter-systemClass" ? "CLASS" : f.label;
-        const label = f.id === "map-filter-clear" ? "CLR" : `${baseLabel}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
-        this.button(f.id, label, fx, fy, fbW, fbH);
-      });
+      // R3: compact viewports collapse all filter chips into a single toggle button.
+      // When the sheet is open, float the full 4×2 grid above the toggle row.
+      const activeCount = filterDefs.filter((f) => f.id !== "map-filter-clear" && f.value !== "all").length;
+      const toggleLabel = state.mapFilterSheetOpen
+        ? "DONE"
+        : activeCount > 0 ? `FILTERS [${activeCount}]` : "FILTERS";
+      this.button(
+        "map-filters-toggle",
+        toggleLabel,
+        chrome.footerSecondaryActionRow.x,
+        chrome.footerSecondaryActionRow.y,
+        chrome.footerSecondaryActionRow.width,
+        chrome.footerSecondaryActionRow.height
+      );
+
+      if (state.mapFilterSheetOpen) {
+        const cols = 4;
+        const fbGap = 4;
+        const fbH = 26;
+        const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (cols - 1)) / cols);
+        // Sheet floats above the toggle row.
+        const sheetRows = 2;
+        const sheetInnerH = sheetRows * fbH + (sheetRows - 1) * fbGap;
+        const sheetPadY = 8;
+        const sheetH = sheetInnerH + sheetPadY * 2;
+        const sheetY = chrome.footerSecondaryActionRow.y - sheetH - 4;
+        const sheetX = chrome.footerSecondaryActionRow.x;
+        const sheetW = chrome.footerSecondaryActionRow.width;
+
+        // Sheet background
+        this.ctx.save();
+        this.ctx.fillStyle = THEME.colors.bgDeep;
+        this.ctx.globalAlpha = 0.92;
+        this.ctx.beginPath();
+        this.ctx.roundRect(sheetX, sheetY, sheetW, sheetH, SIGNAL_GLASS_THEME.radius.control);
+        this.ctx.fill();
+        this.ctx.restore();
+        this.ctx.strokeStyle = "rgba(0, 242, 255, 0.18)";
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.roundRect(sheetX, sheetY, sheetW, sheetH, SIGNAL_GLASS_THEME.radius.control);
+        this.ctx.stroke();
+
+        const firstFbY = sheetY + sheetPadY;
+        filterDefs.forEach((f, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const fx = sheetX + col * (fbW + fbGap);
+          const fy = firstFbY + row * (fbH + fbGap);
+          const active = f.id === "map-filter-clear" ? false : f.value !== "all";
+          const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
+          this.button(f.id, label, fx, fy, fbW, fbH);
+        });
+      }
     } else {
       const fbGap = 6;
-      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (filters.length - 1)) / filters.length);
+      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (filterDefs.length - 1)) / filterDefs.length);
       const fbH = Math.min(30, chrome.footerSecondaryActionRow.height);
       const fbY = chrome.footerSecondaryActionRow.y + (chrome.footerSecondaryActionRow.height - fbH) / 2;
       const fbStartX = chrome.footerSecondaryActionRow.x;
 
-      filters.forEach((f, i) => {
+      filterDefs.forEach((f, i) => {
         const fx = fbStartX + i * (fbW + fbGap);
         const active = f.id === "map-filter-clear" ? false : f.value !== "all";
         const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
@@ -1305,28 +1399,58 @@ export class Renderer {
     const system = state.systems[state.player.currentSystemId];
     const profile = getStationProfile(system);
     const hullFraction = state.player.hull / state.player.maxHull;
-    const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
     const repLabel = getReputationLabel(state.player.reputation);
     const riskLabel = getLegalRiskLabel(state.player.legalRisk);
-    const riskColor = state.player.legalRisk >= 5 ? THEME.colors.danger : state.player.legalRisk >= 2 ? THEME.colors.warning : THEME.colors.success;
 
-    this.drawPanelHeader(chrome, `${system.name.toUpperCase()} STATION`, profile.label.toUpperCase(), system.stationHint.toUpperCase());
+    // On compact viewports the HELP button sits in the right portion of titleRow —
+    // constrain the title to the available left region to prevent overlap.
+    const dockedTitleW = this.narrow
+      ? chrome.titleRow.width - chrome.headerActionRow.width - 8
+      : undefined;
+    this.drawPanelHeader(chrome, `${system.name.toUpperCase()} STATION`, profile.label.toUpperCase(), system.stationHint.toUpperCase(), dockedTitleW);
     this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
     const infoY = chrome.contentBounds.y + (this.narrow ? 18 : 20);
     const infoSize = this.narrow ? 11 : 14;
     const infoGap = this.narrow ? 22 : 32;
-    this.drawText(`PILOT RANK: ${state.pilotRank.title}`, this.width / 2, infoY, {
-      align: "center", color: THEME.colors.accentPink, size: infoSize, font: THEME.fonts.mono
-    });
-    this.drawText(
-      `HULL: ${Math.round(state.player.hull)}/${state.player.maxHull}   BAL: ${Math.round(state.player.balance)}`,
-      this.width / 2, infoY + infoGap, { align: "center", color: hullColor, size: infoSize, font: THEME.fonts.mono }
-    );
-    this.drawText(
-      `REPUTATION: ${repLabel}   STATUS: ${riskLabel}`,
-      this.width / 2, infoY + infoGap * 2, { align: "center", color: riskColor, size: infoSize - 2, font: THEME.fonts.mono }
-    );
+
+    // Value colors — only deviate from muted when off-nominal.
+    const muted = THEME.colors.textSecondary;
+    const hullValueColor = hullFraction < 0.3 ? THEME.colors.danger
+      : hullFraction < 0.6 ? THEME.colors.warning
+      : muted;
+    const repValueColor = state.player.reputation < 0 ? THEME.colors.warning : muted;
+    const riskValueColor = state.player.legalRisk >= 5 ? THEME.colors.danger
+      : state.player.legalRisk >= 2 ? THEME.colors.warning
+      : muted;
+
+    // Helper: draw a centered multi-segment line (label + value each with their own color).
+    const drawInfoLine = (y: number, fontSize: number, segments: Array<{ text: string; color: string }>) => {
+      const font = `${fontSize}px ${THEME.fonts.mono}`;
+      const widths = segments.map((seg) => { this.ctx.font = font; return this.ctx.measureText(seg.text).width; });
+      const totalW = widths.reduce((a, b) => a + b, 0);
+      let x = this.width / 2 - totalW / 2;
+      for (let i = 0; i < segments.length; i++) {
+        this.drawText(segments[i].text, x, y, { color: segments[i].color, size: fontSize, font: THEME.fonts.mono });
+        x += widths[i];
+      }
+    };
+
+    drawInfoLine(infoY, infoSize, [
+      { text: "PILOT RANK  ", color: muted },
+      { text: state.pilotRank.title.toUpperCase(), color: muted }
+    ]);
+    drawInfoLine(infoY + infoGap, infoSize, [
+      { text: "HULL  ", color: muted },
+      { text: `${Math.round(state.player.hull)}/${state.player.maxHull}`, color: hullValueColor },
+      { text: `   BAL  ${Math.round(state.player.balance)}`, color: muted }
+    ]);
+    drawInfoLine(infoY + infoGap * 2, infoSize - 2, [
+      { text: "REPUTATION  ", color: muted },
+      { text: repLabel.toUpperCase(), color: repValueColor },
+      { text: "   STATUS  ", color: muted },
+      { text: riskLabel.toUpperCase(), color: riskValueColor }
+    ]);
 
     if (state.player.activeMission) {
       const am = state.player.activeMission;
@@ -1393,27 +1517,35 @@ export class Renderer {
         const by = rowYs[Math.min(row, rowYs.length - 1)];
         this.button(entry[0], entry[1], bx, by, bw, bh);
       });
-      this.button("touch-dock", "LAUNCH", panelX + 16, chrome.footerHintRow.y - 6, panelW - 32, 28);
+      // Mobile LAUNCH — full-width primary CTA with accent fill.
+      this.drawPrimaryButton("touch-dock", "LAUNCH", panelX + 16, chrome.footerHintRow.y - 6, panelW - 32, 28);
     } else {
       const bw = 84;
+      const launchW = Math.round(bw * 1.5); // 126 — wider to signal dominance
       const bgap = 10;
       const tiles = this.signalGlassUi ? getStationServiceTiles(system) : null;
-      const totalButtons = (tiles?.length ?? 4) + 1;
-      const totalW = bw * totalButtons + bgap * (totalButtons - 1);
-      const startX = this.width / 2 - totalW / 2;
       const labels: Array<[string, string]> = tiles
         ? tiles.map((tile) => [tile.id, tile.available ? tile.shortLabel : "LOCKED"])
         : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"]];
+
+      // Service tiles at uniform bw, then double gap, then LAUNCH at 1.5× width.
+      const nTiles = labels.length;
+      const totalServiceW = nTiles * bw + (nTiles - 1) * bgap;
+      const totalW = totalServiceW + bgap * 2 + launchW;
+      const startX = this.width / 2 - totalW / 2;
+
       labels.forEach(([id, label], index) => {
-        this.button(id, label, startX + (bw + bgap) * index, chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
+        this.button(id, label, startX + index * (bw + bgap), chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
         if (tiles && tiles[index] && !tiles[index].available) {
-          // Show unavailable reason inside the button bounds (inline, not floating label).
-          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + (bw + bgap) * index + bw / 2, chrome.footerSecondaryActionRow.y + 14, {
+          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + index * (bw + bgap) + bw / 2, chrome.footerSecondaryActionRow.y + 14, {
             align: "center", color: SIGNAL_GLASS_THEME.colors.textDim, size: 7, font: THEME.fonts.mono
           });
         }
       });
-      this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * labels.length, chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
+
+      // Desktop LAUNCH — wider, accent-filled primary CTA.
+      const launchX = startX + totalServiceW + bgap * 2;
+      this.drawPrimaryButton("touch-dock", "LAUNCH", launchX, chrome.footerPrimaryActionRow.y, launchW, chrome.footerPrimaryActionRow.height);
     }
   }
 
@@ -1572,11 +1704,16 @@ export class Renderer {
       : "HULL REPAIR ACTIVE / EQUIPMENT VENDOR OFFLINE";
     this.drawPanelHeader(chrome, "EQUIPMENT BAY", equipmentVendorLabel, `${profile.label.toUpperCase()} · MAINTENANCE`);
     this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
-    const filteredEquipment = state.equipmentCategoryFilter === "all"
-      ? EQUIPMENT
-      : EQUIPMENT.filter((e) => e.category === state.equipmentCategoryFilter);
 
-    const pageSize = this.narrow ? 5 : 8;
+    // Build ordered list (installed → available → unavailable) then apply category filter.
+    const orderedEquipment = getEquipmentDisplayOrder(state.player, profile);
+    const filteredEquipment = state.equipmentCategoryFilter === "all"
+      ? orderedEquipment
+      : orderedEquipment.filter((e) => e.category === state.equipmentCategoryFilter);
+
+    const rowH = this.narrow ? 44 : 48;
+    const rowSpacing = this.narrow ? 52 : 48;
+    const pageSize = Math.max(4, Math.floor(chrome.contentBounds.height / rowSpacing));
     const pageCount = Math.max(1, Math.ceil(filteredEquipment.length / pageSize));
     const page = Math.max(0, Math.min(state.equipmentPage, pageCount - 1));
     const visibleEquipment = filteredEquipment.slice(page * pageSize, page * pageSize + pageSize);
@@ -1584,19 +1721,20 @@ export class Renderer {
     const left = this.narrow ? panelX + 12 : this.width * 0.14;
     const top = chrome.contentBounds.y + (this.narrow ? 22 : 34);
     const rowW = this.narrow ? panelW - 24 : this.width * 0.72;
-    const rowH = this.narrow ? 44 : 40;
-    const rowSpacing = this.narrow ? 52 : 48;
 
     visibleEquipment.forEach((item, index) => {
       const installed = state.player.equipment[item.id];
       const stocked = isEquipmentAvailableAtStation(item, profile);
-      const affordable = state.player.balance >= item.price;
+      const unavailable = !installed && !stocked;
       const y = top + index * rowSpacing;
       const rowY = y - 20;
       const hovered = isPointInRect(state.mousePosition, left, rowY, rowW, rowH);
 
+      if (unavailable) this.ctx.save();
+      if (unavailable) this.ctx.globalAlpha = 0.6;
+
       if (hovered && !installed && stocked) {
-        this.ctx.fillStyle = "rgba(0, 242, 255, 0.08)";
+        this.ctx.fillStyle = HELP_HOVER_FILL;
         this.ctx.beginPath();
         this.ctx.roundRect(left - 8, rowY, rowW + 16, rowH, 4);
         this.ctx.fill();
@@ -1609,20 +1747,28 @@ export class Renderer {
         color: installed ? THEME.colors.accentTeal : THEME.colors.textPrimary, font: THEME.fonts.accent, size: nameSize
       });
 
+      // Status chip
       const status = installed ? "INSTALLED" : !stocked ? "UNAVAILABLE" : getEquipmentAffordability(state.player, item).toUpperCase();
-      const statusColor = installed ? THEME.colors.accentTeal : !stocked || !affordable ? THEME.colors.textDim : THEME.colors.accentAmber;
+      const chipToken = installed
+        ? THEME.colors.success
+        : !stocked
+          ? SIGNAL_GLASS_THEME.colors.disabled
+          : SIGNAL_GLASS_THEME.colors.accent2;
+
       if (this.narrow) {
-        // Status right-aligned; description on a second row.
-        this.drawText(status, left + rowW - 8, y, { align: "right", color: statusColor, size: SIGNAL_GLASS_TEXT_SIZES.equipmentRow, font: THEME.fonts.mono });
+        // Chip right-aligned; description on a second row.
+        this.drawChip(left + rowW - 8, y, status, chipToken, true);
         this.ctx.font = `${SIGNAL_GLASS_TEXT_SIZES.equipmentRow}px ${THEME.fonts.primary}`;
         const descLines = wrapText(this.ctx, item.description, rowW - 24);
         if (descLines.length > 0) {
           this.drawText(descLines[0], left + 22, y + 16, { size: SIGNAL_GLASS_TEXT_SIZES.equipmentRow, color: THEME.colors.textSecondary });
         }
       } else {
-        this.drawText(status, left + 260, y, { color: statusColor, size: 11, font: THEME.fonts.mono });
+        this.drawChip(left + 260, y, status, chipToken);
         this.drawText(item.description, left + 400, y, { size: 11, color: THEME.colors.textSecondary });
       }
+
+      if (unavailable) this.ctx.restore();
     });
 
     // Subtle separator above footer band
@@ -1634,29 +1780,40 @@ export class Renderer {
     this.ctx.stroke();
 
     const missing = state.player.maxHull - state.player.hull;
-    const hullFraction = state.player.hull / state.player.maxHull;
-    const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
 
-    this.drawText("HULL REPAIR", chrome.footerStatusRow.x, this.rowTextY(chrome.footerStatusRow), {
-      size: this.narrow ? 10 : 11,
-      font: THEME.fonts.mono,
-      color: THEME.colors.textSecondary
-    });
-    const barX = chrome.footerStatusRow.x + (this.narrow ? 86 : 104);
-    const barW = this.narrow ? 104 : 150;
-    this.drawProgressBar(barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
-    this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, barX + barW + 12, this.rowTextY(chrome.footerStatusRow), {
-      size: this.narrow ? 10 : 11,
-      font: THEME.fonts.mono,
-      color: hullColor
-    });
-
-    if (missing > 0) {
+    if (missing === 0) {
+      // Full hull — compact single-line affordance; no progress bar.
+      const compactY = this.rowTextY(chrome.footerStatusRow);
+      this.ctx.strokeStyle = SIGNAL_GLASS_THEME.colors.grid;
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.moveTo(chrome.footerStatusRow.x, chrome.footerStatusRow.y);
+      this.ctx.lineTo(chrome.footerStatusRow.x + chrome.footerStatusRow.width, chrome.footerStatusRow.y);
+      this.ctx.stroke();
+      this.drawText("Hull fully operational · Repair available here", chrome.footerStatusRow.x, compactY, {
+        size: this.narrow ? 10 : 11,
+        font: THEME.fonts.mono,
+        color: SIGNAL_GLASS_THEME.colors.textMuted
+      });
+    } else {
+      const hullFraction = state.player.hull / state.player.maxHull;
+      const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
+      this.drawText("HULL REPAIR", chrome.footerStatusRow.x, this.rowTextY(chrome.footerStatusRow), {
+        size: this.narrow ? 10 : 11,
+        font: THEME.fonts.mono,
+        color: THEME.colors.textSecondary
+      });
+      const barX = chrome.footerStatusRow.x + (this.narrow ? 86 : 104);
+      const barW = this.narrow ? 104 : 150;
+      this.drawProgressBar(barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
+      this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, barX + barW + 12, this.rowTextY(chrome.footerStatusRow), {
+        size: this.narrow ? 10 : 11,
+        font: THEME.fonts.mono,
+        color: hullColor
+      });
       const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
       const repairLabel = `REPAIR HULL (${repairCost} BAL) [H]`;
       this.button("equip-repair", repairLabel, chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
-    } else {
-      this.drawDisabledControl("HULL FULLY OPERATIONAL", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height, THEME.colors.success);
     }
 
     const catLabel = `CAT: ${state.equipmentCategoryFilter.toUpperCase()}`;
@@ -1673,7 +1830,7 @@ export class Renderer {
         align: "right", color: THEME.colors.accentTeal, size: 10, font: THEME.fonts.mono
       });
     } else {
-      this.drawText(`PAGE ${page + 1}/${pageCount} · ${profile.label.toUpperCase()}`, chrome.footerSecondaryActionRow.x, this.rowTextY(chrome.footerSecondaryActionRow), {
+      this.drawText(`PAGE ${page + 1} / ${pageCount} · ${profile.label.toUpperCase()}`, chrome.footerSecondaryActionRow.x, this.rowTextY(chrome.footerSecondaryActionRow), {
         color: THEME.colors.accentTeal, size: 11, font: THEME.fonts.mono
       });
       const right = chrome.footerSecondaryActionRow.x + chrome.footerSecondaryActionRow.width;
@@ -1982,13 +2139,17 @@ export class Renderer {
     const helpSections = searchHelpContent(helpQuery);
     const visibleSections = helpSections.length > 0 ? helpSections : HELP_CONTENT;
 
-    if (this.signalGlassUi) {
-      const searchLabel = helpQuery
-        ? `SEARCH "${helpQuery.toUpperCase()}" / ${helpSections.length} TOPICS`
-        : "SEARCH MANUAL TOPICS";
-      this.drawText(searchLabel, contentX, top - (this.narrow ? 14 : 24), {
-        color: SIGNAL_GLASS_THEME.colors.accent, size: this.narrow ? 9 : 11, font: THEME.fonts.mono
-      });
+    if (this.signalGlassUi && helpQuery) {
+      const manualInput = typeof document !== "undefined"
+        ? document.querySelector(".manual-search-input")
+        : null;
+      if (manualInput) {
+        const inputRect = manualInput.getBoundingClientRect();
+        const captionY = inputRect.bottom + 14;
+        this.drawText(`${helpSections.length} RESULTS`, inputRect.left, captionY, {
+          color: SIGNAL_GLASS_THEME.colors.textMuted, size: 11, font: THEME.fonts.mono
+        });
+      }
     }
 
     visibleSections.forEach((section, index) => {
@@ -1997,20 +2158,19 @@ export class Renderer {
       const rowY = y - sidebarRowH / 2;
 
       if (selected || isPointInRect(state.mousePosition, sidebarX, rowY, sidebarW, sidebarRowH)) {
-        this.ctx.fillStyle = selected ? "rgba(255, 0, 127, 0.15)" : "rgba(0, 242, 255, 0.1)";
+        this.ctx.fillStyle = selected ? "rgba(108, 227, 214, 0.12)" : HELP_HOVER_FILL;
         this.ctx.beginPath();
         this.ctx.roundRect(sidebarX - 4, rowY, sidebarW, sidebarRowH, 4);
         this.ctx.fill();
         if (selected) {
-          this.ctx.strokeStyle = THEME.colors.accentPink;
-          this.ctx.lineWidth = 1;
-          this.ctx.stroke();
+          this.ctx.fillStyle = SIGNAL_GLASS_THEME.colors.accent;
+          this.ctx.fillRect(sidebarX - 4, rowY, 3, sidebarRowH);
         }
       }
 
       this.buttonZones.push({ id: `help-sidebar-${section.id}`, label: section.title, x: sidebarX, y: rowY, width: sidebarW, height: sidebarRowH });
       this.drawText(section.title.toUpperCase(), sidebarX + 8, y + 4, {
-        color: selected ? THEME.colors.accentPink : THEME.colors.textPrimary,
+        color: selected ? SIGNAL_GLASS_THEME.colors.accent : THEME.colors.textPrimary,
         size: sidebarFontSize,
         font: THEME.fonts.accent
       });

@@ -187,6 +187,11 @@ export function classifyEquipment(player: PlayerState, station: StationProfile):
   }, { installed: [], available: [], unavailable: [] });
 }
 
+export function getEquipmentDisplayOrder(player: PlayerState, station: StationProfile): EquipmentDefinition[] {
+  const sections = classifyEquipment(player, station);
+  return [...sections.installed, ...sections.available, ...sections.unavailable];
+}
+
 export function getEquipmentAffordability(player: PlayerState, item: EquipmentDefinition): string {
   if (player.equipment[item.id]) return "Installed";
   if (player.balance >= item.price) return `${item.price} BAL`;

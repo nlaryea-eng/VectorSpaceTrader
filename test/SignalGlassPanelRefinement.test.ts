@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import { Renderer, type RenderState } from "../src/game/Renderer";
-import { getPanelChromeLayout, rectsOverlap } from "../src/game/Layout";
+import { getPanelChromeLayout, getScreenPanelBounds, rectsOverlap } from "../src/game/Layout";
 import { createMissionId } from "../src/game/MissionIds";
-import { SIGNAL_GLASS_TEXT_SIZES } from "../src/game/Theme";
+import { SIGNAL_GLASS_TEXT_SIZES, THEME } from "../src/game/Theme";
 import { generateUniverse } from "../src/game/Universe";
 import type { ButtonZone, GameMode, Mission, PlayerState } from "../src/game/types";
 
@@ -16,6 +16,7 @@ interface DrawnText {
   y: number;
   font: string;
   align: CanvasTextAlign;
+  color: string;
 }
 
 interface RenderTrace {
@@ -28,12 +29,19 @@ function createStubCanvas(trace?: RenderTrace): HTMLCanvasElement {
   const ctx = {
     font: "",
     textAlign: "left" as CanvasTextAlign,
+    fillStyle: "" as string | CanvasGradient | CanvasPattern,
+    strokeStyle: "" as string | CanvasGradient | CanvasPattern,
+    lineWidth: 1,
+    shadowBlur: 0,
+    shadowColor: "",
+    globalAlpha: 1,
+    textBaseline: "middle" as CanvasTextBaseline,
     setTransform() {}, clearRect() {}, fillRect() {}, beginPath() {},
     roundRect() {}, fill() {}, stroke() {},
     rect(x: number, y: number, width: number, height: number) { pendingRect = { x, y, width, height }; },
     clip() { if (pendingRect) trace?.clips.push(pendingRect); },
     fillText(text: string, x: number, y: number) {
-      trace?.texts.push({ text: String(text), x, y, font: ctx.font, align: ctx.textAlign });
+      trace?.texts.push({ text: String(text), x, y, font: ctx.font, align: ctx.textAlign, color: String(ctx.fillStyle) });
     },
     measureText(text: string) { return { width: text.length * 7 }; },
     moveTo() {}, lineTo() {}, arc() {}, ellipse() {}, setLineDash() {}, save() {}, restore() {},
@@ -151,6 +159,8 @@ function state(mode: GameMode, overrides: Partial<RenderState> = {}): RenderStat
     helpPageIndex: 0,
     shipyardPage: 0,
     shipyardClassFilter: "all",
+    showTouchControls: true,
+    mapFilterSheetOpen: false,
     ...overrides
   };
 }
@@ -213,10 +223,9 @@ describe("Signal Glass panel refinement button zones", () => {
     expect(buttons.some((button) => button.id === "touch-equipment")).toBe(true);
   });
 
-  it.each([
-    { width: 390, height: 844 },
-    { width: 1280, height: 800 }
-  ])("keeps map filter chips and header actions visible without overlap on $width x $height", (viewport) => {
+  // Desktop: individual filter chips visible and non-overlapping.
+  it("keeps map filter chips and header actions visible without overlap at 1280x800", () => {
+    const viewport = { width: 1280, height: 800 };
     const buttons = render("map", viewport);
     const close = byId(buttons, "map-back");
     const help = byId(buttons, "help");
@@ -237,6 +246,43 @@ describe("Signal Glass panel refinement button zones", () => {
       for (let j = i + 1; j < filters.length; j += 1) {
         expectNoOverlap(filters[i], filters[j]);
       }
+    }
+  });
+
+  // R3: compact map shows FILTERS toggle, not individual chips (sheet closed).
+  it("R3: compact map shows FILTERS toggle button instead of individual chips (sheet closed)", () => {
+    const buttons = render("map", { width: 390, height: 844 });
+    const toggle = byId(buttons, "map-filters-toggle");
+    expect(toggle.label).toBe("FILTERS");
+    // Individual filter chips must NOT be present when sheet is closed.
+    expect(buttons.some((b) => b.id.startsWith("map-filter-"))).toBe(false);
+    expect(toggle.x).toBeGreaterThanOrEqual(0);
+    expect(toggle.y).toBeGreaterThanOrEqual(0);
+    expect(toggle.x + toggle.width).toBeLessThanOrEqual(390);
+    expect(toggle.y + toggle.height).toBeLessThanOrEqual(844);
+  });
+
+  it("R3: FILTERS button label shows active count when filters are set", () => {
+    const activeFilters = { ...state("map").mapFilters, hazard: "debris" as const, economy: "Mining" as const };
+    const buttons = render("map", { width: 390, height: 844 }, { mapFilters: activeFilters });
+    const toggle = byId(buttons, "map-filters-toggle");
+    expect(toggle.label).toBe("FILTERS [2]");
+  });
+
+  it("R3: opening the filter sheet reveals all individual filter chips above the toggle row", () => {
+    const viewport = { width: 390, height: 844 };
+    const buttons = render("map", viewport, { mapFilterSheetOpen: true });
+    // Individual chips must be present when sheet is open.
+    expect(buttons.some((b) => b.id === "map-filter-systemClass")).toBe(true);
+    expect(buttons.some((b) => b.id === "map-filter-clear")).toBe(true);
+    const toggle = byId(buttons, "map-filters-toggle");
+    expect(toggle.label).toBe("DONE");
+    // All chips must be above the toggle row and within bounds.
+    const chips = buttons.filter((b) => b.id.startsWith("map-filter-"));
+    for (const chip of chips) {
+      expect(chip.y + chip.height).toBeLessThanOrEqual(toggle.y);
+      expect(chip.x).toBeGreaterThanOrEqual(0);
+      expect(chip.x + chip.width).toBeLessThanOrEqual(viewport.width);
     }
   });
 
@@ -262,11 +308,13 @@ describe("Signal Glass panel refinement button zones", () => {
     expectNoOverlap(category, help);
   });
 
-  it("shows complete Equipment hull state without exposing a repair button when fully repaired", () => {
+  it("shows compact hull-full affordance without a repair button or progress bar when fully repaired", () => {
     const { buttons, trace } = renderWithTrace("equipment", { width: 390, height: 844 }, { player: player({ hull: 100, maxHull: 100 }) });
+    // R4: no repair button when hull is full.
     expect(buttons.some((button) => button.id === "equip-repair")).toBe(false);
     expect(buttons.some((button) => button.id === "equip-category-cycle")).toBe(true);
-    const status = trace.texts.find((entry) => entry.text === "HULL FULLY OPERATIONAL");
+    // R4: compact one-line affordance replaces the old full-caps label.
+    const status = trace.texts.find((entry) => entry.text === "Hull fully operational · Repair available here");
     expect(status).toBeDefined();
     expect(status!.y).toBeLessThan(byId(buttons, "equip-category-cycle").y);
   });
@@ -334,6 +382,68 @@ describe("Signal Glass panel refinement button zones", () => {
     const active = renderWithTrace("missions", { width: 390, height: 844 }, { player: player({ activeMission }) });
     expect(drawnText(active.trace)).toContain("ACTIVE CONTRACT IN PROGRESS");
     expect(drawnText(active.trace)).toContain("ACTIVE: SIGNAL PACKET");
+  });
+
+  // R2: docked screen title must not overlap the HELP button on mobile.
+  it("R2: docked station title stays clear of HELP button at 390×844", () => {
+    const viewport = { width: 390, height: 844 };
+    const { trace } = renderWithTrace("docked", viewport);
+
+    // Station title is "{SYSTEM NAME} STATION" (space before STATION) and center-aligned.
+    // Exclude the standalone "STATION" wireframe label drawn by renderStation in the flight view.
+    const titleEntry = trace.texts.find((entry) => entry.text.includes(" STATION") && entry.align === "center");
+    expect(titleEntry, "no STATION title found").toBeDefined();
+
+    // Compute estimated right edge: center X + half stub text width.
+    const titleRightEdge = titleEntry!.x + (titleEntry!.text.length * 7) / 2;
+
+    // Compute headerActionRow.x for this viewport.
+    const panelBounds = getScreenPanelBounds(viewport, "docked");
+    const chrome = getPanelChromeLayout(
+      { x: panelBounds.x, y: panelBounds.y, width: panelBounds.width, height: panelBounds.height }, true
+    );
+
+    expect(titleRightEdge).toBeLessThanOrEqual(chrome.headerActionRow.x - 8);
+  });
+
+  // R2: pilot summary must be entirely muted when the player is in nominal state.
+  it("R2: pilot summary uses muted text when hull full, reputation ≥ 0, legalRisk 0", () => {
+    const viewport = { width: 1280, height: 800 };
+    const { trace } = renderWithTrace("docked", viewport, {
+      player: player({ hull: 100, maxHull: 100, reputation: 0, legalRisk: 0 })
+    });
+
+    const muted = THEME.colors.textSecondary;
+    // Every segment of every pilot-summary line must use the muted color.
+    // Match exact segment texts produced by renderDocked's drawInfoLine calls.
+    // Use precise prefixes to avoid accidentally matching footer/status strings
+    // (e.g. "EQUIPMENT INCLUDES HULL REPAIR" also contains "HULL").
+    const summarySegments = trace.texts.filter((entry) => {
+      const t = entry.text;
+      return t === "PILOT RANK  " || t === "CADET" ||
+             t === "HULL  " || t.startsWith("100/") || t.startsWith("   BAL  ") ||
+             t === "REPUTATION  " || t === "   STATUS  ";
+    });
+    expect(summarySegments.length).toBeGreaterThan(0);
+    for (const seg of summarySegments) {
+      expect(seg.color, `"${seg.text}" should be muted but got ${seg.color}`).toBe(muted);
+    }
+  });
+
+  // R5: touch button zones must be absent when showTouchControls is false (desktop pointer detected).
+  it("R5: suppresses touch overlay button zones when showTouchControls is false", () => {
+    const viewport = { width: 390, height: 844 };
+    // Flight mode, pointer device detected → no touch-* zones registered.
+    const buttons = render("flight", viewport, { showTouchControls: false });
+    const touchZones = buttons.filter((b) => b.id.startsWith("touch-"));
+    expect(touchZones).toHaveLength(0);
+  });
+
+  it("R5: registers touch overlay button zones when showTouchControls is true", () => {
+    const viewport = { width: 390, height: 844 };
+    const buttons = render("flight", viewport, { showTouchControls: true });
+    const touchZones = buttons.filter((b) => b.id.startsWith("touch-"));
+    expect(touchZones.length).toBeGreaterThan(0);
   });
 
   it("keeps Pause summary microcopy readable and buttons separated", () => {

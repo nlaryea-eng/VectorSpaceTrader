@@ -8,7 +8,8 @@ import {
   getReservedTouchControlArea,
   getViewportKind,
   rectsOverlap,
-  respectsReducedMotion
+  respectsReducedMotion,
+  shouldShowTouchControls
 } from "../src/game/Layout";
 
 afterEach(() => {
@@ -62,5 +63,26 @@ describe("Signal Glass layout primitives", () => {
 
     expect(respectsReducedMotion()).toBe(true);
     expect(matchMedia).toHaveBeenCalledWith("(prefers-reduced-motion: reduce)");
+  });
+
+  // R5: shouldShowTouchControls gates on primary pointer type.
+  it("R5: shouldShowTouchControls returns false when primary pointer is fine (mouse/trackpad)", () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal("window", { matchMedia });
+
+    expect(shouldShowTouchControls()).toBe(false);
+    expect(matchMedia).toHaveBeenCalledWith("(pointer: fine)");
+  });
+
+  it("R5: shouldShowTouchControls returns true when primary pointer is coarse (touch)", () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: false });
+    vi.stubGlobal("window", { matchMedia });
+
+    expect(shouldShowTouchControls()).toBe(true);
+  });
+
+  it("R5: shouldShowTouchControls returns true as safe default when matchMedia is unavailable", () => {
+    vi.stubGlobal("window", { matchMedia: undefined });
+    expect(shouldShowTouchControls()).toBe(true);
   });
 });
