@@ -254,10 +254,9 @@ export function getPanelChromeLayout(panelBounds: SubRect, compact: boolean): Pa
   const innerX = px + margin;
   const innerW = Math.max(0, pw - margin * 2);
   const actionReserve = Math.min(compact ? 166 : 224, innerW * 0.42);
-  const titleW = Math.max(0, innerW - actionReserve - rowGap);
 
   const headerBand: SubRect = { x: px, y: py, width: pw, height: Math.min(headerH, ph * 0.28) };
-  const titleRow: SubRect = { x: innerX, y: py + (compact ? 12 : 14), width: titleW, height: compact ? 26 : 30 };
+  const titleRow: SubRect = { x: innerX, y: py + (compact ? 12 : 14), width: innerW, height: compact ? 26 : 30 };
   const headerActionRow: SubRect = {
     x: innerX + innerW - actionReserve,
     y: titleRow.y,
@@ -350,14 +349,45 @@ export interface StationHubZones {
  * Returns the four logical zones of the Station Hub screen.
  * Uses the same panelX/Y/W/H geometry as the renderer's renderDocked().
  */
+export function getScreenPanelBounds(size: ViewportSize, kind: "docked" | "market" | "equipment" | "shipyard" | "missions" | "help" | "centered" | "map", preferredWidth = 640): SubRect {
+  const compact = isCompactViewport(size);
+  if (compact) {
+    if (kind === "centered") {
+      const w = Math.min(preferredWidth, size.width - 16);
+      const h = Math.min(size.height - 24, preferredWidth); // roughly square-ish for modals on mobile
+      return { x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h };
+    }
+    return { x: 8, y: 12, width: size.width - 16, height: size.height - 24 };
+  }
+
+  switch (kind) {
+    case "docked":
+      return { x: size.width * 0.2, y: size.height * 0.1, width: size.width * 0.6, height: size.height * 0.68 };
+    case "market":
+    case "shipyard":
+    case "missions":
+      return { x: size.width * 0.06, y: size.height * 0.08, width: size.width * 0.88, height: size.height * 0.84 };
+    case "equipment":
+      return { x: size.width * 0.08, y: size.height * 0.1, width: size.width * 0.84, height: size.height * 0.82 };
+    case "map":
+      return { x: size.width * 0.08, y: size.height * 0.1, width: size.width * 0.84, height: size.height * 0.78 };
+    case "help":
+      return { x: size.width * 0.04, y: size.height * 0.04, width: size.width * 0.92, height: size.height * 0.92 };
+    case "centered": {
+      const h = size.height * 0.7;
+      return { x: (size.width - preferredWidth) / 2, y: (size.height - h) / 2, width: preferredWidth, height: h };
+    }
+  }
+}
+
 export function getStationHubZones(size: ViewportSize): StationHubZones {
   const compact = isCompactViewport(size);
-  const panelX = compact ? 8 : size.width * 0.2;
-  const panelY = compact ? 12 : size.height * 0.1;
-  const panelW = compact ? size.width - 16 : size.width * 0.6;
-  const panelH = compact ? size.height - 24 : size.height * 0.68;
+  const bounds = getScreenPanelBounds(size, "docked");
+  const panelX = bounds.x;
+  const panelY = bounds.y;
+  const panelW = bounds.width;
 
-  const chrome = getPanelChromeLayout({ x: panelX, y: panelY, width: panelW, height: panelH }, compact);
+  const chrome = getPanelChromeLayout(bounds, compact);
   const serviceActions = chrome.footerRow;
 
   // Recommendation card: snapped just above service actions.

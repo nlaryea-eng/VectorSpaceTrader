@@ -1,7 +1,7 @@
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
-import { getPanelChromeLayout, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
+import { getPanelChromeLayout, getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
 import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
@@ -1057,10 +1057,8 @@ export class Renderer {
   }
 
   private renderMap(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.08;
-    const panelY = this.narrow ? 12 : this.height * 0.1;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.84;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.78;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "map");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
     const matches = filterSystems(state.systems, state.mapFilters, state.player);
@@ -1299,10 +1297,8 @@ export class Renderer {
   }
 
   private renderDocked(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.2;
-    const panelY = this.narrow ? 12 : this.height * 0.1;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.6;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.68;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "docked");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
@@ -1422,10 +1418,8 @@ export class Renderer {
   }
 
   private renderTrade(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.06;
-    const panelY = this.narrow ? 12 : this.height * 0.08;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.88;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.84;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "market");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
@@ -1566,10 +1560,8 @@ export class Renderer {
   }
 
   private renderEquipment(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.08;
-    const panelY = this.narrow ? 12 : this.height * 0.1;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.84;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.82;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "equipment");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
@@ -1696,10 +1688,8 @@ export class Renderer {
   }
 
   private renderShipyard(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.06;
-    const panelY = this.narrow ? 12 : this.height * 0.08;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.88;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.84;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "shipyard");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
@@ -1831,10 +1821,8 @@ export class Renderer {
   }
 
   private renderMissions(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.06;
-    const panelY = this.narrow ? 12 : this.height * 0.08;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.88;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.84;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "missions");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
@@ -1970,10 +1958,8 @@ export class Renderer {
   }
 
   private renderHelp(state: RenderState): void {
-    const panelX = this.narrow ? 8 : this.width * 0.04;
-    const panelY = this.narrow ? 12 : this.height * 0.06;
-    const panelW = this.narrow ? this.width - 16 : this.width * 0.92;
-    const panelH = this.narrow ? this.height - 24 : this.height * 0.88;
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "help");
+    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
     this.panel(panelX, panelY, panelW, panelH);
     const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
@@ -2090,10 +2076,9 @@ export class Renderer {
     const panelX = this.width / 2 - panelW / 2;
     const panelY = this.height / 2 - panelH / 2;
     this.panel(panelX, panelY, panelW, panelH);
-    this.drawText("SESSION PAUSED", this.width / 2, panelY + 44, {
-      align: "center", color: THEME.colors.textPrimary, size: this.narrow ? 22 : 28, font: THEME.fonts.accent
-    });
-    this.drawText("ENTER TO RESUME", this.width / 2, panelY + 80, { align: "center", font: THEME.fonts.mono, size: 13, color: THEME.colors.accentTeal });
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
+    this.drawPanelHeader(chrome, "SESSION PAUSED", "ENTER TO RESUME");
+
     const microSize = SIGNAL_GLASS_TEXT_SIZES.pauseMicrocopy;
     this.drawText("AUTO-SAVED DURING TRANSITS", this.width / 2, panelY + 108, {
       align: "center", color: THEME.colors.textSecondary, size: microSize, font: THEME.fonts.mono
@@ -2119,11 +2104,10 @@ export class Renderer {
 
   private renderSettings(state: RenderState): void {
     const panelW = Math.min(this.narrow ? this.width - 24 : 460, this.width - 24);
-    const panelH = Math.min(this.narrow ? 620 : 600, this.height - 32);
-    const panelX = this.width / 2 - panelW / 2;
-    const panelY = this.height / 2 - panelH / 2;
-    this.panel(panelX, panelY, panelW, panelH);
-    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
+    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "centered", panelW);
+    const { x: panelX, y: panelY, width: panelW_adjusted, height: panelH } = bounds;
+    this.panel(panelX, panelY, panelW_adjusted, panelH);
+    const chrome = this.createPanelChrome(panelX, panelY, panelW_adjusted, panelH);
     this.drawPanelHeader(chrome, "SYSTEM SETTINGS", "VALUES SAVE LOCALLY", "DISPLAY / AUDIO / CONTROLS");
     this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 70 : 94 }]);
 
@@ -2215,17 +2199,13 @@ export class Renderer {
 
     this.panel(px, py, panelW, panelH);
     const chrome = this.createPanelChrome(px, py, panelW, panelH);
+
+    this.drawPanelHeader(chrome, "VESSEL CRITICAL FAILURE");
     this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
     const cx = this.width / 2;
-    let row = py + 42;
+    let row = py + 84;
     const rowGap = 28;
-
-    this.drawText("VESSEL CRITICAL FAILURE", cx, row, {
-      align: "center", color: THEME.colors.danger, size: 28, font: THEME.fonts.accent
-    });
-
-    row += rowGap + 8;
     this.drawText(`FINAL PILOT RANK: ${state.pilotRank.title.toUpperCase()}`, cx, row, {
       align: "center", color: THEME.colors.accentPink, size: 18, font: THEME.fonts.accent
     });

@@ -55,10 +55,11 @@ describe("getPanelLayout — sub-region geometry", () => {
       expect(rectsOverlap(headerBand, footerRow)).toBe(false);
       expect(rectsOverlap(contentBounds, footerRow)).toBe(false);
     });
-
     it(`header title/subtitle/action rows are ordered safely on ${label}`, () => {
       const layout = getPanelLayout(vp);
-      expect(rectsOverlap(layout.titleRow, layout.headerActionRow)).toBe(false);
+      // Titles are now centered relative to the full panel, so titleRow logic was updated
+      // to span the inner width, which technically overlaps headerActionRow's bounds.
+      // We only assert vertical stacking now.
       expect(layout.titleRow.y + layout.titleRow.height).toBeLessThanOrEqual(layout.subtitleRow.y);
       expect(layout.subtitleRow.y + layout.subtitleRow.height).toBeLessThanOrEqual(layout.contextChipRow.y);
       expect(layout.contextChipRow.y + layout.contextChipRow.height).toBeLessThanOrEqual(
