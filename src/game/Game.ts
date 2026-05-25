@@ -9,7 +9,7 @@ import {
   getLastKnownPrice,
   recordPriceHistory
 } from "./Economy";
-import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT } from "./Equipment";
+import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT, isPurchasable } from "./Equipment";
 import { Input } from "./Input";
 import { normalizeMapAction, normalizeMarketAction } from "./InputRouter";
 import { DEFAULT_MAP_FILTERS, cycleMapFilterState, type MapFilterState, selectAdjacentFilteredSystem, getSystemAtProjectedMapPoint } from "./MapSearch";
@@ -34,7 +34,7 @@ import { hasSave, loadGame, saveGame } from "./SaveGame";
 import { getMarketRowDisplay } from "./SignalGlassScreens";
 import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID, type PlayerShipDefinition } from "./Ships";
 import { getStationProfile, hasStationService } from "./StationServices";
-import { createInitialTransientState } from "./TransientState";
+import { createEmptyMessageLog, createInitialTransientState, pushMessage, type MessageKind, type MessageLog } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, getMarketBuyPrice, getMarketSellPrice, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
 import { HELP_CONTENT, getHelpSectionForMode, searchHelpContent, type HelpSectionId } from "./HelpContent";
@@ -96,7 +96,7 @@ export class Game {
   private shipyardClassFilter: ShipClassId | "all" = "all";
   private mapFilters: MapFilterState = { ...DEFAULT_MAP_FILTERS };
   private mapFilterSheetOpen = false;
-  private message = "";
+  private messageLog: MessageLog = createEmptyMessageLog();
   private lastTime = 0;
   private enemyCooldown = 1.5;
   private playerLaserCooldown = 0;
@@ -141,16 +141,17 @@ export class Game {
   getDebugSnapshot(): {
     mode: GameMode;
     selectedSystemId: number;
-    message: string;
+    lastMessage: string;
     player: Pick<PlayerState, "docked" | "balance" | "fuel">;
     buttons: ButtonZone[];
     mapFilters: MapFilterState;
     marketRows: ReturnType<typeof getMarketRowDisplay>[];
   } {
+    const last = this.messageLog.entries[this.messageLog.entries.length - 1];
     return {
       mode: this.mode,
       selectedSystemId: this.selectedSystemId,
-      message: this.message,
+      lastMessage: last?.text ?? "",
       player: {
         docked: this.player.docked,
         balance: this.player.balance,
@@ -179,13 +180,13 @@ export class Game {
     if (this.input.consume("KeyU")) {
       this.audio.unlock();
       this.audio.setMuted(!this.audio.isMuted());
-      this.message = this.audio.isMuted() ? "Audio muted" : "Audio enabled";
+      this.msg(this.audio.isMuted() ? "Audio muted" : "Audio enabled");
       this.persist();
     }
 
     if (this.input.consume("KeyG")) {
       this.phosphorGlow = !this.phosphorGlow;
-      this.message = this.phosphorGlow ? "Phosphor glow enabled" : "Crisp vector mode enabled";
+      this.msg(this.phosphorGlow ? "Phosphor glow enabled" : "Crisp vector mode enabled");
     }
 
     if (this.input.consume("Slash")) {
@@ -411,7 +412,7 @@ export class Game {
       this.runStats = recordEnemyDestroyed(this.runStats);
       this.explosionEffect = { worldPosition: { ...this.enemy.position }, age: 0, maxAge: 1.5 };
       this.respawnCountdown = RESPAWN_DELAY;
-      this.message = `${this.enemy.name} destroyed`;
+      this.msg(`${this.enemy.name} destroyed`, "success");
       this.audio.play("destroyed");
       this.persist();
     }
@@ -450,13 +451,13 @@ export class Game {
     const spawnPos: Vector3 = vec3(0, 0, 85);
     this.enemy = createEnemyShip(`contact-${this.player.currentSystemId}-${Date.now()}`, spawnPos, classIdx);
     this.enemyCooldown = this.enemy.fireCooldown;
-    this.message = "New contact detected";
+    this.msg("New contact detected", "warning");
   }
 
   private firePlayerLaser(): void {
     const profile = getLaserProfile(this.player);
     if (this.player.energy < profile.energyCost || this.playerLaserCooldown > 0) {
-      this.message = "Laser charge unavailable";
+      this.msg("Laser charge unavailable", "warning");
       this.audio.play("tradeFail");
       return;
     }
@@ -465,7 +466,7 @@ export class Game {
     this.projectiles.push(fireLaser("player", this.player.position, this.player.orientation, this.player.velocity, profile.damage));
     this.player = { ...this.player, energy: this.player.energy - profile.energyCost };
     this.playerLaserCooldown = this.player.equipment.beamLaser ? 0.34 : 0.22;
-    this.message = `${profile.label} fired`;
+    this.msg(`${profile.label} fired`);
     this.audio.play("laser");
   }
 
@@ -548,7 +549,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "buyCommodity")
       };
       this.refreshMarket(true);
-      this.message = `Bought ${qty} × ${item.name} for ${qty * getMarketBuyPrice(item)} BAL`;
+      this.msg(`Bought ${qty} × ${item.name} for ${qty * getMarketBuyPrice(item)} BAL`, "success");
       this.audio.play("tradeOk");
       this.persist();
     } else {
@@ -573,7 +574,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "sellCommodity")
       };
       this.refreshMarket(true);
-      this.message = `Sold ${qty} × ${item.name} for ${qty * getMarketSellPrice(item)} BAL`;
+      this.msg(`Sold ${qty} × ${item.name} for ${qty * getMarketSellPrice(item)} BAL`, "success");
       this.audio.play("tradeOk");
       this.persist();
     } else {
@@ -654,7 +655,7 @@ export class Game {
       if (!this.input.consume(`Digit${index + 1}`)) continue;
 
       if (this.player.activeMission) {
-        this.message = "Complete the active mission before accepting another";
+        this.msg("Complete the active mission before accepting another", "warning");
         this.audio.play("tradeFail");
         return;
       }
@@ -662,11 +663,11 @@ export class Game {
       const mission = this.missions[index];
       const result = acceptMission(this.player, mission);
       if (!result.ok) {
-        this.message = result.reason ?? "Cannot accept mission";
+        this.msg(result.reason ?? "Cannot accept mission", "warning");
         this.audio.play("tradeFail");
       } else {
         this.player = result.player;
-        this.message = `Accepted: ${mission.title}`;
+        this.msg(`Accepted: ${mission.title}`, "success");
         this.audio.play(getUiSoundEvent("missionAccepted"));
         this.persist();
       }
@@ -681,7 +682,7 @@ export class Game {
       ? hasStationService(current, "equipment") || hasStationService(current, "repair")
       : hasStationService(current, service);
     if (!available) {
-      this.message = `${modeLabel(mode)} unavailable at this station`;
+      this.msg(`${modeLabel(mode)} unavailable at this station`, "warning");
       this.audio.play("tradeFail");
       return;
     }
@@ -694,17 +695,18 @@ export class Game {
     const result = buyShip(this.player, this.selectedShipId);
     if (result.ok) {
       this.player = result.player;
-      this.message = "Ship transfer complete";
+      this.msg("Ship transfer complete", "success");
       this.audio.play(getUiSoundEvent("shipPurchase"));
       this.persist();
     } else {
-      this.message = result.reason ?? "Ship transfer blocked";
+      this.msg(result.reason ?? "Ship transfer blocked", "warning");
       this.audio.play("tradeFail");
     }
   }
 
   private getFilteredEquipmentKeys(): EquipmentId[] {
     return EQUIPMENT
+      .filter(e => isPurchasable(e.id))
       .filter(e => this.equipmentCategoryFilter === "all" || e.category === this.equipmentCategoryFilter)
       .map(e => e.id);
   }
@@ -723,7 +725,7 @@ export class Game {
     if (zoneId === "map-filter-clear") {
       this.mapFilters = cycleMapFilterState(this.mapFilters, zoneId);
       this.mapSearchInput.value = "";
-      this.message = "Map filters cleared";
+      this.msg("Map filters cleared");
       this.audio.play(getUiSoundEvent("filterCycle"));
       return;
     }
@@ -735,7 +737,7 @@ export class Game {
 
   private applyTradeResult(ok: boolean, player: PlayerState, reason?: string): void {
     this.player = player;
-    this.message = ok ? "Transaction complete" : reason ?? "Transaction failed";
+    this.msg(ok ? "Transaction complete" : reason ?? "Transaction failed", ok ? "success" : "warning");
     this.audio.play(ok ? "tradeOk" : "tradeFail");
     this.persist();
   }
@@ -745,7 +747,7 @@ export class Game {
     if (this.player.docked) {
       this.player = { ...this.player, docked: false, velocity: vec3(), speed: 0 };
       this.mode = "flight";
-      this.message = "Launch clearance granted";
+      this.msg("Launch clearance granted", "success");
       this.audio.play("dock");
       this.persist();
       return;
@@ -753,7 +755,7 @@ export class Game {
 
     const stationDistance = distance(this.player.position, STATION_POSITION);
     if (stationDistance > DOCKING_RANGE) {
-      this.message = `Station approach required: ${stationDistance.toFixed(0)} units out`;
+      this.msg(`Station approach required: ${stationDistance.toFixed(0)} units out`, "warning");
       this.audio.play("tradeFail");
       return;
     }
@@ -761,7 +763,7 @@ export class Game {
     this.mode = "docking";
     this.dockingProgress = 0;
     this.projectiles = [];
-    this.message = "Auto-dock corridor engaged";
+    this.msg("Auto-dock corridor engaged");
   }
 
   private updateDocking(dt: number): void {
@@ -781,7 +783,7 @@ export class Game {
       this.player = { ...this.player, docked: true };
       this.mode = "docked";
       this.refreshMissions();
-      this.message = "Docking complete";
+      this.msg("Docking complete", "success");
       this.audio.play("dock");
       this.persist();
     }
@@ -791,12 +793,12 @@ export class Game {
     const current = this.systems[this.player.currentSystemId];
     const selected = this.systems[this.selectedSystemId];
     if (selected.id === current.id) {
-      this.message = "Already in this system";
+      this.msg("Already in this system", "warning");
       return;
     }
 
     if (!canJump(current, selected, this.player.fuel, this.player)) {
-      this.message = "Jump blocked: range or fuel insufficient";
+      this.msg("Jump blocked: range or fuel insufficient", "warning");
       this.audio.play("tradeFail");
       return;
     }
@@ -822,7 +824,7 @@ export class Game {
       this.player = deadlineResult.player;
       if (deadlineResult.failed) {
         this.runStats = recordMissionFailed(this.runStats);
-        this.message = "Mission failed: deadline passed";
+        this.msg("Mission failed: deadline passed", "danger");
         this.audio.play("missionFailed");
       }
     }
@@ -833,8 +835,9 @@ export class Game {
     this.enemyCooldown = this.enemy.fireCooldown;
     this.projectiles = [];
     this.mode = "flight";
-    if (!this.message.startsWith("Mission")) {
-      this.message = `Arrived at ${selected.name}`;
+    const lastEntry = this.messageLog.entries[this.messageLog.entries.length - 1];
+    if (!lastEntry || !lastEntry.text.startsWith("Mission")) {
+      this.msg(`Arrived at ${selected.name}`);
     }
     this.audio.play("jump");
     this.persist();
@@ -847,7 +850,7 @@ export class Game {
     this.runStats = addBalEarned(this.runStats, active.reward);
     this.runStats = recordMissionCompleted(this.runStats);
     this.player = completeMission(this.player, active);
-    this.message = `Mission complete: ${active.title}`;
+    this.msg(`Mission complete: ${active.title}`, "success");
     this.audio.play("missionComplete");
   }
 
@@ -916,12 +919,12 @@ export class Game {
         this.audio.play("ui");
 
         if (target.id === current.id) {
-          this.message = "Already in this system";
+          this.msg("Already in this system", "warning");
         } else if (!canJump(current, target, this.player.fuel, this.player)) {
           const withinRange = getJumpDistance(current, target) <= getPlayerShipStats(this.player).maxJumpRange;
-          this.message = withinRange ? "Insufficient fuel — buy fuel first" : "Out of jump range";
+          this.msg(withinRange ? "Insufficient fuel — buy fuel first" : "Out of jump range", "warning");
         } else {
-          this.message = `${target.name} selected — press Enter or JUMP to travel`;
+          this.msg(`${target.name} selected — press Enter or JUMP to travel`);
         }
         return;
       }
@@ -938,12 +941,12 @@ export class Game {
       this.audio.play("ui");
 
       if (target.id === current.id) {
-        this.message = "Already in this system";
+        this.msg("Already in this system", "warning");
       } else if (!canJump(current, target, this.player.fuel, this.player)) {
         const withinRange = getJumpDistance(current, target) <= getPlayerShipStats(this.player).maxJumpRange;
-        this.message = withinRange ? "Insufficient fuel — buy fuel first" : "Out of jump range";
+        this.msg(withinRange ? "Insufficient fuel — buy fuel first" : "Out of jump range", "warning");
       } else {
-        this.message = `${target.name} selected — press Enter or JUMP to travel`;
+        this.msg(`${target.name} selected — press Enter or JUMP to travel`);
       }
       return;
     }
@@ -1097,16 +1100,16 @@ export class Game {
       const mission = this.missions[index];
       if (mission) {
         if (this.player.activeMission) {
-          this.message = "Complete the active mission before accepting another";
+          this.msg("Complete the active mission before accepting another", "warning");
           this.audio.play("tradeFail");
         } else {
           const result = acceptMission(this.player, mission);
           if (!result.ok) {
-            this.message = result.reason ?? "Cannot accept mission";
+            this.msg(result.reason ?? "Cannot accept mission", "warning");
             this.audio.play("tradeFail");
           } else {
             this.player = result.player;
-            this.message = `Accepted: ${mission.title}`;
+            this.msg(`Accepted: ${mission.title}`, "success");
             this.audio.play(getUiSoundEvent("missionAccepted"));
             this.persist();
           }
@@ -1230,14 +1233,14 @@ export class Game {
     this.runStats = createRunStats(this.player.currentSystemId);
     this.isNewPersonalBest = false;
     this.mode = "flight";
-    this.message = "Launch complete";
+    this.msg("Launch complete", "success");
     this.persist();
   }
 
   private continueGame(): void {
     const save = loadGame();
     if (!save) {
-      this.message = "No valid save found";
+      this.msg("No valid save found", "warning");
       return;
     }
 
@@ -1266,7 +1269,7 @@ export class Game {
     this.runStats = save.runStats ?? createRunStats(this.player.currentSystemId);
     this.isNewPersonalBest = false;
     this.mode = this.player.docked ? "docked" : "flight";
-    this.message = "Save restored";
+    this.msg("Save restored", "success");
   }
 
   private refreshMarket(recordHistory: boolean): void {
@@ -1395,6 +1398,11 @@ export class Game {
     this.explosionEffect = state.explosionEffect;
     this.playerHitFlash = state.playerHitFlash;
     this.dockingProgress = state.dockingProgress;
+    this.messageLog = state.messageLog;
+  }
+
+  private msg(text: string, kind: MessageKind = "info"): void {
+    this.messageLog = pushMessage(this.messageLog, text, kind, this.lastTime);
   }
 
   private updateAmbient(): void {
@@ -1445,7 +1453,7 @@ export class Game {
       enemy: this.enemy,
       projectiles: this.projectiles,
       hasSave: hasSave(),
-      message: this.message,
+      messageLog: this.messageLog,
       stationPosition: STATION_POSITION,
       dockingProgress: this.dockingProgress,
       phosphorGlow: this.phosphorGlow,

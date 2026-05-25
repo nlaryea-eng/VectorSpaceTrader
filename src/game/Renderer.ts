@@ -1,6 +1,6 @@
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
-import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
+import { createHudShellLayout, formatSystemChip } from "./UiHost";
 import { getPanelChromeLayout, getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
 import { isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
@@ -25,6 +25,9 @@ import {
   getStationRecommendation,
   getStationServiceTiles
 } from "./SignalGlassScreens";
+import type { MessageLog, MessageKind } from "./TransientState";
+import { computeBodies } from "./SystemBodies";
+import { STATION_VERTICES, STATION_EDGES } from "./StationModel";
 import type {
   ButtonZone,
   CommodityId,
@@ -61,7 +64,7 @@ export interface RenderState {
   enemy: Ship;
   projectiles: Projectile[];
   hasSave: boolean;
-  message: string;
+  messageLog: MessageLog;
   stationPosition: Vector3;
   dockingProgress: number;
   phosphorGlow: boolean;
@@ -415,6 +418,7 @@ export class Renderer {
 
   private renderFlightView(state: RenderState): void {
     this.renderStars(state.player);
+    this.renderSystemBodies(state);
     this.renderStation(state);
     this.renderShip(state.enemy, state.player, THEME.colors.accentPink, state.phosphorGlow);
     this.renderProjectiles(state.projectiles, state.player);
@@ -428,9 +432,8 @@ export class Renderer {
       else this.renderHud(state);
       if (state.showTouchControls) this.renderTouchControls(state);
       if (state.playerHitFlash > 0) this.renderHitFlash(state.playerHitFlash);
-      if (state.message) {
-        if (this.signalGlassUi) this.renderSignalGlassToast(state.message);
-        else this.drawStatusMessage(state.message);
+      if (state.messageLog.entries.length > 0) {
+        this.renderMessageLog(state.messageLog);
       }
     } else {
       // Behind a modal panel: apply a solid dim over the wireframe vista so the
@@ -444,26 +447,52 @@ export class Renderer {
     }
   }
 
-  /** Status message — placed above the touch safe area so it never collides. */
-  private drawStatusMessage(message: string): void {
-    const text = message.toUpperCase();
-    const y = this.narrow
-      ? Math.min(this.height - NARROW_TOUCH_AREA - 18, this.height - 160)
-      : this.height - 90;
-    // Background pill so the message stays legible over the cockpit.
-    this.ctx.font = `13px ${THEME.fonts.accent}`;
-    const metrics = this.ctx.measureText(text);
-    const padX = 12;
-    const w = Math.min(this.width - 32, metrics.width + padX * 2);
-    const x = this.width / 2 - w / 2;
-    this.ctx.fillStyle = "rgba(2, 4, 8, 0.7)";
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y - 13, w, 26, 4);
-    this.ctx.fill();
-    this.drawText(text, this.width / 2, y, {
-      align: "center", color: THEME.colors.accentAmber, size: 13, font: THEME.fonts.accent
-    });
+  private msgKindColor(kind: MessageKind): string {
+    if (kind === "success") return THEME.colors.accentTeal;
+    if (kind === "warning") return THEME.colors.accentAmber;
+    if (kind === "danger") return THEME.colors.accentPink;
+    return THEME.colors.textPrimary;
   }
+
+  private renderMessageLog(log: MessageLog): void {
+    const entries = log.entries.slice(-5);
+    if (entries.length === 0) return;
+
+    const rowH = 18;
+    const padX = 12;
+    const padY = 5;
+    const fontSize = 11;
+
+    this.ctx.font = `${fontSize}px ${THEME.fonts.mono}`;
+    let maxW = 0;
+    for (const e of entries) {
+      const m = this.ctx.measureText(e.text.toUpperCase());
+      if (m.width > maxW) maxW = m.width;
+    }
+    const panelW = Math.min(this.width - 32, maxW + padX * 2);
+    const panelH = entries.length * rowH + padY * 2;
+    const panelX = this.width / 2 - panelW / 2;
+    const panelY = this.narrow
+      ? this.height - NARROW_TOUCH_AREA - panelH - 6
+      : this.height - panelH - 38;
+
+    this.ctx.fillStyle = "rgba(2, 4, 8, 0.65)";
+    this.ctx.beginPath();
+    this.ctx.roundRect(panelX, panelY, panelW, panelH, 4);
+    this.ctx.fill();
+
+    entries.forEach((entry, i) => {
+      const alpha = 0.35 + (i / (entries.length - 1 || 1)) * 0.65;
+      const color = this.msgKindColor(entry.kind);
+      const ey = panelY + padY + i * rowH + rowH / 2;
+      this.ctx.globalAlpha = alpha;
+      this.drawText(entry.text.toUpperCase(), this.width / 2, ey, {
+        align: "center", color, size: fontSize, font: THEME.fonts.mono
+      });
+    });
+    this.ctx.globalAlpha = 1;
+  }
+
 
   private renderStars(player: PlayerState): void {
     this.setVectorStroke(THEME.colors.accentViolet, 1, false);
@@ -488,6 +517,41 @@ export class Renderer {
     }
 
     this.ctx.globalAlpha = 1;
+  }
+
+  private renderSystemBodies(state: RenderState): void {
+    const bodies = computeBodies(state.player.currentSystemId, state.player.currentSystemId * 31337);
+    for (const body of bodies) {
+      const rel = {
+        x: body.position.x - state.player.position.x,
+        y: body.position.y - state.player.position.y,
+        z: body.position.z - state.player.position.z,
+      };
+      const t = performance.now() * body.rotationRate;
+      const cosT = Math.cos(t);
+      const sinT = Math.sin(t);
+      const rotated = body.vertices.map(v => ({
+        x: v.x * cosT - v.z * sinT,
+        y: v.y,
+        z: v.x * sinT + v.z * cosT,
+      }));
+      const projected = rotated.map(v => this.project({
+        x: v.x + rel.x,
+        y: v.y + rel.y,
+        z: v.z + rel.z,
+      }));
+      const color = body.kind === "sun" ? THEME.colors.accentAmber : THEME.colors.accentViolet;
+      this.setVectorStroke(color, body.kind === "sun" ? 1.2 : 0.9, state.phosphorGlow);
+      for (const [from, to] of body.edges) {
+        const a = projected[from];
+        const b = projected[to];
+        if (!a.visible || !b.visible) continue;
+        this.ctx.beginPath();
+        this.ctx.moveTo(a.x, a.y);
+        this.ctx.lineTo(b.x, b.y);
+        this.ctx.stroke();
+      }
+    }
   }
 
   private renderCockpitOverlay(state: RenderState): void {
@@ -551,30 +615,44 @@ export class Renderer {
 
   private renderStation(state: RenderState): void {
     const relative = subtractPoint(state.stationPosition, state.player.position);
-    const point = this.project(relative);
-    const cx = point.visible ? point.x : this.width * 0.78;
-    const cy = point.visible ? point.y : this.height * 0.34;
-    const size = Math.max(18, Math.min(54, 28 * (point.scale || 1)));
+    // Determine scale from centre-projected point for the model display size.
+    const centrePoint = this.project(relative);
+    const modelScale = Math.max(2.2, Math.min(7, 22 * (centrePoint.scale || 0.3)));
+    const t = performance.now() * 0.00018; // ring rotation rate
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
 
     this.setVectorStroke(THEME.colors.accentAmber, 1.2, state.phosphorGlow);
-    this.ctx.save();
-    this.ctx.translate(cx, cy);
-    this.ctx.rotate(performance.now() * 0.00025);
-    this.ctx.beginPath();
-    for (let index = 0; index < 8; index += 1) {
-      const angle = (Math.PI * 2 * index) / 8;
-      const x = Math.cos(angle) * size;
-      const y = Math.sin(angle) * size;
-      if (index === 0) this.ctx.moveTo(x, y);
-      else this.ctx.lineTo(x, y);
-    }
-    this.ctx.closePath();
-    this.ctx.stroke();
-    this.ctx.strokeRect(-size * 0.4, -size * 0.4, size * 0.8, size * 0.8);
-    this.ctx.restore();
-    this.drawText("STATION", cx, cy + size + 20, {
-      align: "center", color: THEME.colors.accentAmber, size: 10, font: THEME.fonts.mono
+
+    // Separate the ring (first RING_COUNT verts) from fixed structure.
+    // Ring vertices rotate; spire and trusses/beacons are static.
+    const RING_COUNT = 12;
+    const projected = STATION_VERTICES.map((v, idx) => {
+      let wx = v.x;
+      let wy = v.y;
+      let wz = v.z;
+      if (idx < RING_COUNT) {
+        // Rotate the ring around Y
+        wx = v.x * cosT - v.z * sinT;
+        wz = v.x * sinT + v.z * cosT;
+        wy = v.y;
+      }
+      return this.project({
+        x: wx * modelScale + relative.x,
+        y: wy * modelScale + relative.y,
+        z: wz * modelScale + relative.z,
+      });
     });
+
+    for (const [from, to] of STATION_EDGES) {
+      const a = projected[from];
+      const b = projected[to];
+      if (!a.visible || !b.visible) continue;
+      this.ctx.beginPath();
+      this.ctx.moveTo(a.x, a.y);
+      this.ctx.lineTo(b.x, b.y);
+      this.ctx.stroke();
+    }
   }
 
   private renderShip(ship: Ship, player: PlayerState, color: string, glow: boolean): void {
@@ -2433,7 +2511,7 @@ export class Renderer {
     const barH = lineHeight * lines.length + padding * 2;
     const barX = this.width / 2 - barW / 2;
 
-    const barY = getOnboardingHintY(state.mode, this.height, barH, this.narrow, Boolean(state.message));
+    const barY = getOnboardingHintY(state.mode, this.height, barH, this.narrow, state.messageLog.entries.length > 0);
 
     this.ctx.fillStyle = THEME.colors.bgGlass;
     this.ctx.beginPath();
@@ -2497,29 +2575,6 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
   }
 
-  private renderSignalGlassToast(message: string): void {
-    const toast = createToastModel(message, { width: this.width, height: this.height });
-    if (!toast) return;
-    const colors = SIGNAL_GLASS_THEME.colors;
-    const toneColor = toast.tone === "success"
-      ? colors.success
-      : toast.tone === "warning"
-        ? colors.warning
-        : toast.tone === "danger"
-          ? colors.danger
-          : colors.accent;
-
-    this.signalPanel(toast.bounds.x, toast.bounds.y, toast.bounds.width, toast.bounds.height, "overlay");
-    this.ctx.fillStyle = toneColor;
-    this.ctx.beginPath();
-    this.ctx.roundRect(toast.bounds.x + 10, toast.bounds.y + 10, 3, toast.bounds.height - 20, 2);
-    this.ctx.fill();
-    this.drawText(toast.text.toUpperCase(), toast.bounds.x + 24, toast.bounds.y + toast.bounds.height / 2, {
-      color: colors.text,
-      size: this.narrow ? 10 : 12,
-      font: THEME.fonts.mono
-    });
-  }
 
   private project(point: Vector3): ProjectedPoint {
     const z = point.z + 120;

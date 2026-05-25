@@ -1,5 +1,5 @@
 import type { CargoHold, CommodityId, EconomyState, EquipmentState, Meta, Mission, PlayerState, PriceHistoryEntry, SaveData, Settings } from "./types";
-import { DEFAULT_EQUIPMENT } from "./Equipment";
+import { DEFAULT_EQUIPMENT, isPurchasable } from "./Equipment";
 import { normalizeOnboardingMeta } from "./Onboarding";
 import { createRunStats, type RunStats } from "./RunStats";
 import { applyPlayerShipStats, isPlayerShipId, normalizeShipId } from "./Ships";
@@ -376,6 +376,10 @@ function normalizeEquipment(value: unknown): EquipmentState | null {
     if (value[key] === undefined) continue;
     if (typeof value[key] !== "boolean") return null;
     result[key] = value[key];
+  }
+  // Idempotent: strip noop/cosmetic items silently (no refund)
+  for (const key of Object.keys(result) as Array<keyof EquipmentState>) {
+    if (!isPurchasable(key)) result[key] = false;
   }
   return result;
 }

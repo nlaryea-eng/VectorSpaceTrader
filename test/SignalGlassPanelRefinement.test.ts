@@ -124,7 +124,7 @@ function state(mode: GameMode, overrides: Partial<RenderState> = {}): RenderStat
     },
     projectiles: [],
     hasSave: false,
-    message: "",
+    messageLog: { entries: [], nextSeq: 0 },
     stationPosition: { x: 0, y: 0, z: 0 },
     dockingProgress: 0,
     phosphorGlow: true,
