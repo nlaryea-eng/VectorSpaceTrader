@@ -26,6 +26,7 @@ import {
   getStationServiceTiles
 } from "./SignalGlassScreens";
 import type { MessageLog, MessageKind } from "./TransientState";
+import { computeBodies } from "./SystemBodies";
 import type {
   ButtonZone,
   CommodityId,
@@ -416,6 +417,7 @@ export class Renderer {
 
   private renderFlightView(state: RenderState): void {
     this.renderStars(state.player);
+    this.renderSystemBodies(state);
     this.renderStation(state);
     this.renderShip(state.enemy, state.player, THEME.colors.accentPink, state.phosphorGlow);
     this.renderProjectiles(state.projectiles, state.player);
@@ -514,6 +516,41 @@ export class Renderer {
     }
 
     this.ctx.globalAlpha = 1;
+  }
+
+  private renderSystemBodies(state: RenderState): void {
+    const bodies = computeBodies(state.player.currentSystemId, state.player.currentSystemId * 31337);
+    for (const body of bodies) {
+      const rel = {
+        x: body.position.x - state.player.position.x,
+        y: body.position.y - state.player.position.y,
+        z: body.position.z - state.player.position.z,
+      };
+      const t = performance.now() * body.rotationRate;
+      const cosT = Math.cos(t);
+      const sinT = Math.sin(t);
+      const rotated = body.vertices.map(v => ({
+        x: v.x * cosT - v.z * sinT,
+        y: v.y,
+        z: v.x * sinT + v.z * cosT,
+      }));
+      const projected = rotated.map(v => this.project({
+        x: v.x + rel.x,
+        y: v.y + rel.y,
+        z: v.z + rel.z,
+      }));
+      const color = body.kind === "sun" ? THEME.colors.accentAmber : THEME.colors.accentViolet;
+      this.setVectorStroke(color, body.kind === "sun" ? 1.2 : 0.9, state.phosphorGlow);
+      for (const [from, to] of body.edges) {
+        const a = projected[from];
+        const b = projected[to];
+        if (!a.visible || !b.visible) continue;
+        this.ctx.beginPath();
+        this.ctx.moveTo(a.x, a.y);
+        this.ctx.lineTo(b.x, b.y);
+        this.ctx.stroke();
+      }
+    }
   }
 
   private renderCockpitOverlay(state: RenderState): void {
