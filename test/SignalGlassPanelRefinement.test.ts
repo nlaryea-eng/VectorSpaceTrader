@@ -159,6 +159,7 @@ function state(mode: GameMode, overrides: Partial<RenderState> = {}): RenderStat
     helpPageIndex: 0,
     shipyardPage: 0,
     shipyardClassFilter: "all",
+    showTouchControls: true,
     ...overrides
   };
 }
@@ -390,6 +391,22 @@ describe("Signal Glass panel refinement button zones", () => {
     for (const seg of summarySegments) {
       expect(seg.color, `"${seg.text}" should be muted but got ${seg.color}`).toBe(muted);
     }
+  });
+
+  // R5: touch button zones must be absent when showTouchControls is false (desktop pointer detected).
+  it("R5: suppresses touch overlay button zones when showTouchControls is false", () => {
+    const viewport = { width: 390, height: 844 };
+    // Flight mode, pointer device detected → no touch-* zones registered.
+    const buttons = render("flight", viewport, { showTouchControls: false });
+    const touchZones = buttons.filter((b) => b.id.startsWith("touch-"));
+    expect(touchZones).toHaveLength(0);
+  });
+
+  it("R5: registers touch overlay button zones when showTouchControls is true", () => {
+    const viewport = { width: 390, height: 844 };
+    const buttons = render("flight", viewport, { showTouchControls: true });
+    const touchZones = buttons.filter((b) => b.id.startsWith("touch-"));
+    expect(touchZones.length).toBeGreaterThan(0);
   });
 
   it("keeps Pause summary microcopy readable and buttons separated", () => {

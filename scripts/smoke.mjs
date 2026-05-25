@@ -569,6 +569,11 @@ function makeTarget(send, sessionId) {
         width, height, deviceScaleFactor: 1, mobile,
         screenWidth: width, screenHeight: height
       }, sessionId);
+      // Touch emulation sets navigator.maxTouchPoints so shouldShowTouchControls()
+      // correctly returns true on the mobile smoke pass.
+      if (mobile) {
+        await send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 }, sessionId);
+      }
     },
     async navigate(url) { await send("Page.navigate", { url }, sessionId); },
     async waitForLoad() {

@@ -37,6 +37,7 @@ import { createInitialTransientState } from "./TransientState";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
 import { HELP_CONTENT, getHelpSectionForMode, searchHelpContent, type HelpSectionId } from "./HelpContent";
+import { shouldShowTouchControls } from "./Layout";
 import type {
   ButtonZone,
   EconomyState,
@@ -1450,6 +1451,7 @@ export class Game {
       helpSearchQuery: this.helpSearchQuery,
       shipyardPage: this.shipyardPage,
       shipyardClassFilter: this.shipyardClassFilter,
+      showTouchControls: shouldShowTouchControls(),
     });
   }
 }

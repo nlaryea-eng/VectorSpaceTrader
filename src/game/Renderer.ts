@@ -87,6 +87,8 @@ export interface RenderState {
   helpSearchQuery?: string;
   shipyardPage: number;
   shipyardClassFilter: ShipClassId | "all";
+  /** False when a fine pointer device is detected — suppresses on-screen touch overlay in flight. */
+  showTouchControls: boolean;
 }
 
 interface ProjectedPoint {
@@ -421,7 +423,7 @@ export class Renderer {
       this.renderCockpitOverlay(state);
       if (this.signalGlassUi) this.renderSignalGlassHud(state);
       else this.renderHud(state);
-      this.renderTouchControls(state);
+      if (state.showTouchControls) this.renderTouchControls(state);
       if (state.playerHitFlash > 0) this.renderHitFlash(state.playerHitFlash);
       if (state.message) {
         if (this.signalGlassUi) this.renderSignalGlassToast(state.message);

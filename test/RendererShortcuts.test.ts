@@ -92,7 +92,8 @@ function stubState(mode: GameMode, docked = false): RenderState {
     helpSectionId: "quickStart",
     helpPageIndex: 0,
     shipyardPage: 0,
-    shipyardClassFilter: "all"
+    shipyardClassFilter: "all",
+    showTouchControls: true
   };
 }
 
