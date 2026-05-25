@@ -10,7 +10,7 @@ Renderer Containment 1
 `sprint/renderer-containment-1`
 
 ## Commit hash(es)
-Pending final commit hash.
+`5e20dc1` - `refactor(render): extract shared renderer infrastructure`
 
 ## Objective
 Establish shared renderer infrastructure under `src/game/render/` while keeping `Renderer.ts` as the sole screen facade and orchestrator.
