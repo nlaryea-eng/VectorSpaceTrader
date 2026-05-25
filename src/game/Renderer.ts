@@ -271,9 +271,12 @@ export class Renderer {
       // Panel modes (map, trade, equipment, shipyard, missions, docked, help) own their
       // own footer with shortcut text, so the global strip is suppressed there.
       // True modal dialogs (paused, settings, gameOver) also suppress both layers.
+      // Exception: docked/shipyard allow the onboarding hint (positioned by getOnboardingHintY).
       if (!this.isOverlayMode(state.mode)) {
         this.renderModeHelpText(state);
         if (state.activeHint !== null) this.renderOnboardingHint(state, state.activeHint);
+      } else if ((state.mode === "docked" || state.mode === "shipyard") && state.activeHint !== null) {
+        this.renderOnboardingHint(state, state.activeHint);
       }
     }
   }
@@ -704,11 +707,30 @@ export class Renderer {
       });
     }
 
-    this.signalChip(layout.systemChip.x, layout.systemChip.y, layout.systemChip.width, layout.systemChip.height, formatSystemChip(system), colors.accent);
-    const missionText = activeMission
-      ? `${activeMission.title} -> ${state.systems[activeMission.destinationSystemId]?.name ?? "Unknown"}`
-      : "No active mission";
-    this.signalChip(layout.missionChip.x, layout.missionChip.y, layout.missionChip.width, layout.missionChip.height, missionText, activeMission ? colors.accent2 : colors.textMuted);
+    // Unified top capsule: system info on line 1, active mission on line 2.
+    const cap = layout.topCapsule;
+    this.signalPanel(cap.x, cap.y, cap.width, cap.height, "base");
+    const systemLabel = formatSystemChip(system);
+    if (layout.compact) {
+      // Single line on mobile (height=32).
+      const missionLabel = activeMission
+        ? `  |  ${activeMission.title}`
+        : "";
+      this.drawText(`${systemLabel}${missionLabel}`, cap.x + cap.width / 2, cap.y + 20, {
+        align: "center", size: 10, font: THEME.fonts.mono, color: colors.accent
+      });
+    } else {
+      // Two lines on desktop (height=44).
+      this.drawText(systemLabel, cap.x + 12, cap.y + 16, {
+        size: 11, font: THEME.fonts.mono, color: colors.accent
+      });
+      const missionText = activeMission
+        ? `${activeMission.title} → ${state.systems[activeMission.destinationSystemId]?.name ?? "?"}`
+        : "No active mission";
+      this.drawText(missionText, cap.x + 12, cap.y + 34, {
+        size: 10, font: THEME.fonts.mono, color: activeMission ? colors.accent2 : colors.textMuted
+      });
+    }
 
     if (!layout.compact) {
       const threat = state.enemy.alive ? "CONTACT ACTIVE" : "LANE CLEAR";
@@ -860,12 +882,20 @@ export class Renderer {
    * State-accurate shortcut strip. Shows only shortcuts valid for the current
    * mode and docking state — never advertises [T] Trade or [Space] Fire when
    * those keys do nothing.
+   *
+   * In Signal Glass flight mode the top capsule occupies y=16..60 (desktop).
+   * The strip is moved to y=68 so it sits cleanly below the capsule rather
+   * than overlapping it. On mobile the strip stays at y=92 (below the HUD band).
    */
   private renderModeHelpText(state: RenderState): void {
+    // Suppress the strip when an onboarding hint already occupies the bottom area.
+    if (this.signalGlassUi && state.activeHint !== null) return;
     const tips = this.getModeShortcuts(state);
     if (tips.length === 0) return;
     const text = tips.join("  ");
-    const y = this.narrow ? 92 : 24;
+    const y = this.narrow
+      ? 92
+      : (this.signalGlassUi && state.mode === "flight" ? 68 : 24);
     this.drawText(text, this.width / 2, y, {
       align: "center", color: "rgba(0, 242, 255, 0.6)", size: this.narrow ? 9 : 10, font: THEME.fonts.mono
     });
@@ -1234,13 +1264,19 @@ export class Renderer {
       });
     }
 
+    // Service action zone — computed first so recommendation card can snap to it.
+    const serviceY = this.narrow ? panelY + panelH - 240 : this.height * 0.67;
+
     if (this.signalGlassUi) {
       const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
       const recommendation = getStationRecommendation(state.player, system, state.market, repairCost);
       const recW = this.narrow ? panelW - 32 : Math.min(520, panelW - 64);
       const recX = this.width / 2 - recW / 2;
-      const recY = this.narrow ? panelY + panelH - 322 : this.height * 0.52;
-      this.signalPanel(recX, recY, recW, this.narrow ? 62 : 70, "base");
+      const recH = this.narrow ? 62 : 70;
+      // Snap recommendation card close to service actions (gap ≤ 16px mobile / 24px desktop).
+      const maxGap = this.narrow ? 16 : 24;
+      const recY = serviceY - recH - maxGap;
+      this.signalPanel(recX, recY, recW, recH, "base");
       this.drawText("RECOMMENDED NEXT ACTION", recX + 14, recY + 16, {
         color: SIGNAL_GLASS_THEME.colors.textMuted, size: 9, font: THEME.fonts.mono
       });
@@ -1255,7 +1291,7 @@ export class Renderer {
     if (this.narrow) {
       // Two-column grid of station service buttons that fits at 390px.
       const cols = 2;
-      const buttonsTop = panelY + panelH - 240;
+      const buttonsTop = serviceY;
       const bgap = 8;
       const bw = (panelW - 32 - bgap * (cols - 1)) / cols;
       const bh = 36;
@@ -1278,7 +1314,7 @@ export class Renderer {
       const launchY = buttonsTop + Math.ceil(labels.length / cols) * (bh + bgap) + 8;
       this.button("touch-dock", "LAUNCH", panelX + 16, launchY, panelW - 32, bh + 4);
     } else {
-      const y = this.height * 0.67;
+      const y = serviceY;
       const bw = 84;
       const bgap = 10;
       const tiles = this.signalGlassUi ? getStationServiceTiles(system) : null;
@@ -1290,7 +1326,8 @@ export class Renderer {
       labels.slice(0, 5).forEach(([id, label], index) => {
         this.button(id, label, startX + (bw + bgap) * index, y, bw, 42);
         if (tiles && tiles[index] && !tiles[index].available) {
-          this.drawText(tiles[index].why.toUpperCase(), startX + (bw + bgap) * index + bw / 2, y + 56, {
+          // Show unavailable reason inside the button bounds (inline, not floating label).
+          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + (bw + bgap) * index + bw / 2, y + 34, {
             align: "center", color: SIGNAL_GLASS_THEME.colors.textDim, size: 7, font: THEME.fonts.mono
           });
         }
@@ -1377,17 +1414,32 @@ export class Renderer {
         align: "center", color: THEME.colors.textDim, size: 9, font: THEME.fonts.mono
       });
     } else {
-      const left = this.width * 0.12;
+      const left = panelX + 16;
+      const wideRowW = panelW - 32;
       const headerSize = 10;
-      this.drawText("ID", left, top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("COMMODITY", left + 50, top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("PRICE", left + 260, top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("TREND", left + 340, top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("SUPPLY", left + 430, top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("HELD", left + 520, top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("P/L", left + 610, top - 28, { color: headerColor, font: headerFont, size: headerSize });
+      // Numeric column right-edge anchors — all values in a column share the same x.
+      const cPriceR = left + Math.round(wideRowW * 0.33);
+      const cTrendR = left + Math.round(wideRowW * 0.45);
+      const cSupplyR = left + Math.round(wideRowW * 0.57);
+      const cHeldR  = left + Math.round(wideRowW * 0.70);
+      const cPLR    = left + wideRowW;
 
-      const wideRowW = this.width * 0.76;
+      this.drawText("ID",        left,         top - 28, { color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("COMMODITY", left + 32,    top - 28, { color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("PRICE",     cPriceR,      top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("TREND",     cTrendR,      top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("SUPPLY",    cSupplyR,     top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("HELD",      cHeldR,       top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("P/L",       cPLR,         top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+
+      // Subtle header separator
+      this.ctx.strokeStyle = "rgba(0, 242, 255, 0.15)";
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.moveTo(left, top - 10);
+      this.ctx.lineTo(left + wideRowW, top - 10);
+      this.ctx.stroke();
+
       state.market.forEach((item, index) => {
         const y = top + index * 36;
         const rowY = y - 16;
@@ -1414,18 +1466,28 @@ export class Renderer {
         const held = state.player.cargo[item.id] ?? 0;
         const pl = this.formatProfitLoss(held, state.player.cargoCostBasis[item.id], item.price, false);
 
-        this.drawText(`${index + 1}`, left, y, { size: rowSize, font: rowFont, color: THEME.colors.textDim });
-        this.drawText(item.name.toUpperCase(), left + 50, y, { size: rowSize, font: THEME.fonts.accent, color: THEME.colors.textPrimary });
-        this.drawText(`${item.price}`, left + 260, y, { size: rowSize, font: rowFont });
-        this.drawText(trendText, left + 340, y, { size: 12, font: rowFont, color: trendColor });
-        this.drawText(`${item.quantity}`, left + 430, y, { size: rowSize, font: rowFont });
-        this.drawText(`${held}`, left + 520, y, { size: rowSize, font: rowFont, color: THEME.colors.accentAmber });
-        this.drawText(pl.text, left + 610, y, { size: rowSize, font: rowFont, color: pl.color });
+        this.drawText(`${index + 1}`,         left,      y, { size: rowSize, font: rowFont, color: THEME.colors.textDim });
+        this.drawText(item.name.toUpperCase(), left + 32, y, { size: rowSize, font: THEME.fonts.accent, color: THEME.colors.textPrimary });
+        this.drawText(`${item.price}`,  cPriceR,  y, { align: "right", size: rowSize, font: rowFont });
+        this.drawText(trendText,         cTrendR,  y, { align: "right", size: 12, font: rowFont, color: trendColor });
+        this.drawText(`${item.quantity}`, cSupplyR, y, { align: "right", size: rowSize, font: rowFont });
+        this.drawText(`${held}`,         cHeldR,   y, { align: "right", size: rowSize, font: rowFont, color: THEME.colors.accentAmber });
+        this.drawText(pl.text,           cPLR,     y, { align: "right", size: rowSize, font: rowFont, color: pl.color });
+
+        // Row separator
+        if (index < state.market.length - 1) {
+          this.ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+          this.ctx.lineWidth = 1;
+          this.ctx.beginPath();
+          this.ctx.moveTo(left, rowY + 32);
+          this.ctx.lineTo(left + wideRowW, rowY + 32);
+          this.ctx.stroke();
+        }
       });
 
       this.drawText(
         "CLICK BUY · SHIFT+CLICK SELL · ALT+CLICK MAX · F REFUEL · ESC BACK",
-        this.width / 2, this.height * 0.84, { align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono }
+        panelX + panelW / 2, panelY + panelH - 18, { align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono }
       );
     }
   }
@@ -1506,45 +1568,64 @@ export class Renderer {
       }
     });
 
-    const pageY = top + visibleEquipment.length * rowSpacing + 8;
-    this.drawText(`PAGE ${page + 1}/${pageCount} · ${profile.label.toUpperCase()}`, left, pageY, {
+    // Footer zone — category/page controls and repair status are pinned to the
+    // bottom band so they never float mid-panel based on item count.
+    const footerBandH = this.narrow ? 96 : 84;
+    const footerBandY = panelY + panelH - footerBandH;
+    const footerCtrlY = footerBandY + (this.narrow ? 16 : 14);
+    const footerRepairY = footerBandY + (this.narrow ? 56 : 46);
+
+    // Subtle separator above footer band
+    this.ctx.strokeStyle = "rgba(0, 242, 255, 0.12)";
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.moveTo(panelX + 8, footerBandY);
+    this.ctx.lineTo(panelX + panelW - 8, footerBandY);
+    this.ctx.stroke();
+
+    this.drawText(`PAGE ${page + 1}/${pageCount} · ${profile.label.toUpperCase()}`, left, footerCtrlY + 14, {
       color: THEME.colors.accentTeal, size: 11, font: THEME.fonts.mono
     });
 
     const catLabel = `CAT: ${state.equipmentCategoryFilter.toUpperCase()}`;
-    this.button("equip-category-cycle", catLabel, left + (this.narrow ? rowW - 252 : 440), pageY - 18, 100, 32);
+    if (this.narrow) {
+      this.button("equip-category-cycle", catLabel, left + rowW - 252, footerCtrlY, 100, 32);
+      if (page > 0) this.button("equip-page-prev", "PREV", left + rowW - 148, footerCtrlY, 70, 32);
+      if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + rowW - 74, footerCtrlY, 70, 32);
+    } else {
+      this.button("equip-category-cycle", catLabel, left + 200, footerCtrlY, 100, 32);
+      if (page > 0) this.button("equip-page-prev", "PREV", left + 310, footerCtrlY, 70, 32);
+      if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + 390, footerCtrlY, 70, 32);
+    }
 
-    if (page > 0) this.button("equip-page-prev", "PREV", left + (this.narrow ? rowW - 148 : 548), pageY - 18, 70, 32);
-    if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + (this.narrow ? rowW - 74 : 626), pageY - 18, 70, 32);
-
-    const repairY = pageY + (this.narrow ? 56 : 44);
+    // Repair status in subheader of footer band
     const missing = state.player.maxHull - state.player.hull;
     const hullFraction = state.player.hull / state.player.maxHull;
     const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
 
-    this.drawText(`HULL:`, left, repairY, { size: 12, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
-    this.drawProgressBar(left + 48, repairY - 6, this.narrow ? 100 : 120, 12, hullFraction, hullColor);
-    this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, left + (this.narrow ? 158 : 178), repairY, { size: 11, font: THEME.fonts.mono, color: hullColor });
+    this.drawText("HULL:", left, footerRepairY, { size: 12, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
+    this.drawProgressBar(left + 48, footerRepairY - 6, this.narrow ? 100 : 120, 12, hullFraction, hullColor);
+    this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, left + (this.narrow ? 158 : 178), footerRepairY, { size: 11, font: THEME.fonts.mono, color: hullColor });
 
     if (missing > 0) {
       const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
       const repairLabel = `REPAIR HULL (${repairCost} BAL) [H]`;
       if (this.narrow) {
-        this.button("equip-repair", repairLabel, left, repairY + 18, rowW, 36);
+        this.button("equip-repair", repairLabel, left + rowW - 252, footerRepairY - 14, rowW - (rowW - 248), 32);
       } else {
-        this.button("equip-repair", repairLabel, left + 360, repairY - 18, 240, 36);
+        this.button("equip-repair", repairLabel, left + 200, footerRepairY - 14, 240, 32);
       }
     } else {
       const opLabel = "HULL FULLY OPERATIONAL";
       if (this.narrow) {
-        this.drawText(opLabel, this.width / 2, repairY + 32, { align: "center", size: 11, font: THEME.fonts.accent, color: THEME.colors.success });
+        this.drawText(opLabel, left + rowW - 126, footerRepairY, { align: "center", size: 10, font: THEME.fonts.accent, color: THEME.colors.success });
       } else {
-        this.drawText(opLabel, left + 360, repairY, { size: 12, font: THEME.fonts.accent, color: THEME.colors.success });
+        this.drawText(opLabel, left + 200, footerRepairY, { size: 11, font: THEME.fonts.accent, color: THEME.colors.success });
       }
     }
 
     const footer = this.narrow ? "TAP TO BUY · N/P PAGES · H REPAIR" : "CLICK ROW TO PURCHASE · N/P PAGES · H REPAIR (HERE) · ESC BACK";
-    this.drawText(footer, this.width / 2, panelY + panelH - 18, {
+    this.drawText(footer, panelX + panelW / 2, panelY + panelH - 8, {
       align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono
     });
   }
@@ -1742,8 +1823,10 @@ export class Renderer {
     if (state.missions.length === 0) {
       const emptyCardW = this.narrow ? panelW - 32 : Math.min(540, panelW - 80);
       const emptyCardH = this.narrow ? 108 : 128;
-      const emptyCardX = this.width / 2 - emptyCardW / 2;
+      // Center the card within the panel, not the viewport.
+      const emptyCardX = panelX + (panelW - emptyCardW) / 2;
       const emptyCardY = top + (this.narrow ? 8 : 24);
+      const cardCenterX = emptyCardX + emptyCardW / 2;
       this.signalGlassUi
         ? this.signalPanel(emptyCardX, emptyCardY, emptyCardW, emptyCardH, "base")
         : (() => {
@@ -1752,24 +1835,28 @@ export class Renderer {
             this.ctx.roundRect(emptyCardX, emptyCardY, emptyCardW, emptyCardH, 8);
             this.ctx.fill();
           })();
-      this.drawText("NO CONTRACTS AVAILABLE HERE", this.width / 2, emptyCardY + (this.narrow ? 26 : 34), {
+      this.drawText("NO CONTRACTS AVAILABLE HERE", cardCenterX, emptyCardY + (this.narrow ? 26 : 34), {
         align: "center", color: THEME.colors.accentAmber, size: this.narrow ? 14 : 18, font: THEME.fonts.accent
       });
       const system = state.systems[state.player.currentSystemId];
       const whyText = system
         ? `${system.name.toUpperCase()} HAS NO ACTIVE POSTINGS AT THIS TIME.`
         : "NO ACTIVE POSTINGS AT THIS STATION.";
-      this.drawText(whyText, this.width / 2, emptyCardY + (this.narrow ? 50 : 66), {
+      this.drawText(whyText, cardCenterX, emptyCardY + (this.narrow ? 50 : 66), {
         align: "center", color: THEME.colors.textSecondary, size: this.narrow ? 10 : 12, font: THEME.fonts.mono
       });
-      this.drawText("TRY JUMPING TO ANOTHER SYSTEM OR CHECKING BACK AFTER A TRANSIT.", this.width / 2, emptyCardY + (this.narrow ? 70 : 90), {
+      this.drawText("TRY JUMPING TO ANOTHER SYSTEM OR CHECKING BACK AFTER A TRANSIT.", cardCenterX, emptyCardY + (this.narrow ? 70 : 90), {
         align: "center", color: THEME.colors.textDim, size: this.narrow ? 9 : 11, font: THEME.fonts.mono
       });
-      const actionY = emptyCardY + emptyCardH + (this.narrow ? 10 : 16);
-      const btnW = this.narrow ? (rowW - 16) / 2 : 140;
-      const btnH = this.narrow ? 34 : 38;
-      this.button("touch-dock", "LAUNCH [D]", left, actionY, btnW, btnH);
-      this.button("map-open", "OPEN MAP [M]", left + btnW + (this.narrow ? 16 : 16), actionY, btnW, btnH);
+      // Action buttons attached below the card, centered with it.
+      const actionY = emptyCardY + emptyCardH + (this.narrow ? 10 : 14);
+      const btnW = this.narrow ? (emptyCardW - 16) / 2 : 148;
+      const btnH = this.narrow ? 36 : 40;
+      const btnGap = this.narrow ? 16 : 12;
+      const btnsW = btnW * 2 + btnGap;
+      const btnStartX = emptyCardX + (emptyCardW - btnsW) / 2;
+      this.button("touch-dock", "LAUNCH [D]", btnStartX, actionY, btnW, btnH);
+      this.button("map-open", "OPEN MAP [M]", btnStartX + btnW + btnGap, actionY, btnW, btnH);
     }
 
     state.missions.slice(0, maxRows).forEach((mission, index) => {

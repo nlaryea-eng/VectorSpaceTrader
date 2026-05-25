@@ -12,8 +12,8 @@ export interface UiLayer {
 export interface HudShellLayout {
   vitals: PanelBounds;
   status: PanelBounds;
-  systemChip: PanelBounds;
-  missionChip: PanelBounds;
+  /** Single compact capsule replacing the old separate systemChip + missionChip strips. */
+  topCapsule: PanelBounds;
   threatChip: PanelBounds;
   touchReserved: PanelBounds;
   compact: boolean;
@@ -55,24 +55,27 @@ export function createHudShellLayout(size: ViewportSize): HudShellLayout {
   const touchReserved = { ...touchArea, fullScreen: false };
 
   if (hud.compact) {
+    // Mobile: capsule sits below the compact vitals band (y=8,h=64+26=106).
+    // Height ≤ 36px per requirement.
     return {
       vitals: hud.vitals,
       status: hud.status,
-      systemChip: { x: 12, y: 110, width: size.width - 24, height: 24, fullScreen: false },
-      missionChip: { x: 12, y: 138, width: size.width - 24, height: 24, fullScreen: false },
-      threatChip: { x: size.width - 108, y: 168, width: 96, height: 24, fullScreen: false },
+      topCapsule: { x: 12, y: 110, width: size.width - 24, height: 32, fullScreen: false },
+      threatChip: { x: size.width - 108, y: 148, width: 96, height: 24, fullScreen: false },
       touchReserved,
       compact: true
     };
   }
 
-  const chipW = Math.min(420, size.width * 0.34);
-  const chipX = size.width / 2 - chipW / 2;
+  // Desktop: single capsule centered between vitals and status panels.
+  // Vitals right edge ≈ 246; status left edge ≈ size.width - 246.
+  // Height ≤ 48px per requirement.
+  const capsuleW = Math.min(420, size.width * 0.34);
+  const capsuleX = size.width / 2 - capsuleW / 2;
   return {
     vitals: hud.vitals,
     status: hud.status,
-    systemChip: { x: chipX, y: 16, width: chipW, height: 28, fullScreen: false },
-    missionChip: { x: chipX, y: 52, width: chipW, height: 28, fullScreen: false },
+    topCapsule: { x: capsuleX, y: 16, width: capsuleW, height: 44, fullScreen: false },
     threatChip: { x: size.width - 246, y: 264, width: 230, height: 30, fullScreen: false },
     touchReserved,
     compact: false
@@ -86,8 +89,7 @@ export function createPanelLayerBounds(size: ViewportSize, preferredWidth?: numb
 export function hudOverlapsTouch(layout: HudShellLayout): boolean {
   return rectsOverlap(layout.vitals, layout.touchReserved)
     || rectsOverlap(layout.status, layout.touchReserved)
-    || rectsOverlap(layout.systemChip, layout.touchReserved)
-    || rectsOverlap(layout.missionChip, layout.touchReserved);
+    || rectsOverlap(layout.topCapsule, layout.touchReserved);
 }
 
 export function createToastModel(message: string, size: ViewportSize): ToastModel | null {
