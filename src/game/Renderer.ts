@@ -89,6 +89,8 @@ export interface RenderState {
   shipyardClassFilter: ShipClassId | "all";
   /** False when a fine pointer device is detected — suppresses on-screen touch overlay in flight. */
   showTouchControls: boolean;
+  /** True when the compact map filter sheet is expanded (mobile only). */
+  mapFilterSheetOpen: boolean;
 }
 
 interface ProjectedPoint {
@@ -1291,43 +1293,81 @@ export class Renderer {
       this.button("map-jump", "ENGAGE JUMP DRIVE [Enter]", detailX, chrome.footerPrimaryActionRow.y, Math.min(detailW, 280), chrome.footerPrimaryActionRow.height);
     }
 
-    // Map filters row
-    const filters = [
+    // Map filters
+    const filterDefs = [
       { id: "map-filter-hazard", label: "HAZ", value: state.mapFilters.hazard },
       { id: "map-filter-economy", label: "ECO", value: state.mapFilters.economy },
       { id: "map-filter-government", label: "GOV", value: state.mapFilters.government },
       { id: "map-filter-opportunity", label: "OPP", value: state.mapFilters.opportunity },
       { id: "map-filter-discovery", label: "DISC", value: state.mapFilters.discovery },
       { id: "map-filter-service", label: "SVC", value: state.mapFilters.service },
-      { id: "map-filter-systemClass", label: this.narrow ? "CL" : "CLASS", value: state.mapFilters.systemClass },
+      { id: "map-filter-systemClass", label: "CLASS", value: state.mapFilters.systemClass },
       { id: "map-filter-clear", label: "CLEAR", value: "" }
     ];
 
     if (this.narrow) {
-      const cols = 4;
-      const fbGap = 4;
-      const fbH = 26;
-      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (cols - 1)) / cols);
-      const fbStartX = chrome.footerSecondaryActionRow.x;
-      const firstY = chrome.footerSecondaryActionRow.y;
-      filters.forEach((f, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const fx = fbStartX + col * (fbW + fbGap);
-        const fy = firstY + row * (fbH + fbGap);
-        const active = f.id === "map-filter-clear" ? false : f.value !== "all";
-        const baseLabel = f.id === "map-filter-systemClass" ? "CLASS" : f.label;
-        const label = f.id === "map-filter-clear" ? "CLR" : `${baseLabel}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
-        this.button(f.id, label, fx, fy, fbW, fbH);
-      });
+      // R3: compact viewports collapse all filter chips into a single toggle button.
+      // When the sheet is open, float the full 4×2 grid above the toggle row.
+      const activeCount = filterDefs.filter((f) => f.id !== "map-filter-clear" && f.value !== "all").length;
+      const toggleLabel = state.mapFilterSheetOpen
+        ? "DONE"
+        : activeCount > 0 ? `FILTERS [${activeCount}]` : "FILTERS";
+      this.button(
+        "map-filters-toggle",
+        toggleLabel,
+        chrome.footerSecondaryActionRow.x,
+        chrome.footerSecondaryActionRow.y,
+        chrome.footerSecondaryActionRow.width,
+        chrome.footerSecondaryActionRow.height
+      );
+
+      if (state.mapFilterSheetOpen) {
+        const cols = 4;
+        const fbGap = 4;
+        const fbH = 26;
+        const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (cols - 1)) / cols);
+        // Sheet floats above the toggle row.
+        const sheetRows = 2;
+        const sheetInnerH = sheetRows * fbH + (sheetRows - 1) * fbGap;
+        const sheetPadY = 8;
+        const sheetH = sheetInnerH + sheetPadY * 2;
+        const sheetY = chrome.footerSecondaryActionRow.y - sheetH - 4;
+        const sheetX = chrome.footerSecondaryActionRow.x;
+        const sheetW = chrome.footerSecondaryActionRow.width;
+
+        // Sheet background
+        this.ctx.save();
+        this.ctx.fillStyle = THEME.colors.bgDeep;
+        this.ctx.globalAlpha = 0.92;
+        this.ctx.beginPath();
+        this.ctx.roundRect(sheetX, sheetY, sheetW, sheetH, SIGNAL_GLASS_THEME.radius.control);
+        this.ctx.fill();
+        this.ctx.restore();
+        this.ctx.strokeStyle = "rgba(0, 242, 255, 0.18)";
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.roundRect(sheetX, sheetY, sheetW, sheetH, SIGNAL_GLASS_THEME.radius.control);
+        this.ctx.stroke();
+
+        const firstFbY = sheetY + sheetPadY;
+        filterDefs.forEach((f, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const fx = sheetX + col * (fbW + fbGap);
+          const fy = firstFbY + row * (fbH + fbGap);
+          const active = f.id === "map-filter-clear" ? false : f.value !== "all";
+          const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
+          this.button(f.id, label, fx, fy, fbW, fbH);
+        });
+      }
     } else {
       const fbGap = 6;
-      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (filters.length - 1)) / filters.length);
+      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (filterDefs.length - 1)) / filterDefs.length);
       const fbH = Math.min(30, chrome.footerSecondaryActionRow.height);
       const fbY = chrome.footerSecondaryActionRow.y + (chrome.footerSecondaryActionRow.height - fbH) / 2;
       const fbStartX = chrome.footerSecondaryActionRow.x;
 
-      filters.forEach((f, i) => {
+      filterDefs.forEach((f, i) => {
         const fx = fbStartX + i * (fbW + fbGap);
         const active = f.id === "map-filter-clear" ? false : f.value !== "all";
         const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;

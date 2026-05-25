@@ -94,6 +94,7 @@ export class Game {
   private shipyardPage = 0;
   private shipyardClassFilter: ShipClassId | "all" = "all";
   private mapFilters: MapFilterState = { ...DEFAULT_MAP_FILTERS };
+  private mapFilterSheetOpen = false;
   private message = "";
   private lastTime = 0;
   private enemyCooldown = 1.5;
@@ -246,7 +247,9 @@ export class Game {
     if (this.input.consume("KeyM")) {
       this.audio.unlock();
       this.audio.play("ui");
-      this.mode = this.mode === "map" ? (this.player.docked ? "docked" : "flight") : "map";
+      const leavingMap = this.mode === "map";
+      this.mode = leavingMap ? (this.player.docked ? "docked" : "flight") : "map";
+      if (leavingMap) this.mapFilterSheetOpen = false;
     }
 
     if (this.mode === "map") {
@@ -948,7 +951,14 @@ export class Game {
 
     if (zone.id === "map-back") {
       this.mode = this.player.docked ? "docked" : "flight";
+      this.mapFilterSheetOpen = false;
       this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "map-filters-toggle") {
+      this.mapFilterSheetOpen = !this.mapFilterSheetOpen;
+      this.audio.play(getUiSoundEvent("filterCycle"));
       return;
     }
 
@@ -1452,6 +1462,7 @@ export class Game {
       shipyardPage: this.shipyardPage,
       shipyardClassFilter: this.shipyardClassFilter,
       showTouchControls: shouldShowTouchControls(),
+      mapFilterSheetOpen: this.mapFilterSheetOpen,
     });
   }
 }

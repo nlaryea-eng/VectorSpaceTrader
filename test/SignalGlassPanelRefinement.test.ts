@@ -160,6 +160,7 @@ function state(mode: GameMode, overrides: Partial<RenderState> = {}): RenderStat
     shipyardPage: 0,
     shipyardClassFilter: "all",
     showTouchControls: true,
+    mapFilterSheetOpen: false,
     ...overrides
   };
 }
@@ -222,10 +223,9 @@ describe("Signal Glass panel refinement button zones", () => {
     expect(buttons.some((button) => button.id === "touch-equipment")).toBe(true);
   });
 
-  it.each([
-    { width: 390, height: 844 },
-    { width: 1280, height: 800 }
-  ])("keeps map filter chips and header actions visible without overlap on $width x $height", (viewport) => {
+  // Desktop: individual filter chips visible and non-overlapping.
+  it("keeps map filter chips and header actions visible without overlap at 1280x800", () => {
+    const viewport = { width: 1280, height: 800 };
     const buttons = render("map", viewport);
     const close = byId(buttons, "map-back");
     const help = byId(buttons, "help");
@@ -246,6 +246,43 @@ describe("Signal Glass panel refinement button zones", () => {
       for (let j = i + 1; j < filters.length; j += 1) {
         expectNoOverlap(filters[i], filters[j]);
       }
+    }
+  });
+
+  // R3: compact map shows FILTERS toggle, not individual chips (sheet closed).
+  it("R3: compact map shows FILTERS toggle button instead of individual chips (sheet closed)", () => {
+    const buttons = render("map", { width: 390, height: 844 });
+    const toggle = byId(buttons, "map-filters-toggle");
+    expect(toggle.label).toBe("FILTERS");
+    // Individual filter chips must NOT be present when sheet is closed.
+    expect(buttons.some((b) => b.id.startsWith("map-filter-"))).toBe(false);
+    expect(toggle.x).toBeGreaterThanOrEqual(0);
+    expect(toggle.y).toBeGreaterThanOrEqual(0);
+    expect(toggle.x + toggle.width).toBeLessThanOrEqual(390);
+    expect(toggle.y + toggle.height).toBeLessThanOrEqual(844);
+  });
+
+  it("R3: FILTERS button label shows active count when filters are set", () => {
+    const activeFilters = { ...state("map").mapFilters, hazard: "debris" as const, economy: "Mining" as const };
+    const buttons = render("map", { width: 390, height: 844 }, { mapFilters: activeFilters });
+    const toggle = byId(buttons, "map-filters-toggle");
+    expect(toggle.label).toBe("FILTERS [2]");
+  });
+
+  it("R3: opening the filter sheet reveals all individual filter chips above the toggle row", () => {
+    const viewport = { width: 390, height: 844 };
+    const buttons = render("map", viewport, { mapFilterSheetOpen: true });
+    // Individual chips must be present when sheet is open.
+    expect(buttons.some((b) => b.id === "map-filter-systemClass")).toBe(true);
+    expect(buttons.some((b) => b.id === "map-filter-clear")).toBe(true);
+    const toggle = byId(buttons, "map-filters-toggle");
+    expect(toggle.label).toBe("DONE");
+    // All chips must be above the toggle row and within bounds.
+    const chips = buttons.filter((b) => b.id.startsWith("map-filter-"));
+    for (const chip of chips) {
+      expect(chip.y + chip.height).toBeLessThanOrEqual(toggle.y);
+      expect(chip.x).toBeGreaterThanOrEqual(0);
+      expect(chip.x + chip.width).toBeLessThanOrEqual(viewport.width);
     }
   });
 

@@ -93,7 +93,8 @@ function stubState(mode: GameMode, docked = false): RenderState {
     helpPageIndex: 0,
     shipyardPage: 0,
     shipyardClassFilter: "all",
-    showTouchControls: true
+    showTouchControls: true,
+    mapFilterSheetOpen: false
   };
 }
 
