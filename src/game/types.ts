@@ -1,4 +1,5 @@
 import type { RunStats } from "./RunStats";
+import type { TutorialStage } from "./Tutorial";
 
 export type GameMode =
   | "start"
@@ -339,6 +340,7 @@ export interface PersonalBest {
 export interface Meta {
   hasSeenOnboarding: boolean;
   dismissedHints: string[];
+  tutorialStage?: TutorialStage;
   personalBest?: PersonalBest;
 }
 

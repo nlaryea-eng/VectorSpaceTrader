@@ -4,7 +4,8 @@ import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import { createEconomyState } from "../src/game/Economy";
 import { getPilotRank } from "../src/game/Rank";
 import { createRunStats } from "../src/game/RunStats";
-import { deserializeSave, loadGame, saveGame, SAVE_KEY } from "../src/game/SaveGame";
+import { deserializeSave, loadGame, saveGame, SAVE_KEY, serializeSave } from "../src/game/SaveGame";
+import { COMPLETE_TUTORIAL_STAGE, INITIAL_TUTORIAL_STAGE } from "../src/game/Tutorial";
 import { generateUniverse } from "../src/game/Universe";
 import type { SaveData } from "../src/game/types";
 
@@ -12,7 +13,10 @@ import type { SaveData } from "../src/game/types";
 describe("SaveGame", () => {
   it("round-trips valid save data", () => {
     const storage = new MemoryStorage();
-    const save = makeSave();
+    const save = {
+      ...makeSave(),
+      meta: { hasSeenOnboarding: false, dismissedHints: [], tutorialStage: "openMap" as const }
+    };
 
     saveGame(save, storage);
 
@@ -148,7 +152,7 @@ describe("SaveGame meta and settings persistence", () => {
     const save = makeSave();
     const withMeta = {
       ...save,
-      meta: { hasSeenOnboarding: true, dismissedHints: ["flight", "trade"] },
+      meta: { hasSeenOnboarding: true, dismissedHints: ["flight", "trade"], tutorialStage: "openMap" as const },
       settings: { muted: true, sfxVolume: 0.8, musicVolume: 0.4 }
     };
     saveGame(withMeta, storage);
@@ -156,6 +160,7 @@ describe("SaveGame meta and settings persistence", () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.meta?.hasSeenOnboarding).toBe(true);
     expect(loaded!.meta?.dismissedHints).toContain("flight");
+    expect(loaded!.meta?.tutorialStage).toBe("openMap");
     expect(loaded!.settings?.muted).toBe(true);
     expect(loaded!.settings?.sfxVolume).toBe(0.8);
     expect(loaded!.settings?.musicVolume).toBe(0.4);
@@ -167,8 +172,27 @@ describe("SaveGame meta and settings persistence", () => {
     saveGame(save, storage);
     const loaded = loadGame(storage);
     expect(loaded).not.toBeNull();
-    expect(loaded!.meta).toBeUndefined();
+    expect(loaded!.meta).toEqual({
+      hasSeenOnboarding: false,
+      dismissedHints: [],
+      tutorialStage: COMPLETE_TUTORIAL_STAGE
+    });
     expect(loaded!.settings).toEqual({ muted: false, sfxVolume: 1.0, musicVolume: 0.6 });
+  });
+
+  it("round-trips tutorial stage without changing the save version", () => {
+    const storage = new MemoryStorage();
+    const save = {
+      ...makeNoTradeSave(),
+      meta: { hasSeenOnboarding: false, dismissedHints: [], tutorialStage: "jumpNearby" as const }
+    };
+
+    saveGame(save, storage);
+    const loaded = loadGame(storage);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.version).toBe(1);
+    expect(loaded!.meta?.tutorialStage).toBe("jumpNearby");
   });
 
   it("round-trips personal best inside meta", () => {
@@ -216,6 +240,60 @@ describe("SaveGame meta and settings persistence", () => {
     const loaded = deserializeSave(withPartialSettings);
     expect(loaded).not.toBeNull();
     expect(loaded!.settings).toEqual({ muted: true, sfxVolume: 1.0, musicVolume: 0.6 });
+  });
+
+  it("defaults legacy tutorial to complete when cargo history is present", () => {
+    const loaded = deserializeSave(JSON.stringify({ ...makeSave(), meta: undefined }));
+    expect(loaded).not.toBeNull();
+    expect(loaded!.meta?.tutorialStage).toBe(COMPLETE_TUTORIAL_STAGE);
+  });
+
+  it("defaults legacy tutorial to complete when cost basis history is present", () => {
+    const save = makeNoTradeSave();
+    const raw = JSON.stringify({
+      ...save,
+      player: { ...save.player, cargoCostBasis: { grain: 7 } },
+      meta: undefined
+    });
+
+    const loaded = deserializeSave(raw);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.meta?.tutorialStage).toBe(COMPLETE_TUTORIAL_STAGE);
+  });
+
+  it("defaults legacy tutorial to complete from explicit earned BAL run stat", () => {
+    const save = makeNoTradeSave();
+    const raw = JSON.stringify({
+      ...save,
+      runStats: { ...createRunStats(0), totalBalEarned: 1 },
+      meta: undefined
+    });
+
+    const loaded = deserializeSave(raw);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.meta?.tutorialStage).toBe(COMPLETE_TUTORIAL_STAGE);
+  });
+
+  it("does not infer tutorial completion from BALANCE alone", () => {
+    const save = makeNoTradeSave();
+    const raw = JSON.stringify({
+      ...save,
+      player: { ...save.player, balance: 5000 },
+      meta: undefined
+    });
+
+    const loaded = deserializeSave(raw);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.player.balance).toBe(5000);
+    expect(loaded!.meta?.tutorialStage).toBe(INITIAL_TUTORIAL_STAGE);
+  });
+
+  it("keeps tutorial migration idempotent across serialization", () => {
+    const first = deserializeSave(JSON.stringify({ ...makeNoTradeSave(), meta: undefined }));
+    expect(first).not.toBeNull();
+
+    const second = deserializeSave(serializeSave(first!));
+    expect(second).toEqual(first);
   });
 });
 
@@ -452,4 +530,18 @@ function legacyFundsKey(): string {
 
 function legacyRunTotalKey(): string {
   return ["total", "Cre", "dits", "Earned"].join("");
+}
+
+function makeNoTradeSave(): SaveData {
+  const save = makeSave();
+  return {
+    ...save,
+    player: {
+      ...save.player,
+      cargo: {},
+      cargoCostBasis: {},
+      balance: 5000
+    },
+    runStats: createRunStats(0)
+  };
 }

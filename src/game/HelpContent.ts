@@ -106,6 +106,15 @@ export const HELP_CONTENT: HelpSection[] = [
           "ESCAPE — Back / Pause"
         ],
         tips: ["Use N / P to cycle pages in the Equipment bay."]
+      },
+      {
+        heading: "Controls by mode",
+        body: [
+          "R — Mission Board while docked; Restart after game over.",
+          "D — Dock or launch in flight/station contexts; next manual page while the Pilot Manual is open; next system on the map.",
+          "E — Roll right in flight; Equipment Bay while docked."
+        ],
+        tips: ["If a key appears in two places, the current mode decides which command runs."]
       }
     ]
   },

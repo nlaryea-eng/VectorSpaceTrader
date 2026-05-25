@@ -35,6 +35,15 @@ import { getMarketRowDisplay } from "./SignalGlassScreens";
 import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID, type PlayerShipDefinition } from "./Ships";
 import { getStationProfile, hasStationService } from "./StationServices";
 import { createEmptyMessageLog, createInitialTransientState, pushMessage, type MessageKind, type MessageLog } from "./TransientState";
+import {
+  advanceTutorial,
+  getActiveTutorialHint,
+  getTutorialEventForFlightProgress,
+  INITIAL_TUTORIAL_STAGE,
+  isTutorialComplete,
+  type TutorialEvent,
+  type TutorialStage
+} from "./Tutorial";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, getMarketBuyPrice, getMarketSellPrice, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
 import { HELP_CONTENT, getHelpSectionForMode, searchHelpContent, type HelpSectionId } from "./HelpContent";
@@ -65,6 +74,7 @@ const DOCKING_DURATION = 1.35;
 const WARNING_COOLDOWN = 2.5;
 const RESPAWN_DELAY = 5.0;
 const EQUIPMENT_PAGE_SIZE = 8;
+const FIRST_FLIGHT_ORIGIN = vec3();
 
 const HINT_MODES: Partial<Record<GameMode, HintId>> = {
   flight: "flight",
@@ -108,7 +118,7 @@ export class Game {
   private playerHitFlash = 0;
   private explosionEffect: ExplosionEffect | null = null;
   private runStats: RunStats = createRunStats(0);
-  private meta: Meta = { hasSeenOnboarding: false, dismissedHints: [] };
+  private meta: Meta = { hasSeenOnboarding: false, dismissedHints: [], tutorialStage: INITIAL_TUTORIAL_STAGE };
   private helpSectionId: HelpSectionId = "quickStart";
   private helpPageIndex = 0;
   private helpSearchQuery = "";
@@ -146,6 +156,8 @@ export class Game {
     buttons: ButtonZone[];
     mapFilters: MapFilterState;
     marketRows: ReturnType<typeof getMarketRowDisplay>[];
+    tutorialStage: TutorialStage;
+    tutorialHint: string | null;
   } {
     const last = this.messageLog.entries[this.messageLog.entries.length - 1];
     return {
@@ -159,7 +171,9 @@ export class Game {
       },
       buttons: this.renderer.getButtons(),
       mapFilters: this.mapFilters,
-      marketRows: this.market.map((item) => getMarketRowDisplay(this.player, item))
+      marketRows: this.market.map((item) => getMarketRowDisplay(this.player, item)),
+      tutorialStage: this.getTutorialStage(),
+      tutorialHint: this.getTutorialHint()
     };
   }
 
@@ -261,6 +275,7 @@ export class Game {
       const leavingMap = this.mode === "map";
       this.mode = leavingMap ? (this.player.docked ? "docked" : "flight") : "map";
       if (leavingMap) this.mapFilterSheetOpen = false;
+      else this.applyTutorialEvent("mapOpened", true);
     }
 
     if (this.mode === "map") {
@@ -367,6 +382,11 @@ export class Game {
     if (this.explosionEffect) {
       this.explosionEffect = { ...this.explosionEffect, age: this.explosionEffect.age + dt };
       if (this.explosionEffect.age >= this.explosionEffect.maxAge) this.explosionEffect = null;
+    }
+
+    if (this.getTutorialStage() === "orientStation") {
+      const event = getTutorialEventForFlightProgress(this.player.position, this.player.orientation, STATION_POSITION, FIRST_FLIGHT_ORIGIN);
+      if (event) this.applyTutorialEvent(event, true);
     }
 
     if (this.input.consume("Space")) {
@@ -529,6 +549,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, action.type)
       };
       this.refreshMarket(true);
+      this.applyTutorialEvent(action.type === "sellCommodity" ? "cargoSold" : "commodityBought");
       this.applyTradeResult(true, this.player);
     } else {
       this.applyTradeResult(false, result.player, result.reason);
@@ -549,6 +570,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "buyCommodity")
       };
       this.refreshMarket(true);
+      this.applyTutorialEvent("commodityBought");
       this.msg(`Bought ${qty} × ${item.name} for ${qty * getMarketBuyPrice(item)} BAL`, "success");
       this.audio.play("tradeOk");
       this.persist();
@@ -574,6 +596,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "sellCommodity")
       };
       this.refreshMarket(true);
+      this.applyTutorialEvent("cargoSold");
       this.msg(`Sold ${qty} × ${item.name} for ${qty * getMarketSellPrice(item)} BAL`, "success");
       this.audio.play("tradeOk");
       this.persist();
@@ -689,6 +712,7 @@ export class Game {
 
     this.mode = mode;
     this.audio.play("ui");
+    if (mode === "trade") this.applyTutorialEvent("marketOpened", true);
   }
 
   private purchaseSelectedShip(): void {
@@ -747,6 +771,7 @@ export class Game {
     if (this.player.docked) {
       this.player = { ...this.player, docked: false, velocity: vec3(), speed: 0 };
       this.mode = "flight";
+      this.applyTutorialEvent("beginFlight");
       this.msg("Launch clearance granted", "success");
       this.audio.play("dock");
       this.persist();
@@ -783,6 +808,7 @@ export class Game {
       this.player = { ...this.player, docked: true };
       this.mode = "docked";
       this.refreshMissions();
+      this.applyTutorialEvent("docked");
       this.msg("Docking complete", "success");
       this.audio.play("dock");
       this.persist();
@@ -835,6 +861,7 @@ export class Game {
     this.enemyCooldown = this.enemy.fireCooldown;
     this.projectiles = [];
     this.mode = "flight";
+    this.applyTutorialEvent("jumped");
     const lastEntry = this.messageLog.entries[this.messageLog.entries.length - 1];
     if (!lastEntry || !lastEntry.text.startsWith("Mission")) {
       this.msg(`Arrived at ${selected.name}`);
@@ -959,6 +986,7 @@ export class Game {
     if (zone.id === "map-open") {
       this.mode = "map";
       this.audio.play("ui");
+      this.applyTutorialEvent("mapOpened", true);
       return;
     }
 
@@ -1010,6 +1038,7 @@ export class Game {
               legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, click.shiftKey ? "sellCommodity" : "buyCommodity")
             };
             this.refreshMarket(true);
+            this.applyTutorialEvent(click.shiftKey ? "cargoSold" : "commodityBought");
             this.applyTradeResult(true, this.player);
           } else {
             this.applyTradeResult(false, result.player, result.reason);
@@ -1159,6 +1188,7 @@ export class Game {
     if (zone.id === "back") this.mode = "start";
     if (zone.id === "touch-fire") this.firePlayerLaser();
     if (zone.id === "touch-map") this.mode = "map";
+    if (zone.id === "touch-map") this.applyTutorialEvent("mapOpened", true);
     if (zone.id === "touch-dock") this.handleDockCommand();
     if (zone.id === "touch-trade" && this.player.docked) this.openStationMode("trade");
     if (zone.id === "touch-equipment" && this.player.docked) this.openStationMode("equipment");
@@ -1231,8 +1261,10 @@ export class Game {
     this.mapFilters = { ...DEFAULT_MAP_FILTERS };
     this.mapSearchInput.value = "";
     this.runStats = createRunStats(this.player.currentSystemId);
+    this.meta = { ...this.meta, tutorialStage: INITIAL_TUTORIAL_STAGE };
     this.isNewPersonalBest = false;
     this.mode = "flight";
+    this.applyTutorialEvent("beginFlight");
     this.msg("Launch complete", "success");
     this.persist();
   }
@@ -1247,7 +1279,7 @@ export class Game {
     this.systems = generateUniverse(save.seed);
     this.economy = save.economy ?? createEconomyState(this.systems);
     this.player = save.player;
-    this.meta = save.meta ?? { hasSeenOnboarding: false, dismissedHints: [] };
+    this.meta = save.meta ?? { hasSeenOnboarding: false, dismissedHints: [], tutorialStage: INITIAL_TUTORIAL_STAGE };
 
     if (save.settings) {
       this.audio.setMuted(save.settings.muted);
@@ -1269,6 +1301,7 @@ export class Game {
     this.runStats = save.runStats ?? createRunStats(this.player.currentSystemId);
     this.isNewPersonalBest = false;
     this.mode = this.player.docked ? "docked" : "flight";
+    if (this.mode === "flight") this.applyTutorialEvent("beginFlight");
     this.msg("Save restored", "success");
   }
 
@@ -1405,6 +1438,23 @@ export class Game {
     this.messageLog = pushMessage(this.messageLog, text, kind, this.lastTime);
   }
 
+  private getTutorialStage(): TutorialStage {
+    return this.meta.tutorialStage ?? INITIAL_TUTORIAL_STAGE;
+  }
+
+  private getTutorialHint(): string | null {
+    return getActiveTutorialHint({ stage: this.getTutorialStage() });
+  }
+
+  private applyTutorialEvent(event: TutorialEvent, persistChange = false): void {
+    const stage = this.getTutorialStage();
+    if (isTutorialComplete(stage)) return;
+    const next = advanceTutorial({ stage }, event).stage;
+    if (next === stage) return;
+    this.meta = { ...this.meta, tutorialStage: next };
+    if (persistChange) this.persist();
+  }
+
   private updateAmbient(): void {
     let target: AmbientMode = "none";
     if (
@@ -1427,6 +1477,7 @@ export class Game {
   }
 
   private getActiveHint(): HintId | null {
+    if (this.getTutorialHint() !== null) return null;
     const hint = HINT_MODES[this.mode];
     if (!hint) return null;
     return shouldShowHint(this.meta, hint) ? hint : null;
@@ -1469,6 +1520,7 @@ export class Game {
       pilotRank,
       isNewPersonalBest: this.isNewPersonalBest,
       activeHint: this.getActiveHint(),
+      tutorialHint: this.getTutorialHint(),
       mapFilters: this.mapFilters,
       sfxVolume: this.audio.getSfxVolume(),
       musicVolume: this.audio.getMusicVolume(),

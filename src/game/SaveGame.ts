@@ -5,6 +5,7 @@ import { createRunStats, type RunStats } from "./RunStats";
 import { applyPlayerShipStats, isPlayerShipId, normalizeShipId } from "./Ships";
 import { isValidMissionId, createMissionId } from "./MissionIds";
 import { COMMODITIES } from "./Trading";
+import { COMPLETE_TUTORIAL_STAGE, INITIAL_TUTORIAL_STAGE, isTutorialStage } from "./Tutorial";
 
 export const SAVE_KEY = "vector-space-trader:v1";
 
@@ -73,19 +74,17 @@ function migrateSaveData(value: unknown): SaveData | null {
 
   player = applyPlayerShipStats(player);
 
+  const runStats = migrateRunStats(value.runStats, player.currentSystemId);
   const migrated: SaveData = {
     ...(value as unknown as SaveData),
     player,
     settings: normalizeSettings(value.settings),
-    runStats: migrateRunStats(value.runStats, player.currentSystemId)
+    runStats,
+    meta: migrateMeta(value.meta, player, runStats)
   };
 
   if (value.economy !== undefined) {
     migrated.economy = normalizeEconomyState(value.economy);
-  }
-
-  if (value.meta !== undefined) {
-    migrated.meta = migrateMeta(value.meta);
   }
 
   return migrated;
@@ -129,6 +128,7 @@ function isValidMeta(value: unknown): value is Meta {
     if (!isRecord(value.personalBest)) return false;
     if (typeof value.personalBest.totalBalEarned !== "number") return false;
   }
+  if (value.tutorialStage !== undefined && !isTutorialStage(value.tutorialStage)) return false;
   return true;
 }
 
@@ -165,7 +165,14 @@ function normalizeSettings(value: unknown): Settings {
   return { muted, sfxVolume, musicVolume };
 }
 
-function migrateMeta(value: unknown): Meta {
+function migrateMeta(value: unknown, player: PlayerState, runStats: RunStats): Meta {
+  const base: Meta = { hasSeenOnboarding: false, dismissedHints: [] };
+  if (value === undefined) {
+    return {
+      ...base,
+      tutorialStage: hasLegacyTradeProgress(player, runStats) ? COMPLETE_TUTORIAL_STAGE : INITIAL_TUTORIAL_STAGE,
+    };
+  }
   if (!isRecord(value)) return value as Meta;
   const meta: Record<string, unknown> = { ...value };
   if (isRecord(meta.personalBest)) {
@@ -177,7 +184,18 @@ function migrateMeta(value: unknown): Meta {
     delete personalBest[legacyRunTotalKey()];
     meta.personalBest = personalBest;
   }
+  if (!isTutorialStage(meta.tutorialStage)) {
+    meta.tutorialStage = hasLegacyTradeProgress(player, runStats)
+      ? COMPLETE_TUTORIAL_STAGE
+      : INITIAL_TUTORIAL_STAGE;
+  }
   return normalizeOnboardingMeta(meta as unknown as Meta);
+}
+
+function hasLegacyTradeProgress(player: PlayerState, runStats: RunStats): boolean {
+  const hasCargo = Object.values(player.cargo).some((units) => typeof units === "number" && units > 0);
+  const hasCostBasis = Object.values(player.cargoCostBasis ?? {}).some((basis) => typeof basis === "number" && basis > 0);
+  return hasCargo || hasCostBasis || runStats.totalBalEarned > 0;
 }
 
 function migrateRunStats(value: unknown, startSystemId: number): RunStats {

@@ -100,4 +100,26 @@ describe("Help Content", () => {
     // Currency should use BAL/BALANCE terminology only.
     expect(fullText.toLowerCase()).not.toContain(["cred", "its"].join(""));
   });
+
+  it("clarifies overloaded controls by mode", () => {
+    const controls = HELP_CONTENT.find(s => s.id === "controls")!;
+    const text = controls.pages.flatMap(page => [page.heading, ...page.body]).join("\n");
+
+    expect(text).toContain("Controls by mode");
+    expect(text).toContain("R — Mission Board while docked");
+    expect(text).toContain("Restart after game over");
+    expect(text).toContain("D — Dock or launch");
+    expect(text).toContain("next manual page");
+    expect(text).toContain("next system on the map");
+    expect(text).toContain("E — Roll right in flight");
+    expect(text).toContain("Equipment Bay while docked");
+  });
+
+  it("avoids overpromising in first-run control guidance", () => {
+    const controls = HELP_CONTENT.find(s => s.id === "controls")!;
+    const text = controls.pages.flatMap(page => [page.heading, ...page.body, ...(page.tips ?? [])]).join(" ").toLowerCase();
+
+    expect(text).not.toContain("guaranteed");
+    expect(text).not.toContain("always wins");
+  });
 });

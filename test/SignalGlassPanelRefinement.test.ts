@@ -368,6 +368,18 @@ describe("Signal Glass panel refinement button zones", () => {
     expect(buttons.some((button) => button.id === "touch-missions")).toBe(true);
   });
 
+  it("renders tutorial guidance instead of generic onboarding when both are present", () => {
+    const { buttons, trace } = renderWithTrace("flight", { width: 390, height: 844 }, {
+      activeHint: "flight",
+      tutorialHint: "Open the map with M",
+      messageLog: { entries: [{ seq: 0, text: "Launch complete", kind: "success", t: 0 }], nextSeq: 1 }
+    });
+
+    expect(buttons.some((button) => button.id === "hint-dismiss")).toBe(false);
+    expect(drawnText(trace)).toContain("FIRST FLIGHT");
+    expect(drawnText(trace)).toContain("OPEN THE MAP WITH M");
+  });
+
   it("uses clear Mission Board copy for postings, empty state, and active contract states", () => {
     const postings = renderWithTrace("missions", { width: 390, height: 844 });
     expect(drawnText(postings.trace)).toContain("NO ACTIVE CONTRACT");
