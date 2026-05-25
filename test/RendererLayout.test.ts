@@ -64,12 +64,12 @@ describe("mobile renderer layout helpers", () => {
     expect(controls.some((rect) => overlaps(hint, rect))).toBe(false);
   });
 
-  it.each<GameMode>(["docked", "shipyard"])("places %s hints above station actions on 390x844", (mode) => {
+  it("keeps the shipyard hint above station actions on 390x844", () => {
     const hint: ButtonZone = {
       id: "hint-dismiss",
       label: "Dismiss",
       x: 16,
-      y: getOnboardingHintY(mode, MOBILE_H, 58, true, true),
+      y: getOnboardingHintY("shipyard", MOBILE_H, 58, true, true),
       width: MOBILE_W - 32,
       height: 58,
     };

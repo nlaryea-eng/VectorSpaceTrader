@@ -4,15 +4,38 @@ import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import { Renderer, type RenderState } from "../src/game/Renderer";
 import { getPanelChromeLayout, rectsOverlap } from "../src/game/Layout";
 import { createMissionId } from "../src/game/MissionIds";
+import { SIGNAL_GLASS_TEXT_SIZES } from "../src/game/Theme";
 import { generateUniverse } from "../src/game/Universe";
 import type { ButtonZone, GameMode, Mission, PlayerState } from "../src/game/types";
 
 const systems = generateUniverse(492017);
 
-function createStubCanvas(): HTMLCanvasElement {
+interface DrawnText {
+  text: string;
+  x: number;
+  y: number;
+  font: string;
+  align: CanvasTextAlign;
+}
+
+interface RenderTrace {
+  texts: DrawnText[];
+  clips: Array<{ x: number; y: number; width: number; height: number }>;
+}
+
+function createStubCanvas(trace?: RenderTrace): HTMLCanvasElement {
+  let pendingRect: { x: number; y: number; width: number; height: number } | null = null;
   const ctx = {
+    font: "",
+    textAlign: "left" as CanvasTextAlign,
     setTransform() {}, clearRect() {}, fillRect() {}, beginPath() {},
-    roundRect() {}, fill() {}, stroke() {}, fillText() {}, measureText(text: string) { return { width: text.length * 7 }; },
+    roundRect() {}, fill() {}, stroke() {},
+    rect(x: number, y: number, width: number, height: number) { pendingRect = { x, y, width, height }; },
+    clip() { if (pendingRect) trace?.clips.push(pendingRect); },
+    fillText(text: string, x: number, y: number) {
+      trace?.texts.push({ text: String(text), x, y, font: ctx.font, align: ctx.textAlign });
+    },
+    measureText(text: string) { return { width: text.length * 7 }; },
     moveTo() {}, lineTo() {}, arc() {}, ellipse() {}, setLineDash() {}, save() {}, restore() {},
     translate() {}, rotate() {}, closePath() {}, strokeRect() {}
   } as unknown as CanvasRenderingContext2D;
@@ -132,7 +155,7 @@ function state(mode: GameMode, overrides: Partial<RenderState> = {}): RenderStat
   };
 }
 
-function render(mode: GameMode, viewport = { width: 390, height: 844 }, overrides: Partial<RenderState> = {}): ButtonZone[] {
+function renderWithTrace(mode: GameMode, viewport = { width: 390, height: 844 }, overrides: Partial<RenderState> = {}): { buttons: ButtonZone[]; trace: RenderTrace } {
   vi.stubGlobal("window", {
     devicePixelRatio: 1,
     innerWidth: viewport.width,
@@ -142,10 +165,15 @@ function render(mode: GameMode, viewport = { width: 390, height: 844 }, override
     matchMedia: () => ({ matches: false }),
     addEventListener() {}
   });
-  const renderer = new Renderer(createStubCanvas());
+  const trace: RenderTrace = { texts: [], clips: [] };
+  const renderer = new Renderer(createStubCanvas(trace));
   renderer.resize();
   renderer.render(state(mode, overrides));
-  return renderer.getButtons();
+  return { buttons: renderer.getButtons(), trace };
+}
+
+function render(mode: GameMode, viewport = { width: 390, height: 844 }, overrides: Partial<RenderState> = {}): ButtonZone[] {
+  return renderWithTrace(mode, viewport, overrides).buttons;
 }
 
 function byId(buttons: ButtonZone[], id: string): ButtonZone {
@@ -156,6 +184,15 @@ function byId(buttons: ButtonZone[], id: string): ButtonZone {
 
 function expectNoOverlap(a: ButtonZone, b: ButtonZone): void {
   expect(rectsOverlap(a, b), `${a.id} overlaps ${b.id}`).toBe(false);
+}
+
+function fontSize(draw: DrawnText): number {
+  const match = draw.font.match(/^(\d+(?:\.\d+)?)px\s/);
+  return match ? Number(match[1]) : 0;
+}
+
+function drawnText(trace: RenderTrace): string {
+  return trace.texts.map((entry) => entry.text).join("\n");
 }
 
 describe("Signal Glass panel refinement button zones", () => {
@@ -176,30 +213,62 @@ describe("Signal Glass panel refinement button zones", () => {
     expect(buttons.some((button) => button.id === "touch-equipment")).toBe(true);
   });
 
-  it("keeps map filter chips away from Close and Help", () => {
-    const buttons = render("map");
+  it.each([
+    { width: 390, height: 844 },
+    { width: 1280, height: 800 }
+  ])("keeps map filter chips and header actions visible without overlap on $width x $height", (viewport) => {
+    const buttons = render("map", viewport);
     const close = byId(buttons, "map-back");
     const help = byId(buttons, "help");
-    for (const button of buttons.filter((candidate) => candidate.id.startsWith("map-filter-"))) {
-      expectNoOverlap(button, close);
-      expectNoOverlap(button, help);
+    const systemClass = byId(buttons, "map-filter-systemClass");
+    const clear = byId(buttons, "map-filter-clear");
+    expect(systemClass.label).toContain("CLASS");
+    expect(clear.label).toBe("CLR");
+    for (const button of [close, help, systemClass, clear]) {
+      expect(button.x).toBeGreaterThanOrEqual(0);
+      expect(button.y).toBeGreaterThanOrEqual(0);
+      expect(button.x + button.width).toBeLessThanOrEqual(viewport.width);
+      expect(button.y + button.height).toBeLessThanOrEqual(viewport.height);
     }
+    const filters = buttons.filter((candidate) => candidate.id.startsWith("map-filter-"));
+    for (let i = 0; i < filters.length; i += 1) {
+      expectNoOverlap(filters[i], close);
+      expectNoOverlap(filters[i], help);
+      for (let j = i + 1; j < filters.length; j += 1) {
+        expectNoOverlap(filters[i], filters[j]);
+      }
+    }
+  });
+
+  it("clips map-only decorations to the plot rect", () => {
+    const { trace } = renderWithTrace("map", { width: 390, height: 844 });
+    expect(trace.clips.length).toBeGreaterThan(0);
+    const plotClip = trace.clips[0];
+    expect(plotClip.x).toBeGreaterThanOrEqual(0);
+    expect(plotClip.y).toBeGreaterThan(100);
+    expect(plotClip.x + plotClip.width).toBeLessThanOrEqual(390);
+    expect(plotClip.y + plotClip.height).toBeLessThan(844);
   });
 
   it("keeps Equipment repair, category, page, and Help actions in separate bands", () => {
     const buttons = render("equipment", { width: 390, height: 844 }, { player: player({ hull: 50, balance: 200 }) });
     const repair = byId(buttons, "equip-repair");
     const category = byId(buttons, "equip-category-cycle");
+    const next = buttons.find((button) => button.id === "equip-page-next");
     const help = byId(buttons, "help");
     expectNoOverlap(repair, category);
+    if (next) expectNoOverlap(repair, next);
     expectNoOverlap(repair, help);
     expectNoOverlap(category, help);
   });
 
   it("shows complete Equipment hull state without exposing a repair button when fully repaired", () => {
-    const buttons = render("equipment", { width: 390, height: 844 }, { player: player({ hull: 100, maxHull: 100 }) });
+    const { buttons, trace } = renderWithTrace("equipment", { width: 390, height: 844 }, { player: player({ hull: 100, maxHull: 100 }) });
     expect(buttons.some((button) => button.id === "equip-repair")).toBe(false);
     expect(buttons.some((button) => button.id === "equip-category-cycle")).toBe(true);
+    const status = trace.texts.find((entry) => entry.text === "HULL FULLY OPERATIONAL");
+    expect(status).toBeDefined();
+    expect(status!.y).toBeLessThan(byId(buttons, "equip-category-cycle").y);
   });
 
   it("keeps Mission empty-state actions above the shared footer", () => {
@@ -223,5 +292,62 @@ describe("Signal Glass panel refinement button zones", () => {
     }
     expectNoOverlap(byId(buttons, "settings-sfx-up"), byId(buttons, "settings-music-up"));
     expectNoOverlap(byId(buttons, "settings-glow"), byId(buttons, "settings-mute"));
+    expect(byId(buttons, "settings-sfx-down").x).toBe(byId(buttons, "settings-music-down").x);
+    expect(byId(buttons, "settings-sfx-up").x).toBe(byId(buttons, "settings-music-up").x);
+    expect(byId(buttons, "settings-glow").x + byId(buttons, "settings-glow").width).toBe(byId(buttons, "settings-sfx-up").x + byId(buttons, "settings-sfx-up").width);
+    expect(byId(buttons, "settings-mute").x + byId(buttons, "settings-mute").width).toBe(byId(buttons, "settings-sfx-up").x + byId(buttons, "settings-sfx-up").width);
+    expect(byId(buttons, "settings-back").width).toBeLessThanOrEqual(150);
+    expectNoOverlap(byId(buttons, "settings-back"), byId(buttons, "settings-mute"));
+  });
+
+  it("keeps Settings header actions and footer action inside panel bounds at desktop and 390x844", () => {
+    for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+      const buttons = render("settings", viewport);
+      const help = byId(buttons, "help");
+      const close = byId(buttons, "settings-back");
+      expect(help.x + help.width).toBeLessThanOrEqual(viewport.width);
+      expect(help.y).toBeGreaterThanOrEqual(0);
+      expect(close.x).toBeGreaterThanOrEqual(0);
+      expect(close.x + close.width).toBeLessThanOrEqual(viewport.width);
+      expect(close.y + close.height).toBeLessThanOrEqual(viewport.height);
+    }
+  });
+
+  it("suppresses the docked instruction strip so station cards stay clear", () => {
+    const buttons = render("docked", { width: 390, height: 844 }, { activeHint: "docking" });
+    expect(buttons.some((button) => button.id === "hint-dismiss")).toBe(false);
+    expect(buttons.some((button) => button.id === "touch-equipment")).toBe(true);
+    expect(buttons.some((button) => button.id === "touch-missions")).toBe(true);
+  });
+
+  it("uses clear Mission Board copy for postings, empty state, and active contract states", () => {
+    const postings = renderWithTrace("missions", { width: 390, height: 844 });
+    expect(drawnText(postings.trace)).toContain("NO ACTIVE CONTRACT");
+    expect(drawnText(postings.trace)).not.toContain("NO ACTIVE CONTRACTS");
+    expect(drawnText(postings.trace)).toContain("1 POSTING AVAILABLE");
+
+    const empty = renderWithTrace("missions", { width: 390, height: 844 }, { missions: [] });
+    expect(drawnText(empty.trace)).toContain("NO CONTRACTS AVAILABLE HERE");
+    expect(drawnText(empty.trace)).not.toContain("0 POSTINGS AVAILABLE");
+
+    const activeMission = mission();
+    const active = renderWithTrace("missions", { width: 390, height: 844 }, { player: player({ activeMission }) });
+    expect(drawnText(active.trace)).toContain("ACTIVE CONTRACT IN PROGRESS");
+    expect(drawnText(active.trace)).toContain("ACTIVE: SIGNAL PACKET");
+  });
+
+  it("keeps Pause summary microcopy readable and buttons separated", () => {
+    const { buttons, trace } = renderWithTrace("paused");
+    const summaryLines = trace.texts.filter((entry) => entry.text.startsWith("SAVE CARD") || entry.text.startsWith("BAL / ACTIVE"));
+    expect(summaryLines.length).toBe(2);
+    for (const line of summaryLines) {
+      expect(fontSize(line)).toBeGreaterThanOrEqual(SIGNAL_GLASS_TEXT_SIZES.pauseMicrocopy);
+    }
+    const pauseButtons = ["pause-resume", "help", "pause-settings", "pause-menu"].map((id) => byId(buttons, id));
+    for (let i = 0; i < pauseButtons.length; i += 1) {
+      for (let j = i + 1; j < pauseButtons.length; j += 1) {
+        expectNoOverlap(pauseButtons[i], pauseButtons[j]);
+      }
+    }
   });
 });

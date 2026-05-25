@@ -115,6 +115,16 @@ export const SIGNAL_GLASS_THEME = {
 
 export type SignalGlassTheme = typeof SIGNAL_GLASS_THEME;
 
+export const SIGNAL_GLASS_TEXT_SIZES = {
+  hudTelemetry: 10,
+  marketRow: 11,
+  equipmentRow: 10,
+  missionRow: 10,
+  pauseMicrocopy: 11,
+  settingsMicrocopy: 10,
+  mapDetail: 10
+} as const;
+
 export const SIGNAL_GLASS_CSS_VARS: Record<string, string> = {
   "--vst-bg": SIGNAL_GLASS_THEME.colors.background,
   "--vst-surface-1": SIGNAL_GLASS_THEME.colors.surface1,

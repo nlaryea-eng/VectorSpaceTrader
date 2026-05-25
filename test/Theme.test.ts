@@ -1,6 +1,8 @@
+/// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 
-import { SIGNAL_GLASS_CSS_VARS, SIGNAL_GLASS_THEME, THEME, getStatusToken } from "../src/game/Theme";
+import { SIGNAL_GLASS_CSS_VARS, SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME, getStatusToken } from "../src/game/Theme";
+import styles from "../src/styles.css?raw";
 
 const requiredColorTokens = [
   "background",
@@ -80,6 +82,24 @@ describe("Signal Glass theme tokens", () => {
     expect(scale.telemetry).toBeGreaterThanOrEqual(13);
     // Display/title heading must be at least 18px
     expect(scale.h2).toBeGreaterThanOrEqual(18);
+  });
+
+  it("locks readable minimum sizes for screenshot-polished surfaces", () => {
+    expect(SIGNAL_GLASS_TEXT_SIZES.hudTelemetry).toBeGreaterThanOrEqual(10);
+    expect(SIGNAL_GLASS_TEXT_SIZES.marketRow).toBeGreaterThanOrEqual(11);
+    expect(SIGNAL_GLASS_TEXT_SIZES.equipmentRow).toBeGreaterThanOrEqual(10);
+    expect(SIGNAL_GLASS_TEXT_SIZES.missionRow).toBeGreaterThanOrEqual(10);
+    expect(SIGNAL_GLASS_TEXT_SIZES.pauseMicrocopy).toBeGreaterThanOrEqual(11);
+    expect(SIGNAL_GLASS_TEXT_SIZES.settingsMicrocopy).toBeGreaterThanOrEqual(10);
+    expect(SIGNAL_GLASS_TEXT_SIZES.mapDetail).toBeGreaterThanOrEqual(10);
+  });
+
+  it("does not introduce remote font imports", () => {
+    expect(styles).not.toMatch(/@import\s+url\(["']?https?:\/\/[^"')]+font/i);
+    expect(styles).not.toMatch(/fonts\.(googleapis|gstatic)\.com/i);
+    for (const stack of [SIGNAL_GLASS_THEME.typography.ui, SIGNAL_GLASS_THEME.typography.display, SIGNAL_GLASS_THEME.typography.telemetry]) {
+      expect(stack).not.toMatch(/https?:\/\//i);
+    }
   });
 
   it("keeps all status tokens text-and-glyph addressable", () => {

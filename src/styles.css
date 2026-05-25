@@ -1,5 +1,4 @@
-/* Restore game typography: Space Grotesk (display/accent), Inter (body), JetBrains Mono (telemetry) */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+/* Restore game typography: Space Grotesk (display/accent), Inter (body), JetBrains Mono (telemetry) via local/system stacks. */
 
 :root {
   color-scheme: dark;

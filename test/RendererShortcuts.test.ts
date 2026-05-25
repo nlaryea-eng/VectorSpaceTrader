@@ -100,7 +100,7 @@ function stubState(mode: GameMode, docked = false): RenderState {
 function createStubCanvas(): HTMLCanvasElement {
   const ctx = {
     setTransform() {}, clearRect() {}, fillRect() {}, beginPath() {},
-    roundRect() {}, fill() {}, stroke() {}, fillText() {}, measureText() { return { width: 0 }; },
+    roundRect() {}, fill() {}, stroke() {}, rect() {}, clip() {}, fillText() {}, measureText() { return { width: 0 }; },
     moveTo() {}, lineTo() {}, arc() {}, ellipse() {}, setLineDash() {}, save() {}, restore() {},
     translate() {}, rotate() {}, closePath() {}, strokeRect() {}
   } as unknown as CanvasRenderingContext2D;
