@@ -18,9 +18,16 @@ describe("getPanelLayout — sub-region geometry", () => {
     it(`all sub-regions have positive dimensions on ${label}`, () => {
       const layout = getPanelLayout(vp);
       expect(layout.headerBand.height).toBeGreaterThan(0);
-      expect(layout.subheaderRow.height).toBeGreaterThan(0);
+      expect(layout.titleRow.height).toBeGreaterThan(0);
+      expect(layout.subtitleRow.height).toBeGreaterThan(0);
+      expect(layout.contextChipRow.height).toBeGreaterThan(0);
+      expect(layout.headerActionRow.height).toBeGreaterThan(0);
       expect(layout.contentBounds.height).toBeGreaterThan(0);
       expect(layout.footerRow.height).toBeGreaterThan(0);
+      expect(layout.footerStatusRow.height).toBeGreaterThan(0);
+      expect(layout.footerPrimaryActionRow.height).toBeGreaterThan(0);
+      expect(layout.footerSecondaryActionRow.height).toBeGreaterThan(0);
+      expect(layout.footerHintRow.height).toBeGreaterThan(0);
       expect(layout.emptyStateArea.height).toBeGreaterThan(0);
     });
 
@@ -29,20 +36,43 @@ describe("getPanelLayout — sub-region geometry", () => {
       const pb = layout.panelBounds;
       const panelRect: SubRect = { x: pb.x, y: pb.y, width: pb.width, height: pb.height };
       expect(withinBounds(layout.headerBand, panelRect)).toBe(true);
-      expect(withinBounds(layout.subheaderRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.titleRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.subtitleRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.contextChipRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.headerActionRow, panelRect)).toBe(true);
       expect(withinBounds(layout.contentBounds, panelRect)).toBe(true);
       expect(withinBounds(layout.footerRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.footerStatusRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.footerPrimaryActionRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.footerSecondaryActionRow, panelRect)).toBe(true);
+      expect(withinBounds(layout.footerHintRow, panelRect)).toBe(true);
     });
 
-    it(`headerBand, subheaderRow, contentBounds, footerRow do not overlap on ${label}`, () => {
+    it(`header, content, and footer bands do not overlap on ${label}`, () => {
       const layout = getPanelLayout(vp);
-      const { headerBand, subheaderRow, contentBounds, footerRow } = layout;
-      expect(rectsOverlap(headerBand, subheaderRow)).toBe(false);
+      const { headerBand, contentBounds, footerRow } = layout;
       expect(rectsOverlap(headerBand, contentBounds)).toBe(false);
       expect(rectsOverlap(headerBand, footerRow)).toBe(false);
-      expect(rectsOverlap(subheaderRow, contentBounds)).toBe(false);
-      expect(rectsOverlap(subheaderRow, footerRow)).toBe(false);
       expect(rectsOverlap(contentBounds, footerRow)).toBe(false);
+    });
+
+    it(`header title/subtitle/action rows are ordered safely on ${label}`, () => {
+      const layout = getPanelLayout(vp);
+      expect(rectsOverlap(layout.titleRow, layout.headerActionRow)).toBe(false);
+      expect(layout.titleRow.y + layout.titleRow.height).toBeLessThanOrEqual(layout.subtitleRow.y);
+      expect(layout.subtitleRow.y + layout.subtitleRow.height).toBeLessThanOrEqual(layout.contextChipRow.y);
+      expect(layout.contextChipRow.y + layout.contextChipRow.height).toBeLessThanOrEqual(
+        layout.headerBand.y + layout.headerBand.height
+      );
+    });
+
+    it(`footer status/action/hint rows do not overlap on ${label}`, () => {
+      const layout = getPanelLayout(vp);
+      expect(rectsOverlap(layout.footerStatusRow, layout.footerPrimaryActionRow)).toBe(false);
+      expect(rectsOverlap(layout.footerStatusRow, layout.footerSecondaryActionRow)).toBe(false);
+      expect(rectsOverlap(layout.footerPrimaryActionRow, layout.footerSecondaryActionRow)).toBe(false);
+      expect(rectsOverlap(layout.footerPrimaryActionRow, layout.footerHintRow)).toBe(false);
+      expect(rectsOverlap(layout.footerSecondaryActionRow, layout.footerHintRow)).toBe(false);
     });
 
     it(`contentBounds.height / panelBounds.height >= 0.55 on ${label}`, () => {
@@ -94,17 +124,15 @@ describe("getPanelLayout — emptyStateArea geometry", () => {
 describe("getPanelLayout — structural ordering", () => {
   it("regions are stacked top-to-bottom in logical order on desktop", () => {
     const layout = getPanelLayout(DESKTOP);
-    const { headerBand, subheaderRow, contentBounds, footerRow } = layout;
-    expect(headerBand.y + headerBand.height).toBeLessThanOrEqual(subheaderRow.y);
-    expect(subheaderRow.y + subheaderRow.height).toBeLessThanOrEqual(contentBounds.y);
+    const { headerBand, contentBounds, footerRow } = layout;
+    expect(headerBand.y + headerBand.height).toBeLessThanOrEqual(contentBounds.y);
     expect(contentBounds.y + contentBounds.height).toBeLessThanOrEqual(footerRow.y);
   });
 
   it("regions are stacked top-to-bottom in logical order on mobile", () => {
     const layout = getPanelLayout(MOBILE);
-    const { headerBand, subheaderRow, contentBounds, footerRow } = layout;
-    expect(headerBand.y + headerBand.height).toBeLessThanOrEqual(subheaderRow.y);
-    expect(subheaderRow.y + subheaderRow.height).toBeLessThanOrEqual(contentBounds.y);
+    const { headerBand, contentBounds, footerRow } = layout;
+    expect(headerBand.y + headerBand.height).toBeLessThanOrEqual(contentBounds.y);
     expect(contentBounds.y + contentBounds.height).toBeLessThanOrEqual(footerRow.y);
   });
 });

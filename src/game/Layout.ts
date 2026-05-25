@@ -190,42 +190,123 @@ export interface SubRect {
 export interface PanelLayout {
   panelBounds: PanelBounds;
   headerBand: SubRect;
+  titleRow: SubRect;
+  subtitleRow: SubRect;
+  contextChipRow: SubRect;
+  headerActionRow: SubRect;
   subheaderRow: SubRect;
   contentBounds: SubRect;
   footerRow: SubRect;
+  footerStatusRow: SubRect;
+  footerPrimaryActionRow: SubRect;
+  footerSecondaryActionRow: SubRect;
+  footerHintRow: SubRect;
   emptyStateArea: SubRect;
+  showFooterHint: boolean;
+}
+
+export interface PanelChromeLayout {
+  panelBounds: SubRect;
+  headerBand: SubRect;
+  titleRow: SubRect;
+  subtitleRow: SubRect;
+  contextChipRow: SubRect;
+  headerActionRow: SubRect;
+  contentBounds: SubRect;
+  footerRow: SubRect;
+  footerStatusRow: SubRect;
+  footerPrimaryActionRow: SubRect;
+  footerSecondaryActionRow: SubRect;
+  footerHintRow: SubRect;
+  emptyStateArea: SubRect;
+  showFooterHint: boolean;
 }
 
 /**
  * Divides a modal panel into named structural sub-regions.
  *
- * headerBand    — title + close/back affordance
- * subheaderRow  — summary/status line (balance, cargo, etc.)
- * contentBounds — main scrollable/list area (≥55% of panel height)
- * footerRow     — action buttons and paging controls
+ * headerBand    — title, subtitle/status, context chips, header actions
+ * contentBounds — main scrollable/list area
+ * footerRow     — status, primary/secondary actions, and optional hint
  * emptyStateArea — centered within contentBounds for empty-state cards
  */
 export function getPanelLayout(size: ViewportSize, preferredWidth = 640): PanelLayout {
   const panelBounds = getPanelBounds(size, preferredWidth);
   const compact = isCompactViewport(size);
+  const chrome = getPanelChromeLayout(panelBoundsToRect(panelBounds), compact);
 
-  const headerH = compact ? 44 : 52;
-  const subheaderH = compact ? 26 : 32;
-  const footerH = compact ? 42 : 48;
-  const innerGap = 4;
+  return {
+    ...chrome,
+    panelBounds,
+    subheaderRow: chrome.subtitleRow
+  };
+}
 
+export function getPanelChromeLayout(panelBounds: SubRect, compact: boolean): PanelChromeLayout {
+  const margin = compact ? 12 : 16;
+  const rowGap = compact ? 4 : 6;
+  const headerH = compact ? 96 : 104;
+  const footerH = compact ? 156 : 144;
   const px = panelBounds.x;
   const py = panelBounds.y;
   const pw = panelBounds.width;
   const ph = panelBounds.height;
+  const innerX = px + margin;
+  const innerW = Math.max(0, pw - margin * 2);
+  const actionReserve = Math.min(compact ? 166 : 224, innerW * 0.42);
+  const titleW = Math.max(0, innerW - actionReserve - rowGap);
 
-  const headerBand: SubRect = { x: px, y: py, width: pw, height: headerH };
-  const subheaderRow: SubRect = { x: px, y: py + headerH, width: pw, height: subheaderH };
+  const headerBand: SubRect = { x: px, y: py, width: pw, height: Math.min(headerH, ph * 0.28) };
+  const titleRow: SubRect = { x: innerX, y: py + (compact ? 12 : 14), width: titleW, height: compact ? 26 : 30 };
+  const headerActionRow: SubRect = {
+    x: innerX + innerW - actionReserve,
+    y: titleRow.y,
+    width: actionReserve,
+    height: compact ? 30 : 32
+  };
+  const subtitleRow: SubRect = {
+    x: innerX,
+    y: titleRow.y + titleRow.height + rowGap,
+    width: innerW,
+    height: compact ? 18 : 20
+  };
+  const contextChipRow: SubRect = {
+    x: innerX,
+    y: subtitleRow.y + subtitleRow.height + rowGap,
+    width: innerW,
+    height: compact ? 18 : 20
+  };
+
   const footerRow: SubRect = { x: px, y: py + ph - footerH, width: pw, height: footerH };
+  const footerHintRow: SubRect = {
+    x: innerX,
+    y: py + ph - margin - 16,
+    width: innerW,
+    height: 16
+  };
+  const footerSecondaryActionRow: SubRect = {
+    x: innerX,
+    y: footerHintRow.y - (compact ? 36 : 38),
+    width: innerW,
+    height: compact ? 32 : 34
+  };
+  const footerPrimaryActionRow: SubRect = {
+    x: innerX,
+    y: footerSecondaryActionRow.y - (compact ? 40 : 42),
+    width: innerW,
+    height: compact ? 34 : 36
+  };
+  const footerStatusRow: SubRect = {
+    x: innerX,
+    y: footerRow.y + (compact ? 10 : 8),
+    width: innerW,
+    height: compact ? 22 : 22
+  };
 
-  const contentY = py + headerH + subheaderH + innerGap;
-  const contentH = (py + ph - footerH - innerGap) - contentY;
-  const contentBounds: SubRect = { x: px, y: contentY, width: pw, height: contentH };
+  const contentY = headerBand.y + headerBand.height + rowGap;
+  const contentBottom = footerRow.y - rowGap;
+  const contentH = Math.max(0, contentBottom - contentY);
+  const contentBounds: SubRect = { x: innerX, y: contentY, width: innerW, height: contentH };
 
   const emptyH = Math.min(148, contentH * 0.55);
   const emptyW = Math.min(pw - 32, 540);
@@ -236,7 +317,26 @@ export function getPanelLayout(size: ViewportSize, preferredWidth = 640): PanelL
     height: emptyH
   };
 
-  return { panelBounds, headerBand, subheaderRow, contentBounds, footerRow, emptyStateArea };
+  return {
+    panelBounds,
+    headerBand,
+    titleRow,
+    subtitleRow,
+    contextChipRow,
+    headerActionRow,
+    contentBounds,
+    footerRow,
+    footerStatusRow,
+    footerPrimaryActionRow,
+    footerSecondaryActionRow,
+    footerHintRow,
+    emptyStateArea,
+    showFooterHint: footerHintRow.y >= footerSecondaryActionRow.y + footerSecondaryActionRow.height
+  };
+}
+
+function panelBoundsToRect(bounds: PanelBounds): SubRect {
+  return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
 }
 
 export interface StationHubZones {
@@ -257,15 +357,13 @@ export function getStationHubZones(size: ViewportSize): StationHubZones {
   const panelW = compact ? size.width - 16 : size.width * 0.6;
   const panelH = compact ? size.height - 24 : size.height * 0.68;
 
-  // Service actions: bottom of the panel (matches renderDocked serviceY).
-  const serviceY = compact ? panelY + panelH - 240 : size.height * 0.67;
-  const serviceH = compact ? 240 : panelY + panelH - serviceY;
-  const serviceActions: SubRect = { x: panelX, y: serviceY, width: panelW, height: serviceH };
+  const chrome = getPanelChromeLayout({ x: panelX, y: panelY, width: panelW, height: panelH }, compact);
+  const serviceActions = chrome.footerRow;
 
   // Recommendation card: snapped just above service actions.
   const recH = compact ? 62 : 70;
   const maxGap = compact ? 16 : 24;
-  const recY = serviceY - recH - maxGap;
+  const recY = serviceActions.y - recH - maxGap;
   const recommendation: SubRect = { x: panelX, y: recY, width: panelW, height: recH };
 
   // Identity zone: top portion (title + subtitle). Approximate height.

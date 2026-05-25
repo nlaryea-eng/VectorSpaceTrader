@@ -663,7 +663,10 @@ export class Game {
   private openStationMode(mode: "trade" | "equipment" | "shipyard" | "missions"): void {
     const current = this.systems[this.player.currentSystemId];
     const service = mode === "trade" ? "market" : mode === "equipment" ? "equipment" : mode === "shipyard" ? "shipyard" : "missions";
-    if (!hasStationService(current, service)) {
+    const available = mode === "equipment"
+      ? hasStationService(current, "equipment") || hasStationService(current, "repair")
+      : hasStationService(current, service);
+    if (!available) {
       this.message = `${modeLabel(mode)} unavailable at this station`;
       this.audio.play("tradeFail");
       return;
@@ -933,6 +936,18 @@ export class Game {
 
     if (zone.id === "map-jump") {
       this.jumpToSelectedSystem();
+      return;
+    }
+
+    if (zone.id === "map-open") {
+      this.mode = "map";
+      this.audio.play("ui");
+      return;
+    }
+
+    if (zone.id === "map-back") {
+      this.mode = this.player.docked ? "docked" : "flight";
+      this.audio.play("ui");
       return;
     }
 

@@ -256,11 +256,13 @@ async function browserSmoke() {
     await assertButton(desktop, "touch-missions");
     await assertButton(desktop, "touch-equipment");
     await assertButton(desktop, "touch-shipyard");
-    await assertButton(desktop, "touch-repair");
+    await assertButton(desktop, "help");
+    assert(!(await snapshot(desktop)).buttons.some((button) => button.id === "touch-repair"), "Standalone Repair tile should not render on Station Hub");
 
     await desktop.key("KeyT"); await sleep(300);
     await assertMode(desktop, "trade");
     await assertButton(desktop, "trade-row-0");
+    await assertButton(desktop, "help");
     await desktop.key("KeyF");
     await sleep(200);
     assert((await snapshot(desktop)).message.length > 0, "Market fuel shortcut did not reach a handled result");
@@ -270,22 +272,29 @@ async function browserSmoke() {
     await desktop.key("KeyR"); await sleep(300);
     await assertMode(desktop, "missions");
     await assertButton(desktop, "mission-row-0");
+    await assertButton(desktop, "help");
 
     await desktop.key("Escape"); await sleep(200);
     await assertMode(desktop, "docked");
     await desktop.key("KeyE"); await sleep(300);
     await assertMode(desktop, "equipment");
     await assertButton(desktop, "equip-category-cycle");
+    await assertButton(desktop, "help");
+    writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-equipment.png"), await desktop.screenshot());
 
     await desktop.key("Escape"); await sleep(200);
     await assertMode(desktop, "docked");
     await desktop.key("KeyY"); await sleep(300);
     await assertMode(desktop, "shipyard");
     await assertButton(desktop, "ship-buy");
+    await assertButton(desktop, "help");
 
     await desktop.key("Escape"); await sleep(200);
     await desktop.key("KeyM"); await sleep(300);
     await assertMode(desktop, "map");
+    await assertButton(desktop, "help");
+    await assertButton(desktop, "map-back");
+    writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-map.png"), await desktop.screenshot());
     // Blur auto-focused search input so keyboard navigation works
     await desktop.eval("document.querySelector('.map-search-input').blur()");
     await sleep(100);
@@ -361,6 +370,8 @@ async function browserSmoke() {
     await sleep(300);
     await assertMode(desktop, "settings");
     await assertButton(desktop, "settings-sfx-up");
+    await assertButton(desktop, "help");
+    writeFileSync(join(SCREENSHOTS_DIR, "smoke-desktop-settings.png"), await desktop.screenshot());
     await clickButton(desktop, "settings-sfx-up");
     await sleep(150);
     await desktop.key("Escape"); await sleep(300);
@@ -400,6 +411,7 @@ async function browserSmoke() {
     await assertMode(mobile, "map");
     const mobileMapSearchVisible = await mobile.eval("document.querySelector('.map-search-input').hidden === false");
     assert(mobileMapSearchVisible, "Mobile map search input should be visible in map mode");
+    writeFileSync(join(SCREENSHOTS_DIR, "smoke-mobile-map.png"), await mobile.screenshot());
 
     await mobile.close();
     await browser.close();

@@ -1,7 +1,7 @@
 import { SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
-import { respectsReducedMotion } from "./Layout";
+import { getPanelChromeLayout, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
 import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
@@ -981,23 +981,98 @@ export class Renderer {
     }
   }
 
+  private createPanelChrome(x: number, y: number, width: number, height: number): PanelChromeLayout {
+    return getPanelChromeLayout({ x, y, width, height }, this.narrow);
+  }
+
+  private rowTextY(row: SubRect): number {
+    return row.y + row.height / 2 + 4;
+  }
+
+  private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string): void {
+    this.drawText(title, chrome.titleRow.x + chrome.titleRow.width / 2, this.rowTextY(chrome.titleRow), {
+      align: "center",
+      size: this.narrow ? 18 : 24,
+      color: THEME.colors.textPrimary,
+      font: THEME.fonts.accent
+    });
+    if (subtitle) {
+      this.drawText(subtitle, chrome.subtitleRow.x + chrome.subtitleRow.width / 2, this.rowTextY(chrome.subtitleRow), {
+        align: "center",
+        color: THEME.colors.accentTeal,
+        size: this.narrow ? 10 : 12,
+        font: THEME.fonts.mono
+      });
+    }
+    if (context) {
+      this.drawText(context, chrome.contextChipRow.x + chrome.contextChipRow.width / 2, this.rowTextY(chrome.contextChipRow), {
+        align: "center",
+        color: SIGNAL_GLASS_THEME.colors.accent2,
+        size: this.narrow ? 9 : 10,
+        font: THEME.fonts.mono
+      });
+    }
+  }
+
+  private drawHeaderActions(chrome: PanelChromeLayout, actions: Array<{ id: string; label: string; width?: number }>): void {
+    const gap = this.narrow ? 6 : 8;
+    const h = Math.min(this.narrow ? 28 : 30, chrome.headerActionRow.height);
+    let x = chrome.headerActionRow.x + chrome.headerActionRow.width;
+    for (let index = actions.length - 1; index >= 0; index -= 1) {
+      const action = actions[index];
+      const w = action.width ?? (this.narrow ? 70 : 96);
+      x -= w;
+      this.button(action.id, action.label, x, chrome.headerActionRow.y + (chrome.headerActionRow.height - h) / 2, w, h);
+      x -= gap;
+    }
+  }
+
+  private drawFooterHint(chrome: PanelChromeLayout, hint: string): void {
+    if (!chrome.showFooterHint) return;
+    this.drawText(hint, chrome.footerHintRow.x + chrome.footerHintRow.width / 2, this.rowTextY(chrome.footerHintRow), {
+      align: "center",
+      color: THEME.colors.textDim,
+      size: this.narrow ? 9 : 10,
+      font: THEME.fonts.mono
+    });
+  }
+
+  private drawDisabledControl(label: string, x: number, y: number, width: number, height: number, color = THEME.colors.textDim): void {
+    this.ctx.fillStyle = "rgba(14, 19, 32, 0.42)";
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
+    this.ctx.fill();
+    this.ctx.strokeStyle = "rgba(95, 105, 125, 0.45)";
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
+    this.ctx.stroke();
+    this.drawText(label, x + width / 2, y + height / 2 + 4, {
+      align: "center",
+      color,
+      size: this.narrow ? 10 : 11,
+      font: THEME.fonts.accent
+    });
+  }
+
   private renderMap(state: RenderState): void {
     const panelX = this.narrow ? 8 : this.width * 0.08;
     const panelY = this.narrow ? 12 : this.height * 0.1;
     const panelW = this.narrow ? this.width - 16 : this.width * 0.84;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.78;
     this.panel(panelX, panelY, panelW, panelH);
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
     const matches = filterSystems(state.systems, state.mapFilters, state.player);
-    const titleSize = this.narrow ? 16 : 24;
-    const titleY = panelY + (this.narrow ? 26 : 40);
-    this.drawText("UNIVERSE NAVIGATION", this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
+    this.drawPanelHeader(chrome, "UNIVERSE NAVIGATION", `SYSTEMS ${matches.length}/${state.systems.length}`, "SEARCH / FILTER / CLASS");
+    this.drawHeaderActions(chrome, [
+      { id: "help", label: "HELP [?]", width: this.narrow ? 74 : 92 },
+      { id: "map-back", label: this.narrow ? "CLOSE" : "CLOSE MAP", width: this.narrow ? 78 : 112 }
+    ]);
 
-    const mapX = this.narrow ? panelX + 12 : this.width * 0.12;
-    const mapY = this.narrow ? titleY + 18 : this.height * 0.23;
-    const mapW = this.narrow ? panelW - 24 : this.width * 0.54;
-    const mapH = this.narrow ? this.height * 0.42 : this.height * 0.56;
+    const mapX = this.narrow ? chrome.contentBounds.x : chrome.contentBounds.x;
+    const mapY = chrome.contentBounds.y + (this.narrow ? 4 : 8);
+    const mapW = this.narrow ? chrome.contentBounds.width : chrome.contentBounds.width * 0.64;
+    const mapH = this.narrow ? Math.min(this.height * 0.34, chrome.contentBounds.height * 0.55) : Math.min(this.height * 0.5, chrome.contentBounds.height - 16);
 
     this.ctx.strokeStyle = "rgba(0, 242, 255, 0.2)";
     this.ctx.strokeRect(mapX, mapY, mapW, mapH);
@@ -1100,10 +1175,10 @@ export class Renderer {
       this.buttonZones.push({ id: `map-system-${system.id}`, label: system.name, x: point.x - hitR, y: point.y - hitR, width: hitR * 2, height: hitR * 2 });
     }
 
-    const detailX = this.narrow ? panelX + 12 : this.width * 0.68;
-    const detailY = this.narrow ? mapY + mapH + 12 : this.height * 0.23;
-    const detailW = this.narrow ? panelW - 24 : this.width * 0.22;
-    const detailH = this.narrow ? 110 : this.height * 0.45;
+    const detailX = this.narrow ? chrome.contentBounds.x : mapX + mapW + 18;
+    const detailY = this.narrow ? mapY + mapH + 12 : mapY;
+    const detailW = this.narrow ? chrome.contentBounds.width : Math.max(210, chrome.contentBounds.x + chrome.contentBounds.width - detailX);
+    const detailH = this.narrow ? Math.min(118, Math.max(96, chrome.contentBounds.y + chrome.contentBounds.height - detailY - 6)) : mapH;
 
     // System Detail Panel
     this.hudPanel(detailX, detailY, detailW, detailH);
@@ -1152,17 +1227,10 @@ export class Renderer {
     }
 
     if (this.narrow) {
-      this.button("map-jump", "JUMP [Enter]", detailX, detailY + detailH + 8, detailW, 36);
-      this.button("map-back", "CLOSE MAP [Esc]", this.width / 2 - 90, panelY + panelH - 44, 180, 32);
+      this.button("map-jump", "JUMP [Enter]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
     } else {
-      this.button("map-jump", "ENGAGE JUMP DRIVE [Enter]", detailX, detailY + 210, detailW, 44);
-      this.button("map-back", "CLOSE MAP [Esc]", this.width / 2 - 100, this.height * 0.78, 200, 40);
+      this.button("map-jump", "ENGAGE JUMP DRIVE [Enter]", detailX, chrome.footerPrimaryActionRow.y, Math.min(detailW, 280), chrome.footerPrimaryActionRow.height);
     }
-
-    const filterY = this.narrow ? mapY - 8 : this.height * 0.18;
-    this.drawText(`Systems: ${matches.length}/${state.systems.length}`, mapX, filterY, {
-      align: "left", color: THEME.colors.textSecondary, size: 11, font: THEME.fonts.mono
-    });
 
     // Map filters row
     const filters = [
@@ -1176,11 +1244,11 @@ export class Renderer {
       { id: "map-filter-clear", label: "CLEAR", value: "" }
     ];
 
-    const fbW = this.narrow ? 42 : 74;
-    const fbH = this.narrow ? 24 : 28;
     const fbGap = this.narrow ? 2 : 6;
-    const fbY = this.narrow ? mapY + mapH + 8 : mapY + mapH + 12;
-    const fbStartX = mapX;
+    const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (filters.length - 1)) / filters.length);
+    const fbH = Math.min(this.narrow ? 28 : 30, chrome.footerSecondaryActionRow.height);
+    const fbY = chrome.footerSecondaryActionRow.y + (chrome.footerSecondaryActionRow.height - fbH) / 2;
+    const fbStartX = chrome.footerSecondaryActionRow.x;
 
     filters.forEach((f, i) => {
       const fx = fbStartX + i * (fbW + fbGap);
@@ -1188,6 +1256,7 @@ export class Renderer {
       const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
       this.button(f.id, label, fx, fbY, fbW, fbH);
     });
+    this.drawFooterHint(chrome, this.narrow ? "A/D SELECT · ENTER JUMP · ESC CLOSE" : "SEARCH SYSTEMS · FILTERS STAY CLEAR OF HEADER COMMANDS · ESC CLOSE");
   }
 
   private renderDocking(state: RenderState): void {
@@ -1209,6 +1278,7 @@ export class Renderer {
     const panelW = this.narrow ? this.width - 16 : this.width * 0.6;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.68;
     this.panel(panelX, panelY, panelW, panelH);
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
     const system = state.systems[state.player.currentSystemId];
     const profile = getStationProfile(system);
@@ -1218,25 +1288,10 @@ export class Renderer {
     const riskLabel = getLegalRiskLabel(state.player.legalRisk);
     const riskColor = state.player.legalRisk >= 5 ? THEME.colors.danger : state.player.legalRisk >= 2 ? THEME.colors.warning : THEME.colors.success;
 
-    const titleY = panelY + (this.narrow ? 32 : this.height * 0.18 - panelY);
-    const titleSize = this.narrow ? 18 : 28;
-    this.drawText(`${system.name.toUpperCase()} STATION`, this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
+    this.drawPanelHeader(chrome, `${system.name.toUpperCase()} STATION`, profile.label.toUpperCase(), system.stationHint.toUpperCase());
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
-    // Use wrapped subtitle so long station hints don't clip on phones.
-    const subtitle = `${profile.label} · ${system.stationHint}`;
-    const subtitleSize = this.narrow ? 11 : 14;
-    const subtitleY = titleY + (this.narrow ? 22 : 36);
-    this.ctx.font = `${subtitleSize}px ${THEME.fonts.primary}`;
-    const subLines = wrapText(this.ctx, subtitle, panelW - 32);
-    subLines.forEach((line, i) => {
-      this.drawText(line, this.width / 2, subtitleY + i * (subtitleSize + 4), {
-        align: "center", color: THEME.colors.accentTeal, font: THEME.fonts.primary, size: subtitleSize
-      });
-    });
-
-    const infoY = subtitleY + subLines.length * (subtitleSize + 4) + (this.narrow ? 14 : 32);
+    const infoY = chrome.contentBounds.y + (this.narrow ? 18 : 20);
     const infoSize = this.narrow ? 11 : 14;
     const infoGap = this.narrow ? 22 : 32;
     this.drawText(`PILOT RANK: ${state.pilotRank.title}`, this.width / 2, infoY, {
@@ -1265,7 +1320,7 @@ export class Renderer {
     }
 
     // Service action zone — computed first so recommendation card can snap to it.
-    const serviceY = this.narrow ? panelY + panelH - 240 : this.height * 0.67;
+    const serviceY = chrome.footerRow.y;
 
     if (this.signalGlassUi) {
       const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
@@ -1288,51 +1343,55 @@ export class Renderer {
       });
     }
 
+    const unavailable = getStationServiceTiles(system).filter((tile) => !tile.available);
+    const stationStatus = unavailable.length > 0
+      ? `${unavailable.map((tile) => tile.shortLabel).join(" / ")} OFFLINE`
+      : "EQUIPMENT INCLUDES HULL REPAIR";
+    this.drawText(stationStatus, chrome.footerStatusRow.x + chrome.footerStatusRow.width / 2, this.rowTextY(chrome.footerStatusRow), {
+      align: "center",
+      color: unavailable.length > 0 ? THEME.colors.textDim : THEME.colors.success,
+      size: this.narrow ? 9 : 10,
+      font: THEME.fonts.mono
+    });
+
     if (this.narrow) {
       // Two-column grid of station service buttons that fits at 390px.
       const cols = 2;
-      const buttonsTop = serviceY;
+      const rowYs = [chrome.footerPrimaryActionRow.y, chrome.footerSecondaryActionRow.y];
       const bgap = 8;
       const bw = (panelW - 32 - bgap * (cols - 1)) / cols;
-      const bh = 36;
+      const bh = Math.min(34, chrome.footerPrimaryActionRow.height);
       const labels = this.signalGlassUi
         ? getStationServiceTiles(system).map((tile) => [tile.id, tile.available ? tile.shortLabel : `${tile.shortLabel} LOCKED`] as [string, string])
-        : [
-            ["touch-trade", "MARKET"],
-            ["touch-equipment", "EQUIPMENT"],
-            ["touch-shipyard", "SHIPS"],
-            ["touch-missions", "MISSIONS"],
-            ["help", "HELP"],
-          ] as Array<[string, string]>;
+        : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"]] as Array<[string, string]>;
       labels.forEach((entry, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const bx = panelX + 16 + col * (bw + bgap);
-        const by = buttonsTop + row * (bh + bgap);
+        const by = rowYs[Math.min(row, rowYs.length - 1)];
         this.button(entry[0], entry[1], bx, by, bw, bh);
       });
-      const launchY = buttonsTop + Math.ceil(labels.length / cols) * (bh + bgap) + 8;
-      this.button("touch-dock", "LAUNCH", panelX + 16, launchY, panelW - 32, bh + 4);
+      this.button("touch-dock", "LAUNCH", panelX + 16, chrome.footerHintRow.y - 6, panelW - 32, 28);
     } else {
-      const y = serviceY;
       const bw = 84;
       const bgap = 10;
       const tiles = this.signalGlassUi ? getStationServiceTiles(system) : null;
-      const totalW = bw * 6 + bgap * 5;
+      const totalButtons = (tiles?.length ?? 4) + 1;
+      const totalW = bw * totalButtons + bgap * (totalButtons - 1);
       const startX = this.width / 2 - totalW / 2;
       const labels: Array<[string, string]> = tiles
         ? tiles.map((tile) => [tile.id, tile.available ? tile.shortLabel : "LOCKED"])
-        : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"], ["help", "HELP"], ["touch-dock", "LAUNCH"]];
-      labels.slice(0, 5).forEach(([id, label], index) => {
-        this.button(id, label, startX + (bw + bgap) * index, y, bw, 42);
+        : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"]];
+      labels.forEach(([id, label], index) => {
+        this.button(id, label, startX + (bw + bgap) * index, chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
         if (tiles && tiles[index] && !tiles[index].available) {
           // Show unavailable reason inside the button bounds (inline, not floating label).
-          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + (bw + bgap) * index + bw / 2, y + 34, {
+          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + (bw + bgap) * index + bw / 2, chrome.footerSecondaryActionRow.y + 14, {
             align: "center", color: SIGNAL_GLASS_THEME.colors.textDim, size: 7, font: THEME.fonts.mono
           });
         }
       });
-      this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * 5, y, bw, 42);
+      this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * labels.length, chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
     }
   }
 
@@ -1342,6 +1401,7 @@ export class Renderer {
     const panelW = this.narrow ? this.width - 16 : this.width * 0.88;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.84;
     this.panel(panelX, panelY, panelW, panelH);
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
     const cargoUsed = getTotalOccupiedCargo(state.player);
     const shipStats = getPlayerShipStats(state.player);
@@ -1350,21 +1410,13 @@ export class Renderer {
       ? `${cargoUsed}/${state.player.cargoCapacity} (${missionCargo} Mission)`
       : `${cargoUsed}/${state.player.cargoCapacity}`;
 
-    const titleSize = this.narrow ? 18 : 24;
-    const titleY = panelY + (this.narrow ? 28 : 40);
-    this.drawText("STATION MARKET", this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
-
-    const summaryY = titleY + (this.narrow ? 22 : 28);
     const summaryText = this.narrow
       ? `${Math.round(state.player.balance)} BAL · ${cargoLabel} · FUEL ${state.player.fuel.toFixed(1)}/${shipStats.fuelCapacity.toFixed(1)}`
       : `BALANCE: ${Math.round(state.player.balance)} BAL · CARGO: ${cargoLabel} · FUEL: ${state.player.fuel.toFixed(1)}/${shipStats.fuelCapacity.toFixed(1)}`;
-    this.drawText(summaryText, this.width / 2, summaryY, {
-      align: "center", color: THEME.colors.accentTeal, font: THEME.fonts.mono, size: this.narrow ? 10 : 12
-    });
+    this.drawPanelHeader(chrome, "STATION MARKET", summaryText, "BUY / SELL / FUEL");
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
-    const top = summaryY + (this.narrow ? 32 : 40);
+    const top = chrome.contentBounds.y + (this.narrow ? 22 : 32);
     const rowH = this.narrow ? 30 : 32;
     const rowGap = this.narrow ? 32 : 36;
     const rowW = panelW - 16;
@@ -1408,11 +1460,8 @@ export class Renderer {
         this.drawText(pl.text, colPL, y, { align: "right", size: 11, font: THEME.fonts.mono, color: pl.color });
       });
 
-      const buyFuelY = panelY + panelH - 80;
-      this.button("trade-fuel", `BUY FUEL [F]`, panelX + 8, buyFuelY, panelW - 16, 36);
-      this.drawText("TAP BUY · LONG-TAP SELL · F REFUEL · ESC BACK", this.width / 2, panelY + panelH - 28, {
-        align: "center", color: THEME.colors.textDim, size: 9, font: THEME.fonts.mono
-      });
+      this.button("trade-fuel", "BUY FUEL [F]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
+      this.drawFooterHint(chrome, "TAP BUY · LONG-TAP SELL · F REFUEL · ESC BACK");
     } else {
       const left = panelX + 16;
       const wideRowW = panelW - 32;
@@ -1485,10 +1534,8 @@ export class Renderer {
         }
       });
 
-      this.drawText(
-        "CLICK BUY · SHIFT+CLICK SELL · ALT+CLICK MAX · F REFUEL · ESC BACK",
-        panelX + panelW / 2, panelY + panelH - 18, { align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono }
-      );
+      this.button("trade-fuel", "BUY FUEL [F]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, Math.min(180, chrome.footerPrimaryActionRow.width), chrome.footerPrimaryActionRow.height);
+      this.drawFooterHint(chrome, "CLICK BUY · SHIFT+CLICK SELL · ALT+CLICK MAX · F REFUEL · ESC BACK");
     }
   }
 
@@ -1498,23 +1545,15 @@ export class Renderer {
     const panelW = this.narrow ? this.width - 16 : this.width * 0.84;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.82;
     this.panel(panelX, panelY, panelW, panelH);
-
-    const titleSize = this.narrow ? 18 : 24;
-    const titleY = panelY + (this.narrow ? 28 : 56);
-    this.drawText("EQUIPMENT BAY", this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
     const profile = getStationProfile(state.systems[state.player.currentSystemId]);
     const sections = classifyEquipment(state.player, profile);
-    if (this.signalGlassUi) {
-      this.drawText(
-        `INSTALLED ${sections.installed.length} / AVAILABLE ${sections.available.length} / UNAVAILABLE ${sections.unavailable.length}`,
-        this.width / 2,
-        titleY + (this.narrow ? 20 : 28),
-        { align: "center", color: SIGNAL_GLASS_THEME.colors.accent, size: this.narrow ? 9 : 11, font: THEME.fonts.mono }
-      );
-    }
+    const equipmentVendorLabel = profile.services.equipment
+      ? `INSTALLED ${sections.installed.length} / AVAILABLE ${sections.available.length} / UNAVAILABLE ${sections.unavailable.length}`
+      : "HULL REPAIR ACTIVE / EQUIPMENT VENDOR OFFLINE";
+    this.drawPanelHeader(chrome, "EQUIPMENT BAY", equipmentVendorLabel, `${profile.label.toUpperCase()} · MAINTENANCE`);
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
     const filteredEquipment = state.equipmentCategoryFilter === "all"
       ? EQUIPMENT
       : EQUIPMENT.filter((e) => e.category === state.equipmentCategoryFilter);
@@ -1525,7 +1564,7 @@ export class Renderer {
     const visibleEquipment = filteredEquipment.slice(page * pageSize, page * pageSize + pageSize);
 
     const left = this.narrow ? panelX + 12 : this.width * 0.14;
-    const top = titleY + (this.narrow ? 36 : this.height * 0.26 - titleY);
+    const top = chrome.contentBounds.y + (this.narrow ? 22 : 34);
     const rowW = this.narrow ? panelW - 24 : this.width * 0.72;
     const rowH = this.narrow ? 44 : 40;
     const rowSpacing = this.narrow ? 52 : 48;
@@ -1568,66 +1607,65 @@ export class Renderer {
       }
     });
 
-    // Footer zone — category/page controls and repair status are pinned to the
-    // bottom band so they never float mid-panel based on item count.
-    const footerBandH = this.narrow ? 96 : 84;
-    const footerBandY = panelY + panelH - footerBandH;
-    const footerCtrlY = footerBandY + (this.narrow ? 16 : 14);
-    const footerRepairY = footerBandY + (this.narrow ? 56 : 46);
-
     // Subtle separator above footer band
     this.ctx.strokeStyle = "rgba(0, 242, 255, 0.12)";
     this.ctx.lineWidth = 1;
     this.ctx.beginPath();
-    this.ctx.moveTo(panelX + 8, footerBandY);
-    this.ctx.lineTo(panelX + panelW - 8, footerBandY);
+    this.ctx.moveTo(panelX + 8, chrome.footerRow.y);
+    this.ctx.lineTo(panelX + panelW - 8, chrome.footerRow.y);
     this.ctx.stroke();
 
-    this.drawText(`PAGE ${page + 1}/${pageCount} · ${profile.label.toUpperCase()}`, left, footerCtrlY + 14, {
-      color: THEME.colors.accentTeal, size: 11, font: THEME.fonts.mono
-    });
-
-    const catLabel = `CAT: ${state.equipmentCategoryFilter.toUpperCase()}`;
-    if (this.narrow) {
-      this.button("equip-category-cycle", catLabel, left + rowW - 252, footerCtrlY, 100, 32);
-      if (page > 0) this.button("equip-page-prev", "PREV", left + rowW - 148, footerCtrlY, 70, 32);
-      if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + rowW - 74, footerCtrlY, 70, 32);
-    } else {
-      this.button("equip-category-cycle", catLabel, left + 200, footerCtrlY, 100, 32);
-      if (page > 0) this.button("equip-page-prev", "PREV", left + 310, footerCtrlY, 70, 32);
-      if (page < pageCount - 1) this.button("equip-page-next", "NEXT", left + 390, footerCtrlY, 70, 32);
-    }
-
-    // Repair status in subheader of footer band
     const missing = state.player.maxHull - state.player.hull;
     const hullFraction = state.player.hull / state.player.maxHull;
     const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
 
-    this.drawText("HULL:", left, footerRepairY, { size: 12, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
-    this.drawProgressBar(left + 48, footerRepairY - 6, this.narrow ? 100 : 120, 12, hullFraction, hullColor);
-    this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, left + (this.narrow ? 158 : 178), footerRepairY, { size: 11, font: THEME.fonts.mono, color: hullColor });
+    this.drawText("HULL REPAIR", chrome.footerStatusRow.x, this.rowTextY(chrome.footerStatusRow), {
+      size: this.narrow ? 10 : 11,
+      font: THEME.fonts.mono,
+      color: THEME.colors.textSecondary
+    });
+    const barX = chrome.footerStatusRow.x + (this.narrow ? 86 : 104);
+    const barW = this.narrow ? 104 : 150;
+    this.drawProgressBar(barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
+    this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, barX + barW + 12, this.rowTextY(chrome.footerStatusRow), {
+      size: this.narrow ? 10 : 11,
+      font: THEME.fonts.mono,
+      color: hullColor
+    });
 
     if (missing > 0) {
       const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
       const repairLabel = `REPAIR HULL (${repairCost} BAL) [H]`;
-      if (this.narrow) {
-        this.button("equip-repair", repairLabel, left + rowW - 252, footerRepairY - 14, rowW - (rowW - 248), 32);
-      } else {
-        this.button("equip-repair", repairLabel, left + 200, footerRepairY - 14, 240, 32);
-      }
+      this.button("equip-repair", repairLabel, chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
     } else {
-      const opLabel = "HULL FULLY OPERATIONAL";
-      if (this.narrow) {
-        this.drawText(opLabel, left + rowW - 126, footerRepairY, { align: "center", size: 10, font: THEME.fonts.accent, color: THEME.colors.success });
-      } else {
-        this.drawText(opLabel, left + 200, footerRepairY, { size: 11, font: THEME.fonts.accent, color: THEME.colors.success });
-      }
+      this.drawDisabledControl("HULL FULLY OPERATIONAL", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height, THEME.colors.success);
+    }
+
+    const catLabel = `CAT: ${state.equipmentCategoryFilter.toUpperCase()}`;
+    const ctrlY = chrome.footerSecondaryActionRow.y;
+    const ctrlH = chrome.footerSecondaryActionRow.height;
+    if (this.narrow) {
+      const gap = 6;
+      const catW = Math.min(112, chrome.footerSecondaryActionRow.width * 0.36);
+      const pageW = Math.min(64, (chrome.footerSecondaryActionRow.width - catW - gap * 2) / 2);
+      this.button("equip-category-cycle", catLabel, chrome.footerSecondaryActionRow.x, ctrlY, catW, ctrlH);
+      if (page > 0) this.button("equip-page-prev", "PREV", chrome.footerSecondaryActionRow.x + catW + gap, ctrlY, pageW, ctrlH);
+      if (page < pageCount - 1) this.button("equip-page-next", "NEXT", chrome.footerSecondaryActionRow.x + catW + gap + pageW + gap, ctrlY, pageW, ctrlH);
+      this.drawText(`PAGE ${page + 1}/${pageCount}`, chrome.footerSecondaryActionRow.x + chrome.footerSecondaryActionRow.width, this.rowTextY(chrome.footerSecondaryActionRow), {
+        align: "right", color: THEME.colors.accentTeal, size: 10, font: THEME.fonts.mono
+      });
+    } else {
+      this.drawText(`PAGE ${page + 1}/${pageCount} · ${profile.label.toUpperCase()}`, chrome.footerSecondaryActionRow.x, this.rowTextY(chrome.footerSecondaryActionRow), {
+        color: THEME.colors.accentTeal, size: 11, font: THEME.fonts.mono
+      });
+      const right = chrome.footerSecondaryActionRow.x + chrome.footerSecondaryActionRow.width;
+      if (page < pageCount - 1) this.button("equip-page-next", "NEXT", right - 70, ctrlY, 70, ctrlH);
+      if (page > 0) this.button("equip-page-prev", "PREV", right - 148, ctrlY, 70, ctrlH);
+      this.button("equip-category-cycle", catLabel, right - 268, ctrlY, 112, ctrlH);
     }
 
     const footer = this.narrow ? "TAP TO BUY · N/P PAGES · H REPAIR" : "CLICK ROW TO PURCHASE · N/P PAGES · H REPAIR (HERE) · ESC BACK";
-    this.drawText(footer, panelX + panelW / 2, panelY + panelH - 8, {
-      align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono
-    });
+    this.drawFooterHint(chrome, footer);
   }
 
   private renderShipyard(state: RenderState): void {
@@ -1636,6 +1674,7 @@ export class Renderer {
     const panelW = this.narrow ? this.width - 16 : this.width * 0.88;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.84;
     this.panel(panelX, panelY, panelW, panelH);
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
     const currentShip = getPlayerShip(state.player.shipId);
     const selectedShip = getPlayerShip(state.selectedShipId);
@@ -1647,22 +1686,16 @@ export class Renderer {
     const cargoFits = cargoUsed <= selectedStats.cargoCapacity;
     const alreadyCurrent = selectedShip.id === currentShip.id;
 
-    const titleSize = this.narrow ? 18 : 24;
-    const titleY = panelY + (this.narrow ? 28 : 56);
-    this.drawText("SHIPYARD", this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
-    this.drawText(`${Math.round(state.player.balance)} BAL · CARGO ${cargoUsed}/${state.player.cargoCapacity}`,
-      this.width / 2, titleY + (this.narrow ? 18 : 24),
-      { align: "center", color: THEME.colors.accentTeal, font: THEME.fonts.mono, size: this.narrow ? 10 : 11 });
-    if (this.signalGlassUi) {
-      this.drawText(`COMPARISON READY / ${comparison.affordabilityLabel.toUpperCase()}`,
-        this.width / 2, titleY + (this.narrow ? 34 : 42),
-        { align: "center", color: SIGNAL_GLASS_THEME.colors.accent2, font: THEME.fonts.mono, size: this.narrow ? 9 : 10 });
-    }
+    this.drawPanelHeader(
+      chrome,
+      "SHIPYARD",
+      `${Math.round(state.player.balance)} BAL · CARGO ${cargoUsed}/${state.player.cargoCapacity}`,
+      `COMPARISON READY / ${comparison.affordabilityLabel.toUpperCase()}`
+    );
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
     const left = this.narrow ? panelX + 12 : this.width * 0.1;
-    const listTop = titleY + (this.narrow ? 40 : 64);
+    const listTop = chrome.contentBounds.y + (this.narrow ? 20 : 30);
     const listW = this.narrow ? panelW - 24 : this.width * 0.36;
     const rowSpacing = this.narrow ? 38 : 42;
 
@@ -1761,22 +1794,13 @@ export class Renderer {
           : "READY FOR ACQUISITION";
 
     const warningColor = alreadyCurrent ? THEME.colors.accentTeal : (!canAfford || !cargoFits ? THEME.colors.danger : THEME.colors.success);
-    const purchaseY = panelY + panelH - (this.narrow ? 70 : this.height * 0.16);
-
-    if (this.narrow) {
-      this.drawText(warning, this.width / 2, purchaseY, {
-        align: "center", size: 11, font: THEME.fonts.accent, color: warningColor
-      });
-      this.button("ship-buy", "PURCHASE [Enter]", panelX + 16, purchaseY + 12, panelW - 32, 38);
-    } else {
-      this.drawText(warning, detailX, this.height * 0.76, { size: 12, font: THEME.fonts.accent, color: warningColor });
-      this.button("ship-buy", "PURCHASE [Enter]", detailX + 200, this.height * 0.735, 160, 42);
-    }
+    this.drawText(warning, chrome.footerStatusRow.x + chrome.footerStatusRow.width / 2, this.rowTextY(chrome.footerStatusRow), {
+      align: "center", size: this.narrow ? 10 : 12, font: THEME.fonts.accent, color: warningColor
+    });
+    this.button("ship-buy", "PURCHASE [Enter]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
 
     const footer = this.narrow ? "1-6 COMPARE · ENTER BUY · ESC BACK" : "CLICK HULL OR 1-6 TO COMPARE · ENTER PURCHASES · ESC BACK";
-    this.drawText(footer, this.width / 2, panelY + panelH - 18, {
-      align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono
-    });
+    this.drawFooterHint(chrome, footer);
   }
 
   private renderMissions(state: RenderState): void {
@@ -1785,15 +1809,18 @@ export class Renderer {
     const panelW = this.narrow ? this.width - 16 : this.width * 0.88;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.84;
     this.panel(panelX, panelY, panelW, panelH);
-
-    const titleSize = this.narrow ? 18 : 24;
-    const titleY = panelY + (this.narrow ? 28 : 48);
-    this.drawText("MISSION BOARD", this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
     const active = state.player.activeMission;
-    const activeY = titleY + (this.narrow ? 22 : 32);
+    this.drawPanelHeader(
+      chrome,
+      "MISSION BOARD",
+      active ? "ACTIVE CONTRACT IN PROGRESS" : "NO ACTIVE CONTRACTS",
+      `${state.missions.length} POSTINGS AVAILABLE`
+    );
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
+
+    const activeY = chrome.contentBounds.y + (this.narrow ? 16 : 24);
     if (active) {
       const dest = state.systems[active.destinationSystemId]?.name ?? "unknown";
       const deadlineText = active.deadlineJumps >= 0 ? `${active.deadlineJumps}J LEFT` : "OPEN";
@@ -1812,20 +1839,22 @@ export class Renderer {
       });
     }
 
-    const top = activeY + (this.narrow ? 28 : 64);
+    const top = activeY + (this.narrow ? 30 : 58);
     const left = this.narrow ? panelX + 12 : this.width * 0.12;
     const rowW = this.narrow ? panelW - 24 : this.width * 0.76;
     const rowSpacing = this.narrow ? 56 : 62;
     const rowH = this.narrow ? 48 : 54;
-    const maxRows = this.narrow ? Math.max(0, Math.floor((panelH - (top - panelY) - 40) / rowSpacing)) : state.missions.length;
+    const maxRows = this.narrow
+      ? Math.max(0, Math.floor((chrome.footerRow.y - top - 10) / rowSpacing))
+      : Math.max(0, Math.floor((chrome.footerRow.y - top - 10) / rowSpacing));
 
     // ── Empty state ──────────────────────────────────────────────────────────
     if (state.missions.length === 0) {
-      const emptyCardW = this.narrow ? panelW - 32 : Math.min(540, panelW - 80);
+      const emptyCardW = chrome.emptyStateArea.width;
       const emptyCardH = this.narrow ? 108 : 128;
       // Center the card within the panel, not the viewport.
-      const emptyCardX = panelX + (panelW - emptyCardW) / 2;
-      const emptyCardY = top + (this.narrow ? 8 : 24);
+      const emptyCardX = chrome.emptyStateArea.x;
+      const emptyCardY = Math.min(chrome.emptyStateArea.y, chrome.footerRow.y - emptyCardH - (this.narrow ? 54 : 62));
       const cardCenterX = emptyCardX + emptyCardW / 2;
       this.signalGlassUi
         ? this.signalPanel(emptyCardX, emptyCardY, emptyCardW, emptyCardH, "base")
@@ -1849,7 +1878,7 @@ export class Renderer {
         align: "center", color: THEME.colors.textDim, size: this.narrow ? 9 : 11, font: THEME.fonts.mono
       });
       // Action buttons attached below the card, centered with it.
-      const actionY = emptyCardY + emptyCardH + (this.narrow ? 10 : 14);
+      const actionY = Math.min(emptyCardY + emptyCardH + (this.narrow ? 10 : 14), chrome.footerPrimaryActionRow.y);
       const btnW = this.narrow ? (emptyCardW - 16) / 2 : 148;
       const btnH = this.narrow ? 36 : 40;
       const btnGap = this.narrow ? 16 : 12;
@@ -1908,9 +1937,7 @@ export class Renderer {
     });
 
     const footer = this.narrow ? "TAP TO ACCEPT · ESC BACK" : "CLICK ROW OR 1-8 TO ACCEPT CONTRACT · ESC BACK";
-    this.drawText(footer, this.width / 2, panelY + panelH - 18, {
-      align: "center", color: THEME.colors.textDim, size: 10, font: THEME.fonts.mono
-    });
+    this.drawFooterHint(chrome, footer);
   }
 
   private renderHelp(state: RenderState): void {
@@ -1919,12 +1946,14 @@ export class Renderer {
     const panelW = this.narrow ? this.width - 16 : this.width * 0.92;
     const panelH = this.narrow ? this.height - 24 : this.height * 0.88;
     this.panel(panelX, panelY, panelW, panelH);
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
 
     const titleSize = this.narrow ? 18 : 28;
     const titleY = panelY + (this.narrow ? 32 : 48);
     this.drawText("PILOT MANUAL", this.width / 2, titleY, {
       align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
     });
+    this.drawHeaderActions(chrome, [{ id: "help-close", label: this.narrow ? "CLOSE" : "CLOSE [Esc]", width: this.narrow ? 78 : 112 }]);
 
     const sidebarW = this.narrow ? 110 : 220;
     const sidebarX = panelX + 12;
@@ -2050,50 +2079,68 @@ export class Renderer {
     const btnY = panelY + panelH - 110;
     const btnW = Math.min(100, (panelW - 48) / 3);
     this.button("pause-resume", "RESUME", panelX + 12, btnY, btnW, 38);
-    this.button("help", "HELP", panelX + 12 + btnW + 12, btnY, btnW, 38);
+    this.button("help", "HELP [?]", panelX + 12 + btnW + 12, btnY, btnW, 38);
     this.button("pause-settings", "CONFIG", panelX + 12 + (btnW + 12) * 2, btnY, btnW, 38);
     this.button("pause-menu", "ABORT TO MAIN MENU", panelX + 12, btnY + 50, panelW - 24, 34);
   }
 
   private renderSettings(state: RenderState): void {
-    const panelW = Math.min(400, this.width - 24);
-    const panelH = Math.min(360, this.height - 32);
+    const panelW = Math.min(this.narrow ? this.width - 24 : 460, this.width - 24);
+    const panelH = Math.min(this.narrow ? 720 : 660, this.height - 32);
     const panelX = this.width / 2 - panelW / 2;
     const panelY = this.height / 2 - panelH / 2;
     this.panel(panelX, panelY, panelW, panelH);
-    this.drawText("SYSTEM SETTINGS", this.width / 2, panelY + 36, {
-      align: "center", color: THEME.colors.textPrimary, size: this.narrow ? 20 : 24, font: THEME.fonts.accent
+    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
+    this.drawPanelHeader(chrome, "SYSTEM SETTINGS", "DISPLAY / AUDIO / CONTROLS", "VALUES SAVE LOCALLY");
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
+
+    const left = chrome.contentBounds.x;
+    const innerW = chrome.contentBounds.width;
+    const rowH = this.narrow ? 44 : 48;
+    const gap = this.narrow ? 10 : 12;
+    let y = chrome.contentBounds.y + (this.narrow ? 4 : 8);
+
+    const section = (label: string, color: string): void => {
+      this.drawText(label, left, y + 12, { size: 11, font: THEME.fonts.mono, color });
+      y += 24;
+    };
+    const valueRow = (label: string, value: number, color: string, downId: string, upId: string): void => {
+      this.signalPanel(left, y, innerW, rowH, "base");
+      this.drawText(label, left + 12, y + 18, { size: 11, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
+      const btn = this.narrow ? 30 : 34;
+      const btnY = y + (rowH - 30) / 2;
+      const upX = left + innerW - btn - 10;
+      const downX = upX - btn - 6;
+      const barX = left + (this.narrow ? 118 : 136);
+      const barW = Math.max(46, downX - barX - 12);
+      this.drawProgressBar(barX, y + rowH / 2 - 6, barW, 12, value, color);
+      this.button(downId, "-", downX, btnY, btn, 30);
+      this.button(upId, "+", upX, btnY, btn, 30);
+      y += rowH + gap;
+    };
+    const toggleRow = (label: string, id: string, value: string, color: string): void => {
+      this.signalPanel(left, y, innerW, rowH, "base");
+      this.drawText(label, left + 12, y + 18, { size: 11, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
+      const buttonW = this.narrow ? 118 : 136;
+      this.button(id, value, left + innerW - buttonW - 10, y + (rowH - 30) / 2, buttonW, 30);
+      this.drawText(color, left + 12, y + 34, { size: 9, font: THEME.fonts.mono, color: THEME.colors.textDim });
+      y += rowH + gap;
+    };
+
+    section("DISPLAY", THEME.colors.accentAmber);
+    toggleRow("VISUAL GLOW", "settings-glow", state.phosphorGlow ? "ENABLED" : "DISABLED", "Signal Glass phosphor effect");
+    section("AUDIO", THEME.colors.accentTeal);
+    valueRow("SFX VOLUME", state.sfxVolume, THEME.colors.accentTeal, "settings-sfx-down", "settings-sfx-up");
+    valueRow("MUSIC VOLUME", state.musicVolume, THEME.colors.accentPink, "settings-music-down", "settings-music-up");
+    toggleRow("AUDIO OUTPUT", "settings-mute", state.audioMuted ? "MUTED" : "ACTIVE", "Procedural audio output");
+    section("CONTROLS / INFORMATION", THEME.colors.accentViolet);
+    this.drawText("KEYBOARD AND TOUCH CONTROLS USE THE STANDARD PILOT MANUAL MAP.", left, y + 18, {
+      color: THEME.colors.textSecondary,
+      size: this.narrow ? 9 : 10,
+      font: THEME.fonts.mono
     });
-    if (this.signalGlassUi) {
-      this.drawText("DISPLAY / AUDIO / CONTROLS", this.width / 2, panelY + 60, {
-        align: "center", color: SIGNAL_GLASS_THEME.colors.accent, size: 10, font: THEME.fonts.mono
-      });
-    }
 
-    const left = panelX + 20;
-    const top = panelY + 80;
-    const innerW = panelW - 40;
-
-    // SFX Volume
-    this.drawText("SFX VOLUME", left, top, { size: 12, font: THEME.fonts.mono, color: THEME.colors.accentTeal });
-    this.drawProgressBar(left, top + 16, innerW, 12, state.sfxVolume, THEME.colors.accentTeal);
-    this.button("settings-sfx-down", "-", left + innerW - 76, top - 6, 36, 28);
-    this.button("settings-sfx-up", "+", left + innerW - 36, top - 6, 36, 28);
-
-    // Music Volume
-    this.drawText("MUSIC VOLUME", left, top + 70, { size: 12, font: THEME.fonts.mono, color: THEME.colors.accentPink });
-    this.drawProgressBar(left, top + 86, innerW, 12, state.musicVolume, THEME.colors.accentPink);
-    this.button("settings-music-down", "-", left + innerW - 76, top + 64, 36, 28);
-    this.button("settings-music-up", "+", left + innerW - 36, top + 64, 36, 28);
-
-    // Other settings
-    this.drawText("PHOSPHOR GLOW", left, top + 140, { size: 12, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
-    this.button("settings-glow", state.phosphorGlow ? "ENABLED" : "DISABLED", left + innerW - 120, top + 128, 120, 30);
-
-    this.drawText("AUDIO OUTPUT", left, top + 190, { size: 12, font: THEME.fonts.mono, color: THEME.colors.accentViolet });
-    this.button("settings-mute", state.audioMuted ? "MUTED" : "ACTIVE", left + innerW - 120, top + 178, 120, 30);
-
-    this.button("settings-back", "CLOSE [Esc]", panelX + panelW / 2 - 100, panelY + panelH - 56, 200, 38);
+    this.button("settings-back", "CLOSE [Esc]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
   }
 
   private renderGameOver(state: RenderState): void {
@@ -2108,6 +2155,8 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
 
     this.panel(px, py, panelW, panelH);
+    const chrome = this.createPanelChrome(px, py, panelW, panelH);
+    this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
     const cx = this.width / 2;
     let row = py + 42;
@@ -2163,9 +2212,8 @@ export class Renderer {
 
     const btnRowY = py + panelH - 64;
     const gbw = 130;
-    this.button("death-restart", "RESTART [R]", cx - gbw * 1.5 - 16, btnRowY, gbw, 42);
-    this.button("help", "PILOT MANUAL", cx - gbw / 2, btnRowY, gbw, 42);
-    this.button("death-menu", "MENU [Esc]", cx + gbw / 2 + 16, btnRowY, gbw, 42);
+    this.button("death-restart", "RESTART [R]", cx - gbw - 10, btnRowY, gbw, 42);
+    this.button("death-menu", "MENU [Esc]", cx + 10, btnRowY, gbw, 42);
   }
 
   private renderOnboardingHint(state: RenderState, hint: HintId): void {

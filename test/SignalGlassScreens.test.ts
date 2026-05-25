@@ -91,11 +91,10 @@ describe("Signal Glass screen helpers", () => {
       "Trade Market",
       "Mission Board",
       "Shipyard",
-      "Equipment",
-      "Refuel / Repair",
-      "Pilot Manual"
+      "Equipment & Hull Repair"
     ]);
     expect(tiles.every((tile) => tile.why.length > 0)).toBe(true);
+    expect(tiles.some((tile) => tile.label === "Refuel / Repair")).toBe(false);
   });
 
   it("service tile shortLabels are stable and independent of label text", () => {
@@ -104,11 +103,21 @@ describe("Signal Glass screen helpers", () => {
       "MARKET",
       "MISSIONS",
       "SHIPYARD",
-      "EQUIPMENT",
-      "REPAIR",
-      "MANUAL"
+      "EQUIPMENT"
     ]);
     expect(tiles.find((t) => t.id === "touch-trade")?.shortLabel).toBe("MARKET");
+  });
+
+  it("keeps Equipment reachable for repair-only stations without making equipment universally available", () => {
+    const repairOnly = systems.find((system) => {
+      const profile = getStationProfile(system);
+      return profile.services.repair && !profile.services.equipment;
+    });
+    expect(repairOnly).toBeDefined();
+    const profile = getStationProfile(repairOnly!);
+    const equipmentTile = getStationServiceTiles(repairOnly!).find((tile) => tile.id === "touch-equipment");
+    expect(equipmentTile?.available).toBe(true);
+    expect(profile.services.equipment).toBe(false);
   });
 
   it("formats profit and loss badges with sign, BAL, and percent", () => {

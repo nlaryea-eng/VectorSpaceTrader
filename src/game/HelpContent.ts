@@ -320,6 +320,7 @@ export const HELP_CONTENT: HelpSection[] = [
       {
         heading: "Equipment Bay",
         body: [
+          "The Equipment Bay handles both upgrades and hull maintenance.",
           "Upgrades are grouped into categories like Cargo, Shield, or Weapon.",
           "Advanced and Specialist gear is only found in high-tech hubs.",
           "Installed items provide passive or active bonuses to your ship."

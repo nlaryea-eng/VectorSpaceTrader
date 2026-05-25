@@ -16,7 +16,7 @@ export interface StationRecommendation {
 }
 
 export interface ServiceTile {
-  id: "touch-trade" | "touch-missions" | "touch-shipyard" | "touch-equipment" | "touch-repair" | "help";
+  id: "touch-trade" | "touch-missions" | "touch-shipyard" | "touch-equipment";
   label: string;
   shortLabel: string;
   available: boolean;
@@ -83,8 +83,8 @@ export function getStationRecommendation(
   if (player.hull / player.maxHull < 0.7) {
     return {
       kind: "repair",
-      title: "Repair hull",
-      detail: repairCost > 0 ? `Repair preview: ${repairCost} BAL to restore integrity.` : "Hull service is recommended before launch.",
+      title: "Repair in Equipment",
+      detail: repairCost > 0 ? `Equipment bay repair: ${repairCost} BAL to restore integrity.` : "Hull service is handled in Equipment.",
       actionId: "touch-equipment"
     };
   }
@@ -113,9 +113,13 @@ export function getStationServiceTiles(system: StarSystem): ServiceTile[] {
     { id: "touch-trade", label: "Trade Market", shortLabel: "MARKET", available: profile.services.market, why: serviceWhy(profile, "market") },
     { id: "touch-missions", label: "Mission Board", shortLabel: "MISSIONS", available: profile.services.missions, why: serviceWhy(profile, "missions") },
     { id: "touch-shipyard", label: "Shipyard", shortLabel: "SHIPYARD", available: profile.services.shipyard, why: serviceWhy(profile, "shipyard") },
-    { id: "touch-equipment", label: "Equipment", shortLabel: "EQUIPMENT", available: profile.services.equipment, why: serviceWhy(profile, "equipment") },
-    { id: "touch-repair", label: "Refuel / Repair", shortLabel: "REPAIR", available: profile.services.fuel || profile.services.repair, why: "Fuel and hull service available." },
-    { id: "help", label: "Pilot Manual", shortLabel: "MANUAL", available: true, why: "Reference layer available." }
+    {
+      id: "touch-equipment",
+      label: "Equipment & Hull Repair",
+      shortLabel: "EQUIPMENT",
+      available: profile.services.equipment || profile.services.repair,
+      why: profile.services.equipment ? serviceWhy(profile, "equipment") : "Hull repair available; equipment vendor offline."
+    }
   ];
 }
 
