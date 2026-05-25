@@ -1,7 +1,7 @@
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, formatSystemChip } from "./UiHost";
-import { getPanelChromeLayout, getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
+import { getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
 import { isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
@@ -48,6 +48,35 @@ import type {
 } from "./types";
 import { calcRepairCost, getTotalOccupiedCargo } from "./Trading";
 import { canJump, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
+import { addButtonZone, createButtonZoneCollector } from "./render/ButtonZones";
+import {
+  drawButton,
+  drawCenteredTitle,
+  drawChip,
+  drawHudPanel,
+  drawPanel,
+  drawSignalChip,
+  drawSignalPanel,
+  drawText,
+  isPointInRect,
+  setVectorStroke,
+  wrapText,
+  type SignalPanelTier,
+  type TextDrawOptions
+} from "./render/CanvasPrimitives";
+import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader, drawPrimaryButton, rowTextY } from "./render/PanelChrome";
+import { createRenderContext, updateRenderContext, type RenderContext } from "./render/RenderContext";
+import {
+  getCompactTouchControlRects,
+  getOnboardingHintY,
+  getTutorialBannerRect,
+  isModalPanelMode,
+  NARROW_BREAKPOINT,
+  NARROW_TOUCH_AREA,
+  SHORT_BREAKPOINT
+} from "./render/RendererLayout";
+
+export { getCompactTouchControlRects, getOnboardingHintY, getTutorialBannerRect, isModalPanelMode } from "./render/RendererLayout";
 
 export interface ExplosionEffect {
   worldPosition: Vector3;
@@ -105,128 +134,15 @@ interface ProjectedPoint {
   scale: number;
 }
 
-/**
- * Layout breakpoints. The renderer reflows on narrow screens (phone-sized)
- * so HUD, onboarding hints, and touch controls don't overlap.
- */
-const NARROW_BREAKPOINT = 720;
-const SHORT_BREAKPOINT = 640;
-const NARROW_TOUCH_AREA = 176;
 const HELP_HOVER_FILL = "rgba(108, 227, 214, 0.08)";
-
-export function getCompactTouchControlRects(width: number, height: number, docked: boolean): ButtonZone[] {
-  const size = width <= 420 ? 36 : 40;
-  const gap = width <= 420 ? 5 : 6;
-  const side = width <= 420 ? 12 : 16;
-  const bottomMargin = 8;
-  const modeH = 28;
-  const modeGap = 8;
-
-  const ringHeight = size * 3 + gap * 2;
-  const ringTop = Math.max(modeH + modeGap, height - bottomMargin - ringHeight);
-  const modeY = Math.max(4, ringTop - modeGap - modeH);
-  const modeBtnW = Math.min(60, (width - 16) / 4 - 4);
-  const rowGap = 4;
-  const modeRowW = modeBtnW * 4 + rowGap * 3;
-  const modeStart = width / 2 - modeRowW / 2;
-  const rightX = width - side - size * 2 - gap;
-
-  const rects: ButtonZone[] = [
-    { id: "touch-map", label: "MAP", x: modeStart, y: modeY, width: modeBtnW, height: modeH },
-    { id: "touch-dock", label: docked ? "LAUNCH" : "DOCK", x: modeStart + (modeBtnW + rowGap), y: modeY, width: modeBtnW, height: modeH },
-    { id: "touch-menu", label: "MENU", x: modeStart + (modeBtnW + rowGap) * 3, y: modeY, width: modeBtnW, height: modeH },
-    { id: "touch-up", label: "↑", x: side + size + gap, y: ringTop, width: size, height: size },
-    { id: "touch-left", label: "←", x: side, y: ringTop + size + gap, width: size, height: size },
-    { id: "touch-right", label: "→", x: side + (size + gap) * 2, y: ringTop + size + gap, width: size, height: size },
-    { id: "touch-down", label: "↓", x: side + size + gap, y: ringTop + (size + gap) * 2, width: size, height: size },
-    { id: "touch-throttle-up", label: "W", x: rightX, y: ringTop, width: size, height: size },
-    { id: "touch-throttle-down", label: "S", x: rightX, y: ringTop + (size + gap) * 2, width: size, height: size },
-    { id: "touch-fire", label: "FIRE", x: rightX, y: ringTop + size + gap, width: size * 2 + gap, height: size },
-  ];
-
-  if (docked) {
-    rects.splice(2, 0, {
-      id: "touch-trade",
-      label: "MARKET",
-      x: modeStart + (modeBtnW + rowGap) * 2,
-      y: modeY,
-      width: modeBtnW,
-      height: modeH
-    });
-  }
-
-  return rects;
-}
-
-/**
- * Returns true for modes that display a full-screen or side-sheet panel.
- * When true: background HUD is suppressed, global shortcut strips are hidden,
- * and onboarding hints are not floated over panel content.
- * Exported so layout tests can assert deterministic layering behaviour.
- */
-export function isModalPanelMode(mode: GameMode): boolean {
-  return (
-    mode === "map" ||
-    mode === "docked" ||
-    mode === "trade" ||
-    mode === "equipment" ||
-    mode === "shipyard" ||
-    mode === "missions" ||
-    mode === "help" ||
-    mode === "settings" ||
-    mode === "paused" ||
-    mode === "gameOver" ||
-    mode === "docking"
-  );
-}
-
-export function getOnboardingHintY(mode: GameMode, height: number, barHeight: number, narrow: boolean, hasStatusMessage: boolean): number {
-  if (narrow) {
-    if (mode === "docked" || mode === "shipyard") {
-      return Math.max(150, height - 315);
-    }
-    if (mode === "trade" || mode === "equipment" || mode === "missions" || mode === "map") {
-      return Math.max(150, height - 214);
-    }
-    const statusGap = hasStatusMessage ? 42 : 12;
-    return Math.max(96, height - NARROW_TOUCH_AREA - barHeight - statusGap);
-  }
-
-  if (mode === "docked" || mode === "shipyard") return height * 0.48;
-  if (mode === "trade" || mode === "equipment" || mode === "missions") return 44;
-  if (mode === "map") return height - barHeight - 48;
-  return height - barHeight - 100;
-}
-
-export function getTutorialBannerRect(
-  mode: GameMode,
-  width: number,
-  height: number,
-  narrow: boolean,
-  messageRows: number,
-): ButtonZone {
-  const bannerH = narrow ? 44 : 42;
-  const bannerW = Math.min(width - 32, narrow ? width - 32 : 560);
-  const rows = Math.min(5, Math.max(0, messageRows));
-  const logH = rows > 0 ? rows * 18 + 10 : 0;
-  const logY = narrow ? height - NARROW_TOUCH_AREA - logH - 6 : height - logH - 38;
-  const y = isModalPanelMode(mode)
-    ? (narrow ? 88 : 86)
-    : rows > 0
-      ? logY - bannerH - 10
-      : narrow
-        ? height - NARROW_TOUCH_AREA - bannerH - 44
-        : height - bannerH - 96;
-
-  return { id: "tutorial-banner", label: "First flight hint", x: width / 2 - bannerW / 2, y, width: bannerW, height: bannerH };
-}
 
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly renderContext: RenderContext;
   private width = 1;
   private height = 1;
   private pixelRatio = 1;
-  private buttonZones: ButtonZone[] = [];
+  private readonly buttonZones = createButtonZoneCollector();
   private readonly stars: Vector3[] = [];
   private narrow = false;
   private short = false;
@@ -241,13 +157,14 @@ export class Renderer {
     }
 
     this.ctx = context;
+    this.renderContext = createRenderContext(context, this.buttonZones);
     this.createStars();
     this.resize();
     window.addEventListener("resize", () => this.resize());
   }
 
   getButtons(): ButtonZone[] {
-    return this.buttonZones;
+    return this.buttonZones.zones;
   }
 
   resize(): void {
@@ -261,6 +178,7 @@ export class Renderer {
     this.ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     this.narrow = this.width < NARROW_BREAKPOINT;
     this.short = this.height < SHORT_BREAKPOINT;
+    this.syncRenderContext();
   }
 
   /** True when the viewport is phone-sized; UI must reflow. */
@@ -276,11 +194,27 @@ export class Renderer {
     return this.narrow;
   }
 
+  private syncRenderContext(): void {
+    updateRenderContext(this.renderContext, {
+      width: this.width,
+      height: this.height,
+      narrow: this.narrow,
+      signalGlassUi: this.signalGlassUi,
+      reducedMotion: this.reducedMotion,
+      currentMousePosition: this.currentMousePosition
+    });
+  }
+
+  private addButtonZone(zone: ButtonZone): ButtonZone {
+    return addButtonZone(this.buttonZones, zone);
+  }
+
   render(state: RenderState): void {
     this.signalGlassUi = isSignalGlassUiEnabled();
     this.reducedMotion = respectsReducedMotion();
     this.currentMousePosition = state.mousePosition;
-    this.buttonZones = [];
+    this.buttonZones.reset();
+    this.syncRenderContext();
     this.ctx.clearRect(0, 0, this.width, this.height);
     this.ctx.fillStyle = THEME.colors.bgDeep;
     this.ctx.fillRect(0, 0, this.width, this.height);
@@ -325,19 +259,7 @@ export class Renderer {
    * so station/trade/map screens never collide with cockpit affordances.
    */
   private isOverlayMode(mode: GameMode): boolean {
-    return (
-      mode === "map" ||
-      mode === "docked" ||
-      mode === "trade" ||
-      mode === "equipment" ||
-      mode === "shipyard" ||
-      mode === "missions" ||
-      mode === "help" ||
-      mode === "settings" ||
-      mode === "paused" ||
-      mode === "gameOver" ||
-      mode === "docking"
-    );
+    return isModalPanelMode(mode);
   }
 
   private renderStart(state: RenderState): void {
@@ -1096,11 +1018,11 @@ export class Renderer {
   }
 
   private createPanelChrome(x: number, y: number, width: number, height: number): PanelChromeLayout {
-    return getPanelChromeLayout({ x, y, width, height }, this.narrow);
+    return createPanelChrome(this.renderContext, x, y, width, height);
   }
 
   private rowTextY(row: SubRect): number {
-    return row.y + row.height / 2 + 4;
+    return rowTextY(row);
   }
 
   /**
@@ -1109,54 +1031,15 @@ export class Renderer {
    *   the action row overlaps the right portion of the title row (e.g. docked screen on mobile).
    */
   private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string, titleAvailableWidth?: number): void {
-    const titleCenterX = titleAvailableWidth != null
-      ? chrome.titleRow.x + titleAvailableWidth / 2
-      : chrome.titleRow.x + chrome.titleRow.width / 2;
-    this.drawText(title, titleCenterX, this.rowTextY(chrome.titleRow), {
-      align: "center",
-      size: this.narrow ? 18 : 24,
-      color: THEME.colors.textPrimary,
-      font: THEME.fonts.accent
-    });
-    if (subtitle) {
-      this.drawText(subtitle, chrome.subtitleRow.x + chrome.subtitleRow.width / 2, this.rowTextY(chrome.subtitleRow), {
-        align: "center",
-        color: THEME.colors.accentTeal,
-        size: this.narrow ? 10 : 12,
-        font: THEME.fonts.mono
-      });
-    }
-    if (context) {
-      this.drawText(context, chrome.contextChipRow.x + chrome.contextChipRow.width / 2, this.rowTextY(chrome.contextChipRow), {
-        align: "center",
-        color: SIGNAL_GLASS_THEME.colors.accent2,
-        size: this.narrow ? 9 : 10,
-        font: THEME.fonts.mono
-      });
-    }
+    drawPanelHeader(this.renderContext, chrome, title, subtitle, context, titleAvailableWidth);
   }
 
   private drawHeaderActions(chrome: PanelChromeLayout, actions: Array<{ id: string; label: string; width?: number }>): void {
-    const gap = this.narrow ? 6 : 8;
-    const h = Math.min(this.narrow ? 28 : 30, chrome.headerActionRow.height);
-    let x = chrome.headerActionRow.x + chrome.headerActionRow.width;
-    for (let index = actions.length - 1; index >= 0; index -= 1) {
-      const action = actions[index];
-      const w = action.width ?? (this.narrow ? 70 : 96);
-      x -= w;
-      this.button(action.id, action.label, x, chrome.headerActionRow.y + (chrome.headerActionRow.height - h) / 2, w, h);
-      x -= gap;
-    }
+    drawHeaderActions(this.renderContext, chrome, actions);
   }
 
   private drawFooterHint(chrome: PanelChromeLayout, hint: string): void {
-    if (!chrome.showFooterHint) return;
-    this.drawText(hint, chrome.footerHintRow.x + chrome.footerHintRow.width / 2, this.rowTextY(chrome.footerHintRow), {
-      align: "center",
-      color: THEME.colors.textDim,
-      size: this.narrow ? 9 : 10,
-      font: THEME.fonts.mono
-    });
+    drawFooterHint(this.renderContext, chrome, hint);
   }
 
   /**
@@ -1165,28 +1048,7 @@ export class Renderer {
    * Pushes a buttonZone so InputRouter can route clicks normally.
    */
   private drawPrimaryButton(id: string, label: string, x: number, y: number, width: number, height: number): void {
-    this.buttonZones.push({ id, label, x, y, width, height });
-
-    this.ctx.save();
-    this.ctx.fillStyle = SIGNAL_GLASS_THEME.colors.accent;
-    this.ctx.globalAlpha = 0.18;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
-    this.ctx.fill();
-    this.ctx.restore();
-
-    this.ctx.strokeStyle = SIGNAL_GLASS_THEME.colors.accent;
-    this.ctx.lineWidth = 1.5;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
-    this.ctx.stroke();
-
-    this.drawText(label, x + width / 2, y + height / 2, {
-      align: "center",
-      color: SIGNAL_GLASS_THEME.colors.accent,
-      size: Math.min(13, Math.max(9, height * 0.32)),
-      font: THEME.fonts.accent
-    });
+    drawPrimaryButton(this.renderContext, id, label, x, y, width, height);
   }
 
   /**
@@ -1196,25 +1058,7 @@ export class Renderer {
    * Returns the pixel width of the chip so callers can adjust layout.
    */
   private drawChip(x: number, y: number, label: string, tokenColor: string, rightAligned = false): number {
-    const chipH = this.narrow ? 16 : 18;
-    const padX = 6;
-    const fontSize = this.narrow ? 9 : 10;
-    this.ctx.font = `${fontSize}px ${THEME.fonts.mono}`;
-    const textW = this.ctx.measureText(label).width;
-    const chipW = Math.ceil(textW + padX * 2);
-    const chipX = rightAligned ? x - chipW : x;
-    const chipY = y - chipH / 2;
-
-    this.ctx.save();
-    this.ctx.globalAlpha = 0.22;
-    this.ctx.fillStyle = tokenColor;
-    this.ctx.beginPath();
-    this.ctx.roundRect(chipX, chipY, chipW, chipH, SIGNAL_GLASS_THEME.radius.chip);
-    this.ctx.fill();
-    this.ctx.restore();
-
-    this.drawText(label, chipX + padX, y, { color: tokenColor, size: fontSize, font: THEME.fonts.mono });
-    return chipW;
+    return drawChip(this.renderContext, x, y, label, tokenColor, rightAligned);
   }
 
 
@@ -1339,7 +1183,7 @@ export class Renderer {
       }
 
       const hitR = 12;
-      this.buttonZones.push({ id: `map-system-${system.id}`, label: system.name, x: point.x - hitR, y: point.y - hitR, width: hitR * 2, height: hitR * 2 });
+      this.addButtonZone({ id: `map-system-${system.id}`, label: system.name, x: point.x - hitR, y: point.y - hitR, width: hitR * 2, height: hitR * 2 });
     }
     this.ctx.restore();
 
@@ -1704,7 +1548,7 @@ export class Renderer {
           this.ctx.roundRect(rowLeft, rowY, rowW, rowH, 4);
           this.ctx.fill();
         }
-        this.buttonZones.push({ id: `trade-row-${index}`, label: item.name, x: rowLeft, y: rowY, width: rowW, height: rowH });
+        this.addButtonZone({ id: `trade-row-${index}`, label: item.name, x: rowLeft, y: rowY, width: rowW, height: rowH });
 
         const display = getMarketRowDisplay(state.player, item);
         const prevPrice = state.previousPrices[item.id];
@@ -1765,7 +1609,7 @@ export class Renderer {
           this.ctx.fill();
         }
 
-        this.buttonZones.push({ id: `trade-row-${index}`, label: item.name, x: left, y: rowY, width: wideRowW, height: 32 });
+        this.addButtonZone({ id: `trade-row-${index}`, label: item.name, x: left, y: rowY, width: wideRowW, height: 32 });
 
         const display = getMarketRowDisplay(state.player, item);
         const prevPrice = state.previousPrices[item.id];
@@ -1852,7 +1696,7 @@ export class Renderer {
         this.ctx.fill();
       }
 
-      this.buttonZones.push({ id: `equip-row-${index}`, label: item.name, x: left, y: rowY, width: rowW, height: rowH });
+      this.addButtonZone({ id: `equip-row-${index}`, label: item.name, x: left, y: rowY, width: rowW, height: rowH });
       this.drawText(`${index + 1 + page * pageSize}`, left, y, { color: THEME.colors.textDim, font: THEME.fonts.mono, size: 12 });
       const nameSize = this.narrow ? 12 : 14;
       this.drawText(item.name.toUpperCase(), left + 22, y, {
@@ -2009,7 +1853,7 @@ export class Renderer {
         }
       }
 
-      this.buttonZones.push({ id: `ship-row-${index}`, label: ship.name, x: left, y: rowY, width: listW, height: rowH });
+      this.addButtonZone({ id: `ship-row-${index}`, label: ship.name, x: left, y: rowY, width: listW, height: rowH });
       this.drawText(`${index + 1}`, left, y, { color: THEME.colors.textDim, font: THEME.fonts.mono, size: 12 });
       const nameSize = this.narrow ? 12 : 14;
       this.drawText(ship.name.toUpperCase(), left + 22, y, {
@@ -2186,7 +2030,7 @@ export class Renderer {
         this.ctx.fill();
       }
 
-      this.buttonZones.push({ id: `mission-row-${index}`, label: mission.title, x: left, y: rowY, width: rowW, height: rowH });
+      this.addButtonZone({ id: `mission-row-${index}`, label: mission.title, x: left, y: rowY, width: rowW, height: rowH });
       this.drawText(`${index + 1}`, left, y, { color: THEME.colors.textDim, font: THEME.fonts.mono, size: 12 });
       const cardState = getMissionCardState(state.player, mission);
       const cardColor = cardState.state === "acceptable"
@@ -2280,7 +2124,7 @@ export class Renderer {
         }
       }
 
-      this.buttonZones.push({ id: `help-sidebar-${section.id}`, label: section.title, x: sidebarX, y: rowY, width: sidebarW, height: sidebarRowH });
+      this.addButtonZone({ id: `help-sidebar-${section.id}`, label: section.title, x: sidebarX, y: rowY, width: sidebarW, height: sidebarRowH });
       this.drawText(section.title.toUpperCase(), sidebarX + 8, y + 4, {
         color: selected ? SIGNAL_GLASS_THEME.colors.accent : THEME.colors.textPrimary,
         size: sidebarFontSize,
@@ -2557,7 +2401,7 @@ export class Renderer {
       });
     });
 
-    this.buttonZones.push({ id: "hint-dismiss", label: "Dismiss hint", x: barX, y: barY, width: barW, height: barH });
+    this.addButtonZone({ id: "hint-dismiss", label: "Dismiss hint", x: barX, y: barY, width: barW, height: barH });
   }
 
   private renderTutorialBanner(state: RenderState): void {
@@ -2632,169 +2476,40 @@ export class Renderer {
   }
 
   private button(id: string, label: string, x: number, y: number, width: number, height: number): void {
-    this.buttonZones.push({ id, label, x, y, width, height });
-
-    if (this.signalGlassUi) {
-      const hovered = isPointInRect(this.currentMousePosition, x, y, width, height);
-      const lift = hovered && !this.reducedMotion ? -1 : 0;
-      this.ctx.shadowBlur = hovered && !this.reducedMotion ? 8 : 0;
-      this.ctx.shadowColor = hovered ? "rgba(108, 227, 214, 0.24)" : "transparent";
-      this.ctx.fillStyle = hovered ? SIGNAL_GLASS_THEME.colors.surface3 : "rgba(14, 19, 32, 0.74)";
-      this.ctx.beginPath();
-      this.ctx.roundRect(x, y + lift, width, height, SIGNAL_GLASS_THEME.radius.control);
-      this.ctx.fill();
-      this.ctx.shadowBlur = 0;
-
-      this.ctx.strokeStyle = hovered ? SIGNAL_GLASS_THEME.colors.focus : "rgba(108, 227, 214, 0.62)";
-      this.ctx.lineWidth = 1;
-      this.ctx.beginPath();
-      this.ctx.roundRect(x, y + lift, width, height, SIGNAL_GLASS_THEME.radius.control);
-      this.ctx.stroke();
-
-      this.ctx.fillStyle = "rgba(108, 227, 214, 0.9)";
-      this.ctx.fillRect(x + 8, y + lift + height - 3, Math.max(12, width - 16), hovered ? 2 : 1.5);
-
-      this.drawText(label, x + width / 2, y + lift + height / 2, {
-        align: "center",
-        color: SIGNAL_GLASS_THEME.colors.text,
-        size: Math.min(13, Math.max(9, height * 0.32)),
-        font: THEME.fonts.accent
-      });
-      return;
-    }
-
-    // Glass effect background
-    this.ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, 4);
-    this.ctx.fill();
-
-    this.setVectorStroke(THEME.colors.accentTeal, 1.5, false);
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, 4);
-    this.ctx.stroke();
-
-    this.drawText(label, x + width / 2, y + height / 2, {
-      align: "center",
-      color: THEME.colors.textPrimary,
-      size: 14,
-      font: THEME.fonts.accent
-    });
+    drawButton(this.renderContext, id, label, x, y, width, height);
   }
 
   private panel(x: number, y: number, width: number, height: number): void {
-    if (this.signalGlassUi) {
-      this.signalPanel(x, y, width, height, "elevated");
-      return;
-    }
-
-    this.ctx.fillStyle = THEME.colors.bgGlass;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, 8);
-    this.ctx.fill();
-
-    this.setVectorStroke(THEME.colors.accentTeal, 1.5, true);
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, 8);
-    this.ctx.stroke();
+    drawPanel(this.renderContext, x, y, width, height);
   }
 
   private hudPanel(x: number, y: number, width: number, height: number): void {
-    if (this.signalGlassUi) {
-      this.signalPanel(x, y, width, height, "base");
-      return;
-    }
-
-    this.ctx.fillStyle = "rgba(10, 14, 20, 0.4)";
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, 4);
-    this.ctx.fill();
-
-    this.setVectorStroke("rgba(0, 242, 255, 0.3)", 1, false);
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, 4);
-    this.ctx.stroke();
+    drawHudPanel(this.renderContext, x, y, width, height);
   }
 
-  private signalPanel(x: number, y: number, width: number, height: number, tier: "base" | "elevated" | "overlay"): void {
-    const colors = SIGNAL_GLASS_THEME.colors;
-    this.ctx.shadowBlur = tier === "elevated" ? 10 : 0;
-    this.ctx.shadowColor = "rgba(0, 0, 0, 0.24)";
-    this.ctx.fillStyle = tier === "overlay" ? colors.surfaceOverlay : tier === "elevated" ? colors.surface2 : colors.surfaceGlass;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.panel);
-    this.ctx.fill();
-    this.ctx.shadowBlur = 0;
-
-    this.ctx.strokeStyle = "rgba(230, 236, 245, 0.1)";
-    this.ctx.lineWidth = 1;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.panel);
-    this.ctx.stroke();
-
-    this.ctx.strokeStyle = "rgba(108, 227, 214, 0.28)";
-    this.ctx.beginPath();
-    this.ctx.moveTo(x + SIGNAL_GLASS_THEME.radius.panel, y + 1);
-    this.ctx.lineTo(x + width - SIGNAL_GLASS_THEME.radius.panel, y + 1);
-    this.ctx.stroke();
+  private signalPanel(x: number, y: number, width: number, height: number, tier: SignalPanelTier): void {
+    drawSignalPanel(this.renderContext, x, y, width, height, tier);
   }
 
   private signalChip(x: number, y: number, width: number, height: number, label: string, color: string): void {
-    this.ctx.fillStyle = "rgba(14, 19, 32, 0.78)";
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.chip);
-    this.ctx.fill();
-    this.ctx.strokeStyle = "rgba(230, 236, 245, 0.12)";
-    this.ctx.lineWidth = 1;
-    this.ctx.stroke();
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(x + 8, y + height - 3, Math.max(20, width - 16), 1);
-
-    const maxChars = Math.max(8, Math.floor(width / 8));
-    const clipped = label.length > maxChars ? `${label.slice(0, maxChars - 1)}...` : label;
-    this.drawText(clipped.toUpperCase(), x + width / 2, y + height / 2, {
-      align: "center", color, size: this.narrow ? 9 : 10, font: THEME.fonts.mono
-    });
+    drawSignalChip(this.renderContext, x, y, width, height, label, color);
   }
 
   private setVectorStroke(color: string, width: number, glow: boolean): void {
-    this.ctx.strokeStyle = color;
-    this.ctx.lineWidth = width;
-    this.ctx.lineCap = "round";
-    this.ctx.lineJoin = "round";
-    this.ctx.shadowBlur = glow ? 12 : 0;
-    this.ctx.shadowColor = glow ? color : "transparent";
+    setVectorStroke(this.renderContext, color, width, glow);
   }
 
   private drawCenteredTitle(text: string, y: number): void {
-    this.drawText(text, this.width / 2, y, {
-      align: "center",
-      color: THEME.colors.textPrimary,
-      size: 48,
-      font: THEME.fonts.accent
-    });
-
-    // Underline with neon glow
-    this.setVectorStroke(THEME.colors.accentPink, 2, true);
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.width / 2 - 160, y + 24);
-    this.ctx.lineTo(this.width / 2 + 160, y + 24);
-    this.ctx.stroke();
+    drawCenteredTitle(this.renderContext, text, y);
   }
 
   private drawText(
     text: string,
     x: number,
     y: number,
-    options: { align?: CanvasTextAlign; color?: string; size?: number; font?: string } = {}
+    options: TextDrawOptions = {}
   ): void {
-    this.ctx.shadowBlur = 0;
-    this.ctx.shadowColor = "transparent";
-    this.ctx.fillStyle = options.color ?? THEME.colors.textPrimary;
-    this.ctx.font = `${options.size ?? 16}px ${options.font ?? THEME.fonts.primary}`;
-    this.ctx.textAlign = options.align ?? "left";
-    this.ctx.textBaseline = "middle";
-    this.ctx.fillText(text, x, y);
+    drawText(this.renderContext, text, x, y, options);
   }
 
   private createStars(): void {
@@ -2820,14 +2535,6 @@ function addPoint(a: Vector3, b: Vector3): Vector3 {
 
 function subtractPoint(a: Vector3, b: Vector3): Vector3 {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function isPointInRect(
-  point: { x: number; y: number } | null,
-  x: number, y: number, w: number, h: number
-): boolean {
-  if (!point) return false;
-  return point.x >= x && point.x <= x + w && point.y >= y && point.y <= y + h;
 }
 
 function formatMapValue(value: string): string {
@@ -2856,26 +2563,4 @@ function marketSignalColor(signal: MarketSignal): string {
   if (signal === "SHORTAGE") return THEME.colors.danger;
   if (signal === "DEMAND") return THEME.colors.accentAmber;
   return THEME.colors.textDim;
-}
-
-/**
- * Greedy word-wrap so onboarding/help text doesn't clip on narrow screens.
- * Assumes the canvas font is already set on `ctx`.
- */
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  if (maxWidth <= 0) return [text];
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (ctx.measureText(candidate).width <= maxWidth) {
-      current = candidate;
-    } else {
-      if (current) lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length > 0 ? lines : [text];
 }
