@@ -268,7 +268,7 @@ async function browserSmoke() {
     await assertHeldCargoShowsProfitLoss(desktop);
     await desktop.key("KeyF");
     await sleep(200);
-    assert((await snapshot(desktop)).message.length > 0, "Market fuel shortcut did not reach a handled result");
+    assert((await snapshot(desktop)).lastMessage.length > 0, "Market fuel shortcut did not reach a handled result");
 
     await desktop.key("Escape"); await sleep(200);
     await assertMode(desktop, "docked");
