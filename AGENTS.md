@@ -74,3 +74,65 @@ Current Release: **v0.4.1-beta — Trade Route Economy**
 -   **Bug Fixes:**
     *   Reproduce the bug with a Vitest case before fixing.
     *   Be mindful of how changes affect the deterministic nature of the universe or economy.
+
+## Sprint Reporting Policy
+
+Every substantial sprint or non-trivial commit **must** be accompanied by a
+short markdown report committed to the tracked `docs/reports/` folder. This is
+how the project keeps a durable trail of *what changed and why* that future
+agents and reviewers can read without a local working copy.
+
+`assessment/` is gitignored and is reserved for private review/audit
+artifacts; it **must not** be used for sprint reports. If `docs/reports/` does
+not yet exist, create it with a placeholder `docs/reports/README.md` (see that
+file for the landing-page reference) before writing the first report.
+
+### File naming
+
+Reports are named predictably and sortably:
+
+```
+docs/reports/YYYY-MM-DD-short-sprint-name_NNN.md
+```
+
+- `YYYY-MM-DD` — date the sprint or commit landed.
+- `short-sprint-name` — kebab-case label (e.g. `public-demo-feel`).
+- `_NNN` — zero-padded ordinal to disambiguate multiple reports per day.
+
+### Required content
+
+Each report must include, at minimum:
+
+- Sprint name
+- Date
+- Branch
+- Commit hash(es)
+- Objective
+- Files changed
+- Summary of implementation
+- Tests / verification run (exact commands and outcomes)
+- Compliance scan result
+- Save compatibility notes
+- Known limitations
+- Follow-up recommendations
+
+### Reporting prohibitions
+
+Reports **must not**:
+
+- Store private chain-of-thought, scratchpad reasoning, or internal monologue.
+- Include secrets, API tokens, or credentials.
+- Include prohibited external-IP terms.
+- Duplicate the compliance regex — the workflow at `.github/workflows/ci.yml`
+  is the single source of truth.
+- Claim that any check (type-check, tests, build, smoke, compliance, browser
+  smoke) passed unless that check was actually run and its output captured.
+
+### Authoring & git rules
+
+- Stage report files explicitly: `git add docs/reports/<file>.md`. **Never**
+  use `git add .` — this rule applies to reports just as it applies to source
+  changes.
+- Do not back-fill sprint reports for prior work unless explicitly asked.
+- Do not edit files under `assessment/` as part of a sprint-report flow.
+- Do not weaken or paraphrase the compliance policy in a report; reference it.
