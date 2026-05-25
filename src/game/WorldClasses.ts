@@ -46,6 +46,42 @@ const TRAVEL_CAUTIONS = ["Clear lanes", "Heavy traffic", "Debris fields nearby",
 const DISCOVERY_NOTES = ["Early settlement", "Recent expansion", "Strategic outpost", "Historic site", "Isolated colony", "Deep survey marker"];
 const LOCAL_DESCRIPTORS = ["bustling", "quiet", "industrialized", "militarized", "scenic", "barren", "wealthy", "impoverished"];
 
+const CLASS_EXPORTS: Record<SystemClassId, CommodityId[]> = {
+  cradle: ["medicine", "grain"],
+  forge: ["machinery", "alloys"],
+  archive: ["computers"],
+  garden: ["grain", "medicine"],
+  drift: ["fuelCells"],
+  relay: ["fuelCells", "computers"],
+  bastion: ["alloys", "machinery"],
+  quarry: ["minerals", "alloys"],
+  veil: ["luxuries", "fuelCells"],
+  harbor: ["machinery", "luxuries"],
+  clinic: ["medicine"],
+  observatory: ["computers"],
+  freehold: ["grain", "luxuries"],
+  crucible: ["minerals", "fuelCells"],
+  reserve: ["grain", "medicine"]
+};
+
+const CLASS_IMPORTS: Record<SystemClassId, CommodityId[]> = {
+  cradle: ["luxuries", "machinery"],
+  forge: ["grain", "medicine"],
+  archive: ["machinery", "luxuries"],
+  garden: ["machinery", "computers"],
+  drift: ["medicine", "computers"],
+  relay: ["grain", "machinery"],
+  bastion: ["medicine", "fuelCells"],
+  quarry: ["machinery", "medicine"],
+  veil: ["medicine", "computers"],
+  harbor: ["grain", "minerals"],
+  clinic: ["computers", "grain"],
+  observatory: ["fuelCells", "machinery"],
+  freehold: ["medicine", "computers"],
+  crucible: ["medicine", "machinery"],
+  reserve: ["machinery", "luxuries"]
+};
+
 export function generateWorldProfile(seed: number, id: number, economy: EconomyType, techLevel: number): WorldProfile {
   const prng = new SeededPrng((seed + id * 881 + techLevel * 31) >>> 0);
   
@@ -83,11 +119,29 @@ export function getWorldClassDefinition(system: Pick<StarSystem, "profile">): Sy
   return WORLD_CLASSES[system.profile.classId];
 }
 
+export type WorldTradeRole = "export" | "import" | "neutral";
+
+export function getWorldTradeRole(system: Pick<StarSystem, "profile" | "importHint" | "exportHint">, commodityId: CommodityId): WorldTradeRole {
+  const classId = system.profile.classId;
+  if (commodityId === system.exportHint || CLASS_EXPORTS[classId].includes(commodityId)) return "export";
+  if (commodityId === system.importHint || CLASS_IMPORTS[classId].includes(commodityId)) return "import";
+  return "neutral";
+}
+
 export function getWorldTradeQuantityModifier(system: Pick<StarSystem, "profile" | "importHint" | "exportHint">, commodityId: CommodityId): number {
   const definition = getWorldClassDefinition(system);
   const biasModifier = 1 + (definition.tradeBias - 1) * 0.25;
-  const hintModifier = commodityId === system.exportHint ? 1.03 : commodityId === system.importHint ? 0.97 : 1;
-  return roundTo(clamp(biasModifier * hintModifier, 0.92, 1.08), 3);
+  const hintModifier = commodityId === system.exportHint ? 1.06 : commodityId === system.importHint ? 0.94 : 1;
+  const role = getWorldTradeRole(system, commodityId);
+  const roleModifier = role === "export" ? 1.12 : role === "import" ? 0.88 : 1;
+  return roundTo(clamp(biasModifier * hintModifier * roleModifier, 0.82, 1.22), 3);
+}
+
+export function getWorldTradePriceModifier(system: Pick<StarSystem, "profile" | "importHint" | "exportHint">, commodityId: CommodityId): number {
+  const role = getWorldTradeRole(system, commodityId);
+  const roleModifier = role === "export" ? 0.95 : role === "import" ? 1.06 : 1;
+  const hintModifier = commodityId === system.exportHint ? 0.96 : commodityId === system.importHint ? 1.07 : 1;
+  return roundTo(clamp(roleModifier * hintModifier, 0.88, 1.16), 3);
 }
 
 export function getWorldServiceDensityModifier(system: Pick<StarSystem, "profile">): number {

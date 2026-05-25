@@ -16,9 +16,9 @@ import { getStationProfile } from "./StationServices";
 import { HELP_CONTENT, searchHelpContent, type HelpSectionId } from "./HelpContent";
 import {
   classifyEquipment,
-  formatDeltaBadge,
   getEquipmentAffordability,
   getEquipmentDisplayOrder,
+  getMarketRowDisplay,
   getMissionCardState,
   getRouteValidity,
   getShipComparison,
@@ -32,6 +32,7 @@ import type {
   EquipmentCategory,
   GameMode,
   MarketItem,
+  MarketSignal,
   Meta,
   Mission,
   PlayerShipId,
@@ -1577,13 +1578,13 @@ export class Renderer {
     const headerFont = THEME.fonts.mono;
 
     if (this.narrow) {
-      // 4 narrow columns: NAME, PRICE, HELD, P/L. QTY removed for space.
+      // Compact rows use two lines so BUY, SELL, signal, held, and P/L fit at 390px.
       const colName = rowLeft + 8;
-      const colPrice = rowLeft + rowW * 0.44;
-      const colHeld = rowLeft + rowW * 0.7;
+      const colTrade = rowLeft + rowW * 0.49;
+      const colHeld = rowLeft + rowW * 0.72;
       const colPL = rowLeft + rowW - 8;
       this.drawText("ITEM", colName, top - 16, { color: headerColor, font: headerFont, size: 9 });
-      this.drawText("BAL", colPrice, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
+      this.drawText("BUY/SELL", colTrade, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
       this.drawText("HELD", colHeld, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
       this.drawText("P/L", colPL, top - 16, { align: "right", color: headerColor, font: headerFont, size: 9 });
 
@@ -1599,17 +1600,20 @@ export class Renderer {
         }
         this.buttonZones.push({ id: `trade-row-${index}`, label: item.name, x: rowLeft, y: rowY, width: rowW, height: rowH });
 
+        const display = getMarketRowDisplay(state.player, item);
         const prevPrice = state.previousPrices[item.id];
-        const trend = getPriceTrend(prevPrice, item.price);
+        const trend = getPriceTrend(prevPrice, display.buyPrice);
         const priceColor = trend.label === "rising" ? THEME.colors.danger : trend.label === "falling" ? THEME.colors.success : THEME.colors.textPrimary;
         const arrow = trend.label === "rising" ? "↑" : trend.label === "falling" ? "↓" : " ";
-        const held = state.player.cargo[item.id] ?? 0;
-        const pl = this.formatProfitLoss(held, state.player.cargoCostBasis[item.id], item.price, true);
+        const plText = display.profitLossText === "Basis unknown"
+          ? "?"
+          : display.profitLossText.replace(" BAL / ", "/");
 
         this.drawText(item.name.toUpperCase(), colName, y, { size: 12, font: THEME.fonts.accent, color: THEME.colors.textPrimary });
-        this.drawText(`${arrow}${item.price}`, colPrice, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.marketRow, font: THEME.fonts.mono, color: priceColor });
-        this.drawText(`${held}`, colHeld, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.marketRow, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
-        this.drawText(pl.text, colPL, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.marketRow, font: THEME.fonts.mono, color: pl.color });
+        this.drawText(`${arrow}${display.buyPrice}/${display.sellPrice}`, colTrade, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.marketRow, font: THEME.fonts.mono, color: priceColor });
+        this.drawText(`${display.held}`, colHeld, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.marketRow, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
+        this.drawText(plText, colPL, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.marketRow, font: THEME.fonts.mono, color: profitLossColor(display.profitLossTone) });
+        this.drawText(`${display.signalShort} · STOCK ${display.quantity}`, colName, y + 13, { size: 9, font: THEME.fonts.mono, color: THEME.colors.textDim });
       });
 
       this.button("trade-fuel", "BUY FUEL [F]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
@@ -1619,16 +1623,18 @@ export class Renderer {
       const wideRowW = panelW - 32;
       const headerSize = 10;
       // Numeric column right-edge anchors — all values in a column share the same x.
-      const cPriceR = left + Math.round(wideRowW * 0.33);
-      const cTrendR = left + Math.round(wideRowW * 0.45);
-      const cSupplyR = left + Math.round(wideRowW * 0.57);
-      const cHeldR  = left + Math.round(wideRowW * 0.70);
+      const cBuyR = left + Math.round(wideRowW * 0.29);
+      const cSellR = left + Math.round(wideRowW * 0.40);
+      const cSignalR = left + Math.round(wideRowW * 0.54);
+      const cSupplyR = left + Math.round(wideRowW * 0.66);
+      const cHeldR  = left + Math.round(wideRowW * 0.77);
       const cPLR    = left + wideRowW;
 
       this.drawText("ID",        left,         top - 28, { color: headerColor, font: headerFont, size: headerSize });
       this.drawText("COMMODITY", left + 32,    top - 28, { color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("PRICE",     cPriceR,      top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
-      this.drawText("TREND",     cTrendR,      top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("BUY",       cBuyR,        top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("SELL",      cSellR,       top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
+      this.drawText("SIGNAL",    cSignalR,     top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
       this.drawText("SUPPLY",    cSupplyR,     top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
       this.drawText("HELD",      cHeldR,       top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
       this.drawText("P/L",       cPLR,         top - 28, { align: "right", color: headerColor, font: headerFont, size: headerSize });
@@ -1655,25 +1661,25 @@ export class Renderer {
 
         this.buttonZones.push({ id: `trade-row-${index}`, label: item.name, x: left, y: rowY, width: wideRowW, height: 32 });
 
+        const display = getMarketRowDisplay(state.player, item);
         const prevPrice = state.previousPrices[item.id];
-        const trend = getPriceTrend(prevPrice, item.price);
+        const trend = getPriceTrend(prevPrice, display.buyPrice);
         const trendColor = trend.label === "rising" ? THEME.colors.danger : trend.label === "falling" ? THEME.colors.success : THEME.colors.textDim;
-        const trendText = trend.label === "unknown" || trend.label === "stable"
+        const buyTrendText = trend.label === "unknown" || trend.label === "stable"
           ? "—"
           : `${trend.symbol}${trend.delta > 0 ? "+" : ""}${trend.delta}%`;
 
         const rowFont = THEME.fonts.mono;
         const rowSize = 13;
-        const held = state.player.cargo[item.id] ?? 0;
-        const pl = this.formatProfitLoss(held, state.player.cargoCostBasis[item.id], item.price, false);
 
         this.drawText(`${index + 1}`,         left,      y, { size: rowSize, font: rowFont, color: THEME.colors.textDim });
         this.drawText(item.name.toUpperCase(), left + 32, y, { size: rowSize, font: THEME.fonts.accent, color: THEME.colors.textPrimary });
-        this.drawText(`${item.price}`,  cPriceR,  y, { align: "right", size: rowSize, font: rowFont });
-        this.drawText(trendText,         cTrendR,  y, { align: "right", size: 12, font: rowFont, color: trendColor });
-        this.drawText(`${item.quantity}`, cSupplyR, y, { align: "right", size: rowSize, font: rowFont });
-        this.drawText(`${held}`,         cHeldR,   y, { align: "right", size: rowSize, font: rowFont, color: THEME.colors.accentAmber });
-        this.drawText(pl.text,           cPLR,     y, { align: "right", size: rowSize, font: rowFont, color: pl.color });
+        this.drawText(`${display.buyPrice} ${buyTrendText}`, cBuyR, y, { align: "right", size: rowSize, font: rowFont, color: trendColor });
+        this.drawText(`${display.sellPrice}`, cSellR, y, { align: "right", size: rowSize, font: rowFont });
+        this.drawText(display.signal,     cSignalR, y, { align: "right", size: 12, font: rowFont, color: marketSignalColor(display.signal) });
+        this.drawText(`${display.quantity}`, cSupplyR, y, { align: "right", size: rowSize, font: rowFont });
+        this.drawText(`${display.held}`,  cHeldR,   y, { align: "right", size: rowSize, font: rowFont, color: THEME.colors.accentAmber });
+        this.drawText(display.profitLossText, cPLR, y, { align: "right", size: rowSize, font: rowFont, color: profitLossColor(display.profitLossTone) });
 
         // Row separator
         if (index < state.market.length - 1) {
@@ -2678,16 +2684,6 @@ export class Renderer {
     this.ctx.stroke();
   }
 
-  private formatProfitLoss(held: number, avgPrice: number | undefined, currentPrice: number, isNarrow: boolean): { text: string; color: string } {
-    if (held <= 0) return { text: "—", color: THEME.colors.textDim };
-    if (avgPrice === undefined || avgPrice === 0) {
-      return { text: isNarrow ? "?" : "Basis unknown", color: THEME.colors.textDim };
-    }
-    const badge = formatDeltaBadge(held, avgPrice, currentPrice);
-    const color = badge.tone === "success" ? THEME.colors.success : badge.tone === "danger" ? THEME.colors.danger : THEME.colors.textPrimary;
-    return { text: isNarrow ? badge.text.replace(" BAL / ", "/") : badge.text, color };
-  }
-
   private drawText(
     text: string,
     x: number,
@@ -2749,6 +2745,19 @@ function compareColor(selected: number, current: number): string {
   if (selected > current) return THEME.colors.success;
   if (selected < current) return THEME.colors.danger;
   return THEME.colors.textPrimary;
+}
+
+function profitLossColor(tone: "success" | "danger" | "neutral"): string {
+  if (tone === "success") return THEME.colors.success;
+  if (tone === "danger") return THEME.colors.danger;
+  return THEME.colors.textDim;
+}
+
+function marketSignalColor(signal: MarketSignal): string {
+  if (signal === "SURPLUS") return THEME.colors.success;
+  if (signal === "SHORTAGE") return THEME.colors.danger;
+  if (signal === "DEMAND") return THEME.colors.accentAmber;
+  return THEME.colors.textDim;
 }
 
 /**

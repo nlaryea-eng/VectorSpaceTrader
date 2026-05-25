@@ -1,9 +1,10 @@
-import type { CargoHold, CommodityId, EquipmentState, Meta, Mission, PlayerState, SaveData, Settings } from "./types";
+import type { CargoHold, CommodityId, EconomyState, EquipmentState, Meta, Mission, PlayerState, PriceHistoryEntry, SaveData, Settings } from "./types";
 import { DEFAULT_EQUIPMENT } from "./Equipment";
 import { normalizeOnboardingMeta } from "./Onboarding";
 import { createRunStats, type RunStats } from "./RunStats";
 import { applyPlayerShipStats, isPlayerShipId, normalizeShipId } from "./Ships";
 import { isValidMissionId, createMissionId } from "./MissionIds";
+import { COMMODITIES } from "./Trading";
 
 export const SAVE_KEY = "vector-space-trader:v1";
 
@@ -79,6 +80,10 @@ function migrateSaveData(value: unknown): SaveData | null {
     runStats: migrateRunStats(value.runStats, player.currentSystemId)
   };
 
+  if (value.economy !== undefined) {
+    migrated.economy = normalizeEconomyState(value.economy);
+  }
+
   if (value.meta !== undefined) {
     migrated.meta = migrateMeta(value.meta);
   }
@@ -108,6 +113,7 @@ export function isValidSaveData(value: unknown): value is SaveData {
   if (value.version !== 1) return false;
   if (typeof value.savedAt !== "number" || typeof value.seed !== "number") return false;
   if (!isValidPlayerState(value.player)) return false;
+  if (value.economy !== undefined && !isValidEconomyState(value.economy)) return false;
   if (value.meta !== undefined && !isValidMeta(value.meta)) return false;
   if (value.settings !== undefined && !isValidSettings(value.settings)) return false;
   if (value.runStats !== undefined && !isValidRunStats(value.runStats)) return false;
@@ -197,6 +203,88 @@ function isValidRunStats(value: unknown): value is RunStats {
   if (typeof value.timePlayed !== "number" || value.timePlayed < 0) return false;
   if (typeof value.causeOfDeath !== "string") return false;
   return true;
+}
+
+function normalizeEconomyState(value: unknown): EconomyState {
+  if (!isRecord(value)) return createEmptyEconomyState();
+  return {
+    day: typeof value.day === "number" && value.day >= 0 ? Math.floor(value.day) : 0,
+    drift: normalizeEconomyDrift(value.drift),
+    supplyAdjustments: normalizeSupplyAdjustments(value.supplyAdjustments),
+    priceHistory: normalizePriceHistory(value.priceHistory)
+  };
+}
+
+function createEmptyEconomyState(): EconomyState {
+  return { day: 0, drift: {}, supplyAdjustments: {}, priceHistory: [] };
+}
+
+function isValidEconomyState(value: unknown): value is EconomyState {
+  if (!isRecord(value)) return false;
+  if (typeof value.day !== "number" || value.day < 0) return false;
+  if (!isRecord(value.drift) || !isRecord(value.supplyAdjustments)) return false;
+  if (!Array.isArray(value.priceHistory)) return false;
+  return true;
+}
+
+function normalizeEconomyDrift(value: unknown): EconomyState["drift"] {
+  if (!isRecord(value)) return {};
+  const result: EconomyState["drift"] = {};
+  for (const [systemId, rawValues] of Object.entries(value)) {
+    const numericSystemId = Number(systemId);
+    if (!Number.isInteger(numericSystemId) || numericSystemId < 0 || !isRecord(rawValues)) continue;
+    const values: Partial<Record<CommodityId, number>> = {};
+    for (const commodity of COMMODITIES) {
+      const raw = rawValues[commodity.id];
+      if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+        values[commodity.id] = Math.max(0.5, Math.min(2, raw));
+      }
+    }
+    result[numericSystemId] = values as Record<CommodityId, number>;
+  }
+  return result;
+}
+
+function normalizeSupplyAdjustments(value: unknown): EconomyState["supplyAdjustments"] {
+  if (!isRecord(value)) return {};
+  const result: EconomyState["supplyAdjustments"] = {};
+  for (const [systemId, rawValues] of Object.entries(value)) {
+    const numericSystemId = Number(systemId);
+    if (!Number.isInteger(numericSystemId) || numericSystemId < 0 || !isRecord(rawValues)) continue;
+    const values: Partial<Record<CommodityId, number>> = {};
+    for (const commodity of COMMODITIES) {
+      const raw = rawValues[commodity.id];
+      if (typeof raw === "number" && Number.isFinite(raw)) {
+        values[commodity.id] = Math.max(-200, Math.min(200, Math.round(raw)));
+      }
+    }
+    result[numericSystemId] = values;
+  }
+  return result;
+}
+
+function normalizePriceHistory(value: unknown): PriceHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  const commodityIds = new Set(COMMODITIES.map((commodity) => commodity.id));
+  return value
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    .filter((entry) => (
+      typeof entry.day === "number" &&
+      typeof entry.systemId === "number" &&
+      typeof entry.commodityId === "string" &&
+      commodityIds.has(entry.commodityId as CommodityId) &&
+      typeof entry.price === "number" &&
+      entry.day >= 0 &&
+      entry.systemId >= 0 &&
+      entry.price >= 0
+    ))
+    .map((entry) => ({
+      day: Math.floor(entry.day as number),
+      systemId: Math.floor(entry.systemId as number),
+      commodityId: entry.commodityId as CommodityId,
+      price: Math.max(0, Math.round(entry.price as number))
+    }))
+    .slice(-240);
 }
 
 function isValidPlayerState(value: unknown): value is PlayerState {

@@ -17,6 +17,7 @@ export interface StationProfile {
   label: string;
   services: Record<StationService, boolean>;
   marketScale: number;
+  marketPriceModifier: number;
   repairCostModifier: number;
   missionDensity: number;
 }
@@ -54,7 +55,7 @@ export function getStationProfile(system: StarSystem): StationProfile {
       equipment: true,
       shipyard: true,
       survey: true
-    }, 1, 1, 1);
+    }, 1, 1, 1, 1);
   }
 
   const selector = Math.abs(
@@ -67,7 +68,7 @@ export function getStationProfile(system: StarSystem): StationProfile {
       equipment: true,
       advancedEquipment: system.techLevel >= 7,
       shipyard: system.techLevel >= 6
-    }, 1.18, 1, 1));
+    }, 1.18, 1, 1, 0.98));
   }
 
   if (system.economy === "Research" || selector === 1) {
@@ -76,7 +77,7 @@ export function getStationProfile(system: StarSystem): StationProfile {
       equipment: true,
       advancedEquipment: true,
       survey: true
-    }, 0.95, 1, 1));
+    }, 0.95, 1, 1, 1.02));
   }
 
   if (system.economy === "Mining" || selector === 2) {
@@ -85,7 +86,7 @@ export function getStationProfile(system: StarSystem): StationProfile {
       equipment: true,
       survey: true,
       salvage: true
-    }, 0.9, 0.95, 1));
+    }, 0.9, 0.95, 1, 1.03));
   }
 
   if (selector === 3 || system.techLevel >= 9) {
@@ -94,14 +95,14 @@ export function getStationProfile(system: StarSystem): StationProfile {
       equipment: true,
       advancedEquipment: true,
       shipyard: true
-    }, 1, 1, 1));
+    }, 1, 1, 1, 1));
   }
 
   if (selector === 4) {
     return applyWorldServiceBias(system, buildProfile("repairCoop", "Repair Cooperative", {
       missions: true,
       equipment: true
-    }, 0.92, 0.72, 0.9));
+    }, 0.92, 0.72, 0.9, 1.01));
   }
 
   if (selector === 5 || system.opportunityTag === "contractFlow") {
@@ -109,7 +110,7 @@ export function getStationProfile(system: StarSystem): StationProfile {
       missions: true,
       equipment: true,
       restrictedContracts: system.hazardLevel >= 3
-    }, 1, 1, 1.3));
+    }, 1, 1, 1.3, 1.01));
   }
 
   if (selector === 6 || system.hazardLevel >= 4) {
@@ -117,13 +118,13 @@ export function getStationProfile(system: StarSystem): StationProfile {
       missions: true,
       salvage: true,
       restrictedContracts: true
-    }, 0.82, 1.15, 1.05));
+    }, 0.82, 1.15, 1.05, 1.06));
   }
 
   return applyWorldServiceBias(system, buildProfile("limitedPort", "Limited Port", {
     missions: system.population >= 3 || system.techLevel >= 4,
     equipment: system.techLevel >= 5
-  }, 0.78, 1, 0.75));
+  }, 0.78, 1, 0.75, 1.04));
 }
 
 export function hasStationService(system: StarSystem, service: StationService): boolean {
@@ -141,13 +142,15 @@ function buildProfile(
   services: Partial<Record<StationService, boolean>>,
   marketScale: number,
   repairCostModifier: number,
-  missionDensity: number
+  missionDensity: number,
+  marketPriceModifier = 1
 ): StationProfile {
   return {
     id,
     label,
     services: { ...BASE_SERVICES, ...services },
     marketScale,
+    marketPriceModifier,
     repairCostModifier,
     missionDensity
   };
@@ -181,6 +184,7 @@ function applyWorldServiceBias(system: StarSystem, profile: StationProfile): Sta
     ...profile,
     services,
     marketScale: clamp(profile.marketScale * getWorldServiceDensityModifier(system), 0.72, 1.25),
+    marketPriceModifier: clamp(profile.marketPriceModifier, 0.94, 1.08),
     missionDensity: clamp(profile.missionDensity * getWorldMissionDensityModifier(system), 0.7, 1.35)
   };
 }

@@ -125,9 +125,14 @@ export interface Commodity {
 }
 
 export type CargoHold = Partial<Record<CommodityId, number>>;
+export type MarketSignal = "SURPLUS" | "STEADY" | "DEMAND" | "SHORTAGE";
 
 export interface MarketItem extends Commodity {
+  /** BUY/reference price retained for compatibility with older market callers. */
   price: number;
+  buyPrice?: number;
+  sellPrice?: number;
+  marketSignal?: MarketSignal;
   quantity: number;
 }
 

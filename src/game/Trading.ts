@@ -55,7 +55,8 @@ export function getAvailableCargoCapacity(player: PlayerState): number {
 
 export function getBulkBuyQuantity(player: PlayerState, item: MarketItem): number {
   const free = Math.max(0, getAvailableCargoCapacity(player));
-  const byBalance = item.price > 0 ? Math.floor(player.balance / item.price) : item.quantity;
+  const buyPrice = getMarketBuyPrice(item);
+  const byBalance = buyPrice > 0 ? Math.floor(player.balance / buyPrice) : item.quantity;
   return Math.min(free, byBalance, item.quantity);
 }
 
@@ -72,19 +73,28 @@ export function getCommodity(id: CommodityId): Commodity {
   return commodity;
 }
 
+export function getMarketBuyPrice(item: MarketItem): number {
+  return Math.max(1, Math.round(item.buyPrice ?? item.price));
+}
+
+export function getMarketSellPrice(item: MarketItem): number {
+  return Math.min(getMarketBuyPrice(item), Math.max(1, Math.round(item.sellPrice ?? item.price)));
+}
+
 export function buyCommodity(player: PlayerState, item: MarketItem, quantity: number): TradeResult {
   const amount = Math.max(0, Math.floor(quantity));
   if (amount <= 0) return fail("Quantity must be positive", player);
   if (item.quantity < amount) return fail("Market supply is too low", player);
   if (getTotalOccupiedCargo(player) + amount > player.cargoCapacity) return fail("Cargo hold is full", player);
 
-  const totalCost = item.price * amount;
+  const buyPrice = getMarketBuyPrice(item);
+  const totalCost = buyPrice * amount;
   if (player.balance < totalCost) return fail("Not enough BAL", player);
 
   const oldQty = player.cargo[item.id] ?? 0;
   const oldBasis = player.cargoCostBasis[item.id] ?? 0;
   const newQty = oldQty + amount;
-  const newBasis = (oldQty * oldBasis + amount * item.price) / newQty;
+  const newBasis = (oldQty * oldBasis + amount * buyPrice) / newQty;
 
   return {
     ok: true,
@@ -122,11 +132,13 @@ export function sellCommodity(player: PlayerState, item: MarketItem, quantity: n
     // Basis remains the same for the remaining units
   }
 
+  const sellPrice = getMarketSellPrice(item);
+
   return {
     ok: true,
     player: {
       ...player,
-      balance: player.balance + item.price * amount,
+      balance: player.balance + sellPrice * amount,
       cargo: nextCargo,
       cargoCostBasis: nextCargoCostBasis
     }

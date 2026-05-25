@@ -37,6 +37,14 @@ describe("Pilot Manual Content", () => {
 
     const equipmentSection = HELP_CONTENT.find(s => s.id === "equipment")!;
     expect(JSON.stringify(equipmentSection)).toContain("categories");
+
+    const tradingSection = HELP_CONTENT.find(s => s.id === "trading")!;
+    const tradingText = JSON.stringify(tradingSection);
+    expect(tradingText).toContain("BUY");
+    expect(tradingText).toContain("SELL");
+    expect(tradingText).toContain("spread");
+    expect(tradingText).toContain("SURPLUS");
+    expect(tradingText).toContain("fuel costs");
   });
 
   it("does not contain banned terms (compliance)", () => {

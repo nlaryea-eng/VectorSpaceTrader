@@ -199,19 +199,23 @@ export const HELP_CONTENT: HelpSection[] = [
       {
         heading: "Market Mechanics",
         body: [
-          "Commodity prices shift based on local economy and drift.",
+          "BUY is what the station charges you. SELL is what the station pays you.",
+          "The same station keeps a small spread, so buying and immediately selling there loses BAL.",
+          "Commodity prices shift based on local economy, station type, world class, and drift.",
           "Use [Ctrl/Alt] with Digit keys for bulk buying and selling.",
           "Cargo capacity limits how much you can carry."
         ],
-        tips: ["Some missions require free cargo space."]
+        tips: ["P/L compares the current SELL price with your recorded cargo basis."]
       },
       {
         heading: "Market Insight",
         body: [
-          "Discovered systems show detailed market data on the map.",
-          "Price trend indicators help identify profit opportunities.",
+          "SURPLUS marks goods that are easier to buy locally.",
+          "DEMAND and SHORTAGE mark goods the station is more likely to value.",
+          "Plan routes by buying surplus goods and selling into demand after fuel costs.",
           "Equipment like the Trade Ledger stores historical data."
-        ]
+        ],
+        tips: ["Unknown cargo basis stays unknown until new purchases record a basis."]
       }
     ]
   },

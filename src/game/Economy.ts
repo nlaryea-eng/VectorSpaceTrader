@@ -1,12 +1,15 @@
-import type { CommodityId, EconomyState, MarketItem, StarSystem } from "./types";
+import type { CommodityId, EconomyState, MarketItem, MarketSignal, StarSystem } from "./types";
 import { COMMODITIES } from "./Trading";
-import { getWorldTradeQuantityModifier } from "./WorldClasses";
+import { getWorldTradePriceModifier, getWorldTradeQuantityModifier, getWorldTradeRole } from "./WorldClasses";
 
 export const ECONOMY_CONSTANTS = {
   maxHistoryEntries: 240,
   driftStep: 0.035,
   minDrift: 0.7,
-  maxDrift: 1.35
+  maxDrift: 1.35,
+  spreadRate: 0.06,
+  maxPriceFactor: 2.25,
+  maxQuantityFactor: 2.8
 } as const;
 
 export function createEconomyState(systems: StarSystem[]): EconomyState {
@@ -23,7 +26,7 @@ export function createEconomyState(systems: StarSystem[]): EconomyState {
   };
 }
 
-export function generateDynamicMarket(system: StarSystem, economy: EconomyState, marketScale = 1): MarketItem[] {
+export function generateDynamicMarket(system: StarSystem, economy: EconomyState, marketScale = 1, stationPriceModifier = 1): MarketItem[] {
   const drift = economy.drift[system.id] ?? ({} as Record<CommodityId, number>);
   const supplyAdjustments = economy.supplyAdjustments[system.id] ?? {};
 
@@ -33,11 +36,28 @@ export function generateDynamicMarket(system: StarSystem, economy: EconomyState,
     const supplyShift = supplyAdjustments[commodity.id] ?? 0;
     const techSupply = commodity.id === "computers" || commodity.id === "medicine" ? system.techLevel : 13 - system.techLevel;
     const worldQuantityModifier = getWorldTradeQuantityModifier(system, commodity.id);
-    const price = Math.max(1, Math.round(commodity.basePrice * modifier * driftFactor));
-    const quantity = Math.max(0, Math.round((commodity.baseQuantity * modifier + techSupply + supplyShift) * marketScale * worldQuantityModifier));
+    const worldPriceModifier = getWorldTradePriceModifier(system, commodity.id);
+    const boundedStationPriceModifier = clamp(stationPriceModifier, 0.94, 1.08);
+    const rawPrice = commodity.basePrice * modifier * driftFactor * worldPriceModifier * boundedStationPriceModifier;
+    const buyPrice = clampInteger(rawPrice, 1, Math.max(1, Math.round(commodity.basePrice * ECONOMY_CONSTANTS.maxPriceFactor)));
+    const sellPrice = getStationSellPrice(buyPrice);
+    const rawQuantity = (commodity.baseQuantity * modifier + techSupply + supplyShift) * marketScale * worldQuantityModifier;
+    const quantity = clampInteger(rawQuantity, 0, Math.max(1, Math.round((commodity.baseQuantity + 13) * ECONOMY_CONSTANTS.maxQuantityFactor)));
+    const marketSignal = getLocalMarketSignal(system, commodity.id, {
+      priceFactor: rawPrice / commodity.basePrice,
+      quantityRatio: quantity / Math.max(1, Math.round((commodity.baseQuantity + techSupply) * marketScale)),
+      driftFactor,
+      supplyShift
+    });
 
-    return { ...commodity, price, quantity };
+    return { ...commodity, price: buyPrice, buyPrice, sellPrice, marketSignal, quantity };
   });
+}
+
+export function getStationSellPrice(buyPrice: number): number {
+  const normalizedBuy = Math.max(1, Math.round(buyPrice));
+  const spread = Math.max(1, Math.ceil(normalizedBuy * ECONOMY_CONSTANTS.spreadRate));
+  return Math.max(1, normalizedBuy - spread);
 }
 
 export function applyEconomyDrift(economy: EconomyState, systems: StarSystem[], seed: number): EconomyState {
@@ -103,6 +123,29 @@ function structuredCloneEconomyDrift(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Number(value.toFixed(4))));
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function getLocalMarketSignal(
+  system: StarSystem,
+  commodityId: CommodityId,
+  context: { priceFactor: number; quantityRatio: number; driftFactor: number; supplyShift: number }
+): MarketSignal {
+  const role = getWorldTradeRole(system, commodityId);
+  const roleBias = role === "export" ? -0.55 : role === "import" ? 0.55 : 0;
+  const pricePressure = (context.priceFactor - 1) * 1.6;
+  const stockPressure = (1 - context.quantityRatio) * 0.9;
+  const driftPressure = (context.driftFactor - 1) * 0.8;
+  const supplyPressure = context.supplyShift > 0 ? -0.18 : context.supplyShift < 0 ? 0.18 : 0;
+  const score = pricePressure + stockPressure + driftPressure + supplyPressure + roleBias;
+
+  if (score <= -0.45) return "SURPLUS";
+  if (score >= 0.9) return "SHORTAGE";
+  if (score >= 0.35) return "DEMAND";
+  return "STEADY";
 }
 
 export interface PriceTrend {

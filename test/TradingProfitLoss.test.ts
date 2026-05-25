@@ -46,6 +46,15 @@ describe("Trading Profit/Loss", () => {
     // (10*0 + 10*20) / 20 = 10
     expect(player.cargoCostBasis.grain).toBe(10);
   });
+
+  it("records BUY price as basis and keeps old unknown basis absent until a buy", () => {
+    const unknownBasis = makePlayer({ balance: 1000, cargo: { grain: 4 }, cargoCostBasis: {} });
+    expect(unknownBasis.cargoCostBasis.grain).toBeUndefined();
+
+    const bought = buyCommodity(unknownBasis, { ...grain, price: 20, buyPrice: 22, sellPrice: 18 }, 2).player;
+    expect(bought.cargo.grain).toBe(6);
+    expect(bought.cargoCostBasis.grain).toBeCloseTo((4 * 0 + 2 * 22) / 6);
+  });
 });
 
 const grain: MarketItem = {

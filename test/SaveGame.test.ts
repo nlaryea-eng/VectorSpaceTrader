@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ALL_HINTS, shouldShowHint } from "../src/game/Onboarding";
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
+import { createEconomyState } from "../src/game/Economy";
 import { getPilotRank } from "../src/game/Rank";
 import { createRunStats } from "../src/game/RunStats";
 import { deserializeSave, loadGame, saveGame, SAVE_KEY } from "../src/game/SaveGame";
+import { generateUniverse } from "../src/game/Universe";
 import type { SaveData } from "../src/game/types";
 
 
@@ -86,6 +88,57 @@ describe("SaveGame cost basis migration", () => {
     const loaded = loadGame(storage);
     expect(loaded).not.toBeNull();
     expect(loaded!.player.cargoCostBasis).toEqual({});
+  });
+});
+
+describe("SaveGame economy compatibility", () => {
+  it("loads old saves without economy while preserving cargo and cost basis", () => {
+    const storage = new MemoryStorage();
+    const save = makeSave();
+    const oldShape = { ...save } as Record<string, unknown>;
+    delete oldShape.economy;
+    storage.setItem(SAVE_KEY, JSON.stringify(oldShape));
+
+    const loaded = loadGame(storage);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.economy).toBeUndefined();
+    expect(loaded!.player.cargo).toEqual(save.player.cargo);
+    expect(loaded!.player.cargoCostBasis).toEqual(save.player.cargoCostBasis);
+    expect(loaded!.player.balance).toBe(save.player.balance);
+  });
+
+  it("round-trips optional economy state", () => {
+    const storage = new MemoryStorage();
+    const systems = generateUniverse(492017);
+    const save = { ...makeSave(), economy: createEconomyState(systems) };
+
+    saveGame(save, storage);
+    expect(loadGame(storage)?.economy).toEqual(save.economy);
+  });
+
+  it("sanitizes malformed economy fields without corrupting player state", () => {
+    const storage = new MemoryStorage();
+    const save = makeSave();
+    storage.setItem(SAVE_KEY, JSON.stringify({
+      ...save,
+      economy: {
+        day: "bad",
+        drift: { 0: { grain: "hot", minerals: 999 } },
+        supplyAdjustments: { 0: { grain: 1.7, computers: "many" } },
+        priceHistory: [{ day: 2.8, systemId: 0, commodityId: "grain", price: 7.4 }, { day: 1, systemId: 0, commodityId: "bad", price: 10 }]
+      }
+    }));
+
+    const loaded = loadGame(storage);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.player.cargo).toEqual(save.player.cargo);
+    expect(loaded!.player.cargoCostBasis).toEqual(save.player.cargoCostBasis);
+    expect(loaded!.economy).toEqual({
+      day: 0,
+      drift: { 0: { minerals: 2 } },
+      supplyAdjustments: { 0: { grain: 2 } },
+      priceHistory: [{ day: 2, systemId: 0, commodityId: "grain", price: 7 }]
+    });
   });
 });
 

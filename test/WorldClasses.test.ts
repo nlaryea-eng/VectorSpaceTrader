@@ -50,7 +50,7 @@ describe("World classes", () => {
     expect(profile.services.shipyard).toBe(true);
   });
 
-  it("applies trade bias to quantities without changing prices", () => {
+  it("applies trade bias to quantities and bounded BUY prices deterministically", () => {
     const system = generateUniverse(492017).find((candidate) => candidate.profile.classId !== "harbor")!;
     const economy = createEconomyState([system]);
     const baseline = generateDynamicMarket(withClass(system, "garden"), economy);
@@ -58,7 +58,8 @@ describe("World classes", () => {
 
     expect(biased.some((item, index) => item.quantity !== baseline[index].quantity)).toBe(true);
     expect(biased.every((item) => item.quantity >= 0)).toBe(true);
-    expect(biased.map((item) => item.price)).toEqual(baseline.map((item) => item.price));
+    expect(biased.some((item, index) => item.price !== baseline[index].price)).toBe(true);
+    expect(biased.every((item) => item.price >= 1 && item.price <= Math.round(item.basePrice * 2.25))).toBe(true);
   });
 
   it("applies service bias deterministically without removing fuel or repair", () => {

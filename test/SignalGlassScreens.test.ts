@@ -5,6 +5,7 @@ import {
   classifyEquipment,
   formatDeltaBadge,
   getEquipmentDisplayOrder,
+  getMarketRowDisplay,
   getMissionCardState,
   getRouteValidity,
   getShipComparison,
@@ -124,6 +125,29 @@ describe("Signal Glass screen helpers", () => {
   it("formats profit and loss badges with sign, BAL, and percent", () => {
     expect(formatDeltaBadge(4, 10, 15).text).toBe("+20 BAL / +50.0%");
     expect(formatDeltaBadge(4, 10, 5).text).toBe("-20 BAL / -50.0%");
+  });
+
+  it("formats market rows with BUY, SELL, signal, held, and SELL-side P/L", () => {
+    const row = getMarketRowDisplay(
+      player({ cargo: { grain: 4 }, cargoCostBasis: { grain: 10 } }),
+      { id: "grain", name: "Grain", basePrice: 7, baseQuantity: 18, mass: 1, price: 15, buyPrice: 15, sellPrice: 12, quantity: 9, marketSignal: "DEMAND" }
+    );
+
+    expect(row.buyPrice).toBe(15);
+    expect(row.sellPrice).toBe(12);
+    expect(row.signal).toBe("DEMAND");
+    expect(row.held).toBe(4);
+    expect(row.profitLossText).toBe("+8 BAL / +20.0%");
+  });
+
+  it("keeps P/L basis unknown when old cargo has no recorded basis", () => {
+    const row = getMarketRowDisplay(
+      player({ cargo: { grain: 4 }, cargoCostBasis: {} }),
+      { id: "grain", name: "Grain", basePrice: 7, baseQuantity: 18, mass: 1, price: 15, buyPrice: 15, sellPrice: 12, quantity: 9, marketSignal: "DEMAND" }
+    );
+
+    expect(row.profitLossText).toBe("Basis unknown");
+    expect(row.profitLossTone).toBe("neutral");
   });
 
   it("mirrors mission acceptability logic", () => {

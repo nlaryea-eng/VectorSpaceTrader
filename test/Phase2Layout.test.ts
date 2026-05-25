@@ -70,11 +70,31 @@ describe("Market layout — subheaderRow and footerRow positions", () => {
     const panelW = DESKTOP.width * 0.88;
     const left = panelX + 16;
     const wideRowW = panelW - 32;
-    const cPriceR1 = left + Math.round(wideRowW * 0.33);
-    const cPriceR2 = left + Math.round(wideRowW * 0.33);
-    expect(cPriceR1).toBe(cPriceR2); // anchor is deterministic
+    const cBuyR1 = left + Math.round(wideRowW * 0.29);
+    const cBuyR2 = left + Math.round(wideRowW * 0.29);
+    const cSellR = left + Math.round(wideRowW * 0.40);
+    const cSignalR = left + Math.round(wideRowW * 0.54);
+    const cSupplyR = left + Math.round(wideRowW * 0.66);
+    const cHeldR = left + Math.round(wideRowW * 0.77);
     const cPLR = left + wideRowW;
-    expect(cPLR).toBeGreaterThan(cPriceR1); // P/L is rightmost column
+    expect(cBuyR1).toBe(cBuyR2); // anchor is deterministic
+    expect(cSellR).toBeGreaterThan(cBuyR1);
+    expect(cSignalR).toBeGreaterThan(cSellR);
+    expect(cSupplyR).toBeGreaterThan(cSignalR);
+    expect(cHeldR).toBeGreaterThan(cSupplyR);
+    expect(cPLR).toBeGreaterThan(cHeldR); // P/L is rightmost column
+  });
+
+  it("compact market rows fit inside 390x844 content bounds with bid/ask signal line", () => {
+    const panelY = 12;
+    const panelH = MOBILE.height - 24;
+    const top = panelY + 112;
+    const rowH = 30;
+    const rowGap = 32;
+    const lastRowBottom = top + 7 * rowGap - 14 + rowH;
+    const footerTop = panelY + panelH - 74;
+
+    expect(lastRowBottom).toBeLessThan(footerTop);
   });
 });
 

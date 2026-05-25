@@ -58,7 +58,7 @@ describe("Sprint 4 balance invariants", () => {
     const sold = sellCommodity(bought.player, item, 1);
 
     expect(sold.ok).toBe(true);
-    expect(sold.player.balance).toBe(player.balance);
+    expect(sold.player.balance).toBeLessThanOrEqual(player.balance);
   });
 
   it("keeps balances, cargo, and hull nonnegative through common outcomes", () => {

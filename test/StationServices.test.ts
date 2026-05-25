@@ -36,4 +36,12 @@ describe("StationServices", () => {
     expect(profiles.filter((profile) => profile.services.shipyard).length).toBeGreaterThanOrEqual(8);
     expect(profiles.filter((profile) => profile.services.advancedEquipment).length).toBeGreaterThanOrEqual(8);
   });
+
+  it("keeps station market price modifiers derived and bounded", () => {
+    const profiles = generateUniverse(492017).map(getStationProfile);
+
+    expect(profiles.every((profile) => profile.marketPriceModifier >= 0.94)).toBe(true);
+    expect(profiles.every((profile) => profile.marketPriceModifier <= 1.08)).toBe(true);
+    expect(getStationProfile(generateUniverse(492017)[0]).marketPriceModifier).toBe(1);
+  });
 });

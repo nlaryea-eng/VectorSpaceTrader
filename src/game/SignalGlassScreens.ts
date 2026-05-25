@@ -2,9 +2,9 @@ import { EQUIPMENT, isEquipmentAvailableAtStation, type EquipmentDefinition } fr
 import { acceptMission } from "./Missions";
 import { getPlayerShipStats, PLAYER_SHIPS } from "./Ships";
 import { getStationProfile, type StationProfile } from "./StationServices";
-import { getAvailableCargoCapacity, getTotalOccupiedCargo } from "./Trading";
+import { getAvailableCargoCapacity, getMarketBuyPrice, getMarketSellPrice, getTotalOccupiedCargo } from "./Trading";
 import { canJump, getFuelRequired, getJumpDistance } from "./Universe";
-import type { MarketItem, Mission, PlayerShipId, PlayerState, StarSystem } from "./types";
+import type { MarketItem, MarketSignal, Mission, PlayerShipId, PlayerState, StarSystem } from "./types";
 
 export type StationRecommendationKind = "deliver" | "repair" | "sell" | "missions";
 
@@ -28,6 +28,19 @@ export interface DeltaBadge {
   tone: "success" | "danger" | "neutral";
   total: number;
   percent: number;
+}
+
+export interface MarketRowDisplay {
+  id: string;
+  name: string;
+  buyPrice: number;
+  sellPrice: number;
+  signal: MarketSignal;
+  signalShort: string;
+  quantity: number;
+  held: number;
+  profitLossText: string;
+  profitLossTone: DeltaBadge["tone"];
 }
 
 export interface MissionCardState {
@@ -94,7 +107,7 @@ export function getStationRecommendation(
     return {
       kind: "sell",
       title: "Sell high-margin cargo",
-      detail: `${profitable.item.name}: ${formatDeltaBadge(profitable.held, profitable.basis, profitable.item.price).text}.`,
+      detail: `${profitable.item.name}: ${formatDeltaBadge(profitable.held, profitable.basis, getMarketSellPrice(profitable.item)).text}.`,
       actionId: "touch-trade"
     };
   }
@@ -137,6 +150,36 @@ export function formatDeltaBadge(held: number, basis: number | undefined, localP
     total,
     percent
   };
+}
+
+export function getMarketRowDisplay(player: PlayerState, item: MarketItem): MarketRowDisplay {
+  const buyPrice = getMarketBuyPrice(item);
+  const sellPrice = getMarketSellPrice(item);
+  const signal = item.marketSignal ?? "STEADY";
+  const held = player.cargo[item.id] ?? 0;
+  const basis = player.cargoCostBasis[item.id];
+  const badge = formatDeltaBadge(held, basis, sellPrice);
+  const basisUnknown = held > 0 && (basis === undefined || basis === 0);
+
+  return {
+    id: item.id,
+    name: item.name,
+    buyPrice,
+    sellPrice,
+    signal,
+    signalShort: getMarketSignalShortLabel(signal),
+    quantity: item.quantity,
+    held,
+    profitLossText: basisUnknown ? "Basis unknown" : held > 0 ? badge.text : "—",
+    profitLossTone: basisUnknown || held <= 0 ? "neutral" : badge.tone
+  };
+}
+
+export function getMarketSignalShortLabel(signal: MarketSignal): string {
+  if (signal === "SURPLUS") return "SURP";
+  if (signal === "SHORTAGE") return "SHRT";
+  if (signal === "DEMAND") return "DEMD";
+  return "STDY";
 }
 
 export function getMissionCardState(player: PlayerState, mission: Mission): MissionCardState {
@@ -231,7 +274,7 @@ function getBestProfitableCargo(player: PlayerState, market: readonly MarketItem
     const held = player.cargo[item.id] ?? 0;
     const basis = player.cargoCostBasis[item.id];
     if (held <= 0 || !basis) continue;
-    const total = (item.price - basis) * held;
+    const total = (getMarketSellPrice(item) - basis) * held;
     if (total < 50) continue;
     if (!best || total > best.total) best = { item, held, basis, total };
   }

@@ -51,6 +51,12 @@ describe("BulkTrading helpers", () => {
       expect(getBulkBuyQuantity(player, item)).toBe(3);
     });
 
+    it("uses BUY price when calculating max affordable quantity", () => {
+      const player = makePlayer({ balance: 30, cargoCapacity: 20 });
+      const item = makeItem({ quantity: 20, price: 10, buyPrice: 12, sellPrice: 9 });
+      expect(getBulkBuyQuantity(player, item)).toBe(2);
+    });
+
     it("returns quantity limited by free cargo space", () => {
       const player = makePlayer({ balance: 10000, cargo: { grain: 17 }, cargoCapacity: 20 });
       const item = makeItem({ quantity: 20, price: 10 });

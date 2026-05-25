@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
-import { buyCommodity, sellCommodity } from "../src/game/Trading";
+import { buyCommodity, getMarketBuyPrice, getMarketSellPrice, sellCommodity } from "../src/game/Trading";
 import type { MarketItem, PlayerState } from "../src/game/types";
 
 describe("Trading", () => {
@@ -27,6 +27,31 @@ describe("Trading", () => {
     expect(result.ok).toBe(true);
     expect(result.player.balance).toBe(64);
     expect(result.player.cargo.grain).toBe(1);
+  });
+
+  it("uses BUY for purchase cost and SELL for sale revenue", () => {
+    const spreadItem: MarketItem = { ...grain, price: 11, buyPrice: 11, sellPrice: 8 };
+    const bought = buyCommodity(makePlayer({ balance: 100 }), spreadItem, 1);
+
+    expect(bought.ok).toBe(true);
+    expect(bought.player.balance).toBe(89);
+    expect(bought.player.cargoCostBasis.grain).toBe(11);
+
+    const sold = sellCommodity(bought.player, spreadItem, 1);
+    expect(sold.ok).toBe(true);
+    expect(sold.player.balance).toBe(97);
+  });
+
+  it("never allows a same-station immediate buy/sell profit", () => {
+    const spreadItem: MarketItem = { ...grain, price: 7, buyPrice: 7, sellPrice: 6 };
+    const starting = makePlayer({ balance: 100, cargoCapacity: 20 });
+    const bought = buyCommodity(starting, spreadItem, 1);
+    const sold = sellCommodity(bought.player, spreadItem, 1);
+
+    expect(bought.ok).toBe(true);
+    expect(sold.ok).toBe(true);
+    expect(sold.player.balance).toBeLessThanOrEqual(starting.balance);
+    expect(getMarketSellPrice(spreadItem)).toBeLessThanOrEqual(getMarketBuyPrice(spreadItem));
   });
 });
 

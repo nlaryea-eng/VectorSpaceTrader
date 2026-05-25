@@ -263,6 +263,9 @@ async function browserSmoke() {
     await assertMode(desktop, "trade");
     await assertButton(desktop, "trade-row-0");
     await assertButton(desktop, "help");
+    await assertMarketRowsExposeTradePlanning(desktop);
+    await desktop.key("Digit1"); await sleep(250);
+    await assertHeldCargoShowsProfitLoss(desktop);
     await desktop.key("KeyF");
     await sleep(200);
     assert((await snapshot(desktop)).message.length > 0, "Market fuel shortcut did not reach a handled result");
@@ -406,6 +409,7 @@ async function browserSmoke() {
     await mobile.key("KeyT"); await sleep(300);
     await assertMode(mobile, "trade");
     await assertButton(mobile, "trade-row-0");
+    await assertMarketRowsExposeTradePlanning(mobile);
     await mobile.key("Escape"); await sleep(200);
     await mobile.key("KeyM"); await sleep(300);
     await assertMode(mobile, "map");
@@ -467,6 +471,24 @@ async function assertMode(tab, mode) {
 async function assertButton(tab, id) {
   const state = await snapshot(tab);
   assert(Boolean(state.buttons.find((button) => button.id === id)), `Missing button zone ${id} in mode ${state.mode}`);
+}
+
+async function assertMarketRowsExposeTradePlanning(tab) {
+  const state = await snapshot(tab);
+  assert(Array.isArray(state.marketRows) && state.marketRows.length >= 1, "Market rows missing from debug snapshot");
+  for (const row of state.marketRows) {
+    assert(Number.isInteger(row.buyPrice) && row.buyPrice >= 1, `Invalid BUY price for ${row.name}`);
+    assert(Number.isInteger(row.sellPrice) && row.sellPrice >= 1, `Invalid SELL price for ${row.name}`);
+    assert(row.sellPrice <= row.buyPrice, `SELL exceeds BUY for ${row.name}`);
+    assert(["SURPLUS", "STEADY", "DEMAND", "SHORTAGE"].includes(row.signal), `Missing market signal for ${row.name}`);
+  }
+}
+
+async function assertHeldCargoShowsProfitLoss(tab) {
+  const state = await snapshot(tab);
+  const held = state.marketRows.find((row) => row.held > 0);
+  assert(held, "Expected held cargo after market purchase");
+  assert(held.profitLossText && held.profitLossText !== "—" && held.profitLossText !== "Basis unknown", "Held cargo P/L did not render with known basis");
 }
 
 async function clickButton(tab, id) {

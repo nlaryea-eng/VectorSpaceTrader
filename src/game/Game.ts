@@ -31,10 +31,11 @@ import {
   type RunStats
 } from "./RunStats";
 import { hasSave, loadGame, saveGame } from "./SaveGame";
+import { getMarketRowDisplay } from "./SignalGlassScreens";
 import { buyShip, getPlayerShipStats, PLAYER_SHIPS, STARTER_SHIP_ID, type PlayerShipDefinition } from "./Ships";
 import { getStationProfile, hasStationService } from "./StationServices";
 import { createInitialTransientState } from "./TransientState";
-import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, repairHull, sellCommodity } from "./Trading";
+import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, getMarketBuyPrice, getMarketSellPrice, repairHull, sellCommodity } from "./Trading";
 import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
 import { HELP_CONTENT, getHelpSectionForMode, searchHelpContent, type HelpSectionId } from "./HelpContent";
 import { shouldShowTouchControls } from "./Layout";
@@ -137,7 +138,15 @@ export class Game {
     this.manualSearchInput.remove();
   }
 
-  getDebugSnapshot(): { mode: GameMode; selectedSystemId: number; message: string; player: Pick<PlayerState, "docked" | "balance" | "fuel">; buttons: ButtonZone[]; mapFilters: MapFilterState } {
+  getDebugSnapshot(): {
+    mode: GameMode;
+    selectedSystemId: number;
+    message: string;
+    player: Pick<PlayerState, "docked" | "balance" | "fuel">;
+    buttons: ButtonZone[];
+    mapFilters: MapFilterState;
+    marketRows: ReturnType<typeof getMarketRowDisplay>[];
+  } {
     return {
       mode: this.mode,
       selectedSystemId: this.selectedSystemId,
@@ -148,7 +157,8 @@ export class Game {
         fuel: this.player.fuel
       },
       buttons: this.renderer.getButtons(),
-      mapFilters: this.mapFilters
+      mapFilters: this.mapFilters,
+      marketRows: this.market.map((item) => getMarketRowDisplay(this.player, item))
     };
   }
 
@@ -538,7 +548,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "buyCommodity")
       };
       this.refreshMarket(true);
-      this.message = `Bought ${qty} × ${item.name} for ${qty * item.price} BAL`;
+      this.message = `Bought ${qty} × ${item.name} for ${qty * getMarketBuyPrice(item)} BAL`;
       this.audio.play("tradeOk");
       this.persist();
     } else {
@@ -563,7 +573,7 @@ export class Game {
         legalRisk: getTradeLegalRisk(result.player.legalRisk, item.id, "sellCommodity")
       };
       this.refreshMarket(true);
-      this.message = `Sold ${qty} × ${item.name} for ${qty * item.price} BAL`;
+      this.message = `Sold ${qty} × ${item.name} for ${qty * getMarketSellPrice(item)} BAL`;
       this.audio.play("tradeOk");
       this.persist();
     } else {
@@ -1261,7 +1271,8 @@ export class Game {
 
   private refreshMarket(recordHistory: boolean): void {
     const current = this.systems[this.player.currentSystemId];
-    this.market = generateDynamicMarket(current, this.economy, getStationProfile(current).marketScale);
+    const station = getStationProfile(current);
+    this.market = generateDynamicMarket(current, this.economy, station.marketScale, station.marketPriceModifier);
     if (recordHistory) {
       this.economy = recordPriceHistory(this.economy, this.player.currentSystemId, this.market);
     }
