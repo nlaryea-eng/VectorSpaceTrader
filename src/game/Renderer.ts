@@ -55,6 +55,7 @@ import {
   drawChip,
   drawHudPanel,
   drawPanel,
+  drawProgressBar,
   drawSignalChip,
   drawSignalPanel,
   drawText,
@@ -637,27 +638,6 @@ export class Renderer {
     }
   }
 
-  private drawProgressBar(x: number, y: number, width: number, height: number, fraction: number, color: string): void {
-    const radius = 2;
-    this.ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, radius);
-    this.ctx.fill();
-
-    if (fraction > 0) {
-      this.ctx.fillStyle = color;
-      this.ctx.beginPath();
-      this.ctx.roundRect(x, y, width * Math.min(1, fraction), height, radius);
-      this.ctx.fill();
-
-      // Add a subtle glow to the bar
-      this.ctx.shadowBlur = 8;
-      this.ctx.shadowColor = color;
-      this.ctx.fill();
-      this.ctx.shadowBlur = 0;
-    }
-  }
-
   private renderSignalGlassHud(state: RenderState): void {
     const layout = createHudShellLayout({ width: this.width, height: this.height });
     const colors = SIGNAL_GLASS_THEME.colors;
@@ -686,7 +666,7 @@ export class Renderer {
         const x = layout.vitals.x + 9 + cellW * index;
         this.drawText(cell.label, x, layout.vitals.y + 17, { size: SIGNAL_GLASS_TEXT_SIZES.hudTelemetry, font: THEME.fonts.mono, color: colors.textMuted });
         this.drawText(cell.value, x + cellW - 8, layout.vitals.y + 17, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.hudTelemetry, font: THEME.fonts.mono, color: colors.text });
-        this.drawProgressBar(x, layout.vitals.y + 34, cellW - 8, 4, cell.fraction, cell.color);
+        drawProgressBar(this.renderContext, x, layout.vitals.y + 34, cellW - 8, 4, cell.fraction, cell.color);
       });
       this.drawText(`${Math.round(state.player.balance)} BAL`, layout.vitals.x + 10, layout.vitals.y + 55, {
         size: SIGNAL_GLASS_TEXT_SIZES.hudTelemetry, font: THEME.fonts.mono, color: colors.accent2
@@ -713,7 +693,7 @@ export class Renderer {
         this.drawText(vital.value, layout.vitals.x + layout.vitals.width - 14, y, {
           align: "right", size: 11, font: THEME.fonts.mono, color: colors.text
         });
-        this.drawProgressBar(layout.vitals.x + 14, y + 12, layout.vitals.width - 28, 5, vital.fraction, vital.color);
+        drawProgressBar(this.renderContext, layout.vitals.x + 14, y + 12, layout.vitals.width - 28, 5, vital.fraction, vital.color);
       });
       this.drawText(`SPD ${Math.round(state.player.speed).toString().padStart(3, "0")}`, layout.vitals.x + 14, layout.vitals.y + layout.vitals.height - 18, {
         size: 13, font: THEME.fonts.mono, color: colors.accent
@@ -811,7 +791,7 @@ export class Renderer {
       const ty = 60 + i * 44;
       this.drawText(v.label, 28, ty, { size: 11, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
       this.drawText(v.value, 214, ty, { align: "right", size: 11, font: THEME.fonts.mono });
-      this.drawProgressBar(28, ty + 10, 186, 4, v.fraction, v.color);
+      drawProgressBar(this.renderContext, 28, ty + 10, 186, 4, v.fraction, v.color);
     });
 
     this.drawText(`SPD ${speed.toString().padStart(3, "0")}`, 28, 226, { size: 14, font: THEME.fonts.mono, color: THEME.colors.accentPink });
@@ -887,7 +867,7 @@ export class Renderer {
       this.drawText(cell.value, cx + cellW - 6, colY, {
         align: "right", size: valueSize, font: THEME.fonts.mono
       });
-      this.drawProgressBar(cx, barY, cellW - 8, barH, cell.fraction, cell.color);
+      drawProgressBar(this.renderContext, cx, barY, cellW - 8, barH, cell.fraction, cell.color);
     });
 
     // Bottom line of the band: balance/speed/risk pill
@@ -1335,7 +1315,7 @@ export class Renderer {
       align: "center", color: THEME.colors.textPrimary, size: 24, font: THEME.fonts.accent
     });
 
-    this.drawProgressBar(this.width / 2 - 150, this.height / 2 - 4, 300, 18, state.dockingProgress, THEME.colors.accentTeal);
+    drawProgressBar(this.renderContext, this.width / 2 - 150, this.height / 2 - 4, 300, 18, state.dockingProgress, THEME.colors.accentTeal);
     this.drawText(`${progress}%`, this.width / 2, this.height / 2 + 42, {
       align: "center", color: THEME.colors.textPrimary, font: THEME.fonts.mono
     });
@@ -1761,7 +1741,7 @@ export class Renderer {
       });
       const barX = chrome.footerStatusRow.x + (this.narrow ? 86 : 104);
       const barW = this.narrow ? 104 : 150;
-      this.drawProgressBar(barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
+      drawProgressBar(this.renderContext, barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
       this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, barX + barW + 12, this.rowTextY(chrome.footerStatusRow), {
         size: this.narrow ? 10 : 11,
         font: THEME.fonts.mono,
@@ -2265,7 +2245,7 @@ export class Renderer {
       const { btn, downX, upX, btnY } = controlGeometry();
       const barX = left + (this.narrow ? 116 : 138);
       const barW = Math.max(46, downX - barX - 12);
-      this.drawProgressBar(barX, y + rowH / 2 - 6, barW, 12, value, color);
+      drawProgressBar(this.renderContext, barX, y + rowH / 2 - 6, barW, 12, value, color);
       this.button(downId, "-", downX, btnY, btn, btn);
       this.button(upId, "+", upX, btnY, btn, btn);
       y += rowH + gap;

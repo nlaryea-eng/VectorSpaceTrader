@@ -64,6 +64,36 @@ export function drawCenteredTitle(renderContext: RenderContext, text: string, y:
   ctx.stroke();
 }
 
+export function drawProgressBar(
+  renderContext: RenderContext,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fraction: number,
+  color: string
+): void {
+  const { ctx } = renderContext;
+  const radius = 2;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, radius);
+  ctx.fill();
+
+  if (fraction > 0) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width * Math.min(1, fraction), height, radius);
+    ctx.fill();
+
+    // Add a subtle glow to the bar
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = color;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+
 export function drawButton(renderContext: RenderContext, id: string, label: string, x: number, y: number, width: number, height: number): void {
   const { ctx } = renderContext;
   renderContext.buttonZones.add({ id, label, x, y, width, height });
