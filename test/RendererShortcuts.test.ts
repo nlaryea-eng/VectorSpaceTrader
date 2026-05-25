@@ -58,7 +58,7 @@ function stubState(mode: GameMode, docked = false): RenderState {
     },
     projectiles: [],
     hasSave: false,
-    message: "",
+    messageLog: { entries: [], nextSeq: 0 },
     stationPosition: { x: 0, y: 0, z: 0 },
     dockingProgress: 0,
     phosphorGlow: false,

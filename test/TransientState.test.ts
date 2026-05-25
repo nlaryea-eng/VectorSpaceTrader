@@ -8,6 +8,7 @@ describe("createInitialTransientState", () => {
       explosionEffect: null,
       playerHitFlash: 0,
       dockingProgress: 0,
+      messageLog: { entries: [], nextSeq: 0 },
     });
   });
 });

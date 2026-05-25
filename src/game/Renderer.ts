@@ -1,6 +1,6 @@
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
-import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
+import { createHudShellLayout, formatSystemChip } from "./UiHost";
 import { getPanelChromeLayout, getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
 import { isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
@@ -25,6 +25,7 @@ import {
   getStationRecommendation,
   getStationServiceTiles
 } from "./SignalGlassScreens";
+import type { MessageLog, MessageKind } from "./TransientState";
 import type {
   ButtonZone,
   CommodityId,
@@ -61,7 +62,7 @@ export interface RenderState {
   enemy: Ship;
   projectiles: Projectile[];
   hasSave: boolean;
-  message: string;
+  messageLog: MessageLog;
   stationPosition: Vector3;
   dockingProgress: number;
   phosphorGlow: boolean;
@@ -428,9 +429,8 @@ export class Renderer {
       else this.renderHud(state);
       if (state.showTouchControls) this.renderTouchControls(state);
       if (state.playerHitFlash > 0) this.renderHitFlash(state.playerHitFlash);
-      if (state.message) {
-        if (this.signalGlassUi) this.renderSignalGlassToast(state.message);
-        else this.drawStatusMessage(state.message);
+      if (state.messageLog.entries.length > 0) {
+        this.renderMessageLog(state.messageLog);
       }
     } else {
       // Behind a modal panel: apply a solid dim over the wireframe vista so the
@@ -444,26 +444,52 @@ export class Renderer {
     }
   }
 
-  /** Status message — placed above the touch safe area so it never collides. */
-  private drawStatusMessage(message: string): void {
-    const text = message.toUpperCase();
-    const y = this.narrow
-      ? Math.min(this.height - NARROW_TOUCH_AREA - 18, this.height - 160)
-      : this.height - 90;
-    // Background pill so the message stays legible over the cockpit.
-    this.ctx.font = `13px ${THEME.fonts.accent}`;
-    const metrics = this.ctx.measureText(text);
-    const padX = 12;
-    const w = Math.min(this.width - 32, metrics.width + padX * 2);
-    const x = this.width / 2 - w / 2;
-    this.ctx.fillStyle = "rgba(2, 4, 8, 0.7)";
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y - 13, w, 26, 4);
-    this.ctx.fill();
-    this.drawText(text, this.width / 2, y, {
-      align: "center", color: THEME.colors.accentAmber, size: 13, font: THEME.fonts.accent
-    });
+  private msgKindColor(kind: MessageKind): string {
+    if (kind === "success") return THEME.colors.accentTeal;
+    if (kind === "warning") return THEME.colors.accentAmber;
+    if (kind === "danger") return THEME.colors.accentPink;
+    return THEME.colors.textPrimary;
   }
+
+  private renderMessageLog(log: MessageLog): void {
+    const entries = log.entries.slice(-5);
+    if (entries.length === 0) return;
+
+    const rowH = 18;
+    const padX = 12;
+    const padY = 5;
+    const fontSize = 11;
+
+    this.ctx.font = `${fontSize}px ${THEME.fonts.mono}`;
+    let maxW = 0;
+    for (const e of entries) {
+      const m = this.ctx.measureText(e.text.toUpperCase());
+      if (m.width > maxW) maxW = m.width;
+    }
+    const panelW = Math.min(this.width - 32, maxW + padX * 2);
+    const panelH = entries.length * rowH + padY * 2;
+    const panelX = this.width / 2 - panelW / 2;
+    const panelY = this.narrow
+      ? this.height - NARROW_TOUCH_AREA - panelH - 6
+      : this.height - panelH - 38;
+
+    this.ctx.fillStyle = "rgba(2, 4, 8, 0.65)";
+    this.ctx.beginPath();
+    this.ctx.roundRect(panelX, panelY, panelW, panelH, 4);
+    this.ctx.fill();
+
+    entries.forEach((entry, i) => {
+      const alpha = 0.35 + (i / (entries.length - 1 || 1)) * 0.65;
+      const color = this.msgKindColor(entry.kind);
+      const ey = panelY + padY + i * rowH + rowH / 2;
+      this.ctx.globalAlpha = alpha;
+      this.drawText(entry.text.toUpperCase(), this.width / 2, ey, {
+        align: "center", color, size: fontSize, font: THEME.fonts.mono
+      });
+    });
+    this.ctx.globalAlpha = 1;
+  }
+
 
   private renderStars(player: PlayerState): void {
     this.setVectorStroke(THEME.colors.accentViolet, 1, false);
@@ -2433,7 +2459,7 @@ export class Renderer {
     const barH = lineHeight * lines.length + padding * 2;
     const barX = this.width / 2 - barW / 2;
 
-    const barY = getOnboardingHintY(state.mode, this.height, barH, this.narrow, Boolean(state.message));
+    const barY = getOnboardingHintY(state.mode, this.height, barH, this.narrow, state.messageLog.entries.length > 0);
 
     this.ctx.fillStyle = THEME.colors.bgGlass;
     this.ctx.beginPath();
@@ -2497,29 +2523,6 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
   }
 
-  private renderSignalGlassToast(message: string): void {
-    const toast = createToastModel(message, { width: this.width, height: this.height });
-    if (!toast) return;
-    const colors = SIGNAL_GLASS_THEME.colors;
-    const toneColor = toast.tone === "success"
-      ? colors.success
-      : toast.tone === "warning"
-        ? colors.warning
-        : toast.tone === "danger"
-          ? colors.danger
-          : colors.accent;
-
-    this.signalPanel(toast.bounds.x, toast.bounds.y, toast.bounds.width, toast.bounds.height, "overlay");
-    this.ctx.fillStyle = toneColor;
-    this.ctx.beginPath();
-    this.ctx.roundRect(toast.bounds.x + 10, toast.bounds.y + 10, 3, toast.bounds.height - 20, 2);
-    this.ctx.fill();
-    this.drawText(toast.text.toUpperCase(), toast.bounds.x + 24, toast.bounds.y + toast.bounds.height / 2, {
-      color: colors.text,
-      size: this.narrow ? 10 : 12,
-      font: THEME.fonts.mono
-    });
-  }
 
   private project(point: Vector3): ProjectedPoint {
     const z = point.z + 120;
