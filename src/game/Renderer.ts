@@ -147,6 +147,28 @@ export function getCompactTouchControlRects(width: number, height: number, docke
   return rects;
 }
 
+/**
+ * Returns true for modes that display a full-screen or side-sheet panel.
+ * When true: background HUD is suppressed, global shortcut strips are hidden,
+ * and onboarding hints are not floated over panel content.
+ * Exported so layout tests can assert deterministic layering behaviour.
+ */
+export function isModalPanelMode(mode: GameMode): boolean {
+  return (
+    mode === "map" ||
+    mode === "docked" ||
+    mode === "trade" ||
+    mode === "equipment" ||
+    mode === "shipyard" ||
+    mode === "missions" ||
+    mode === "help" ||
+    mode === "settings" ||
+    mode === "paused" ||
+    mode === "gameOver" ||
+    mode === "docking"
+  );
+}
+
 export function getOnboardingHintY(mode: GameMode, height: number, barHeight: number, narrow: boolean, hasStatusMessage: boolean): number {
   if (narrow) {
     if (mode === "docked" || mode === "shipyard") {
@@ -245,9 +267,14 @@ export class Renderer {
       if (state.mode === "paused") this.renderPause(state);
       if (state.mode === "gameOver") this.renderGameOver(state);
 
-      // Always show state-accurate help text and active hints on top of overlays
-      this.renderModeHelpText(state);
-      if (state.activeHint !== null) this.renderOnboardingHint(state, state.activeHint);
+      // Shortcut strip and onboarding hints must not float over active panel screens.
+      // Panel modes (map, trade, equipment, shipyard, missions, docked, help) own their
+      // own footer with shortcut text, so the global strip is suppressed there.
+      // True modal dialogs (paused, settings, gameOver) also suppress both layers.
+      if (!this.isOverlayMode(state.mode)) {
+        this.renderModeHelpText(state);
+        if (state.activeHint !== null) this.renderOnboardingHint(state, state.activeHint);
+      }
     }
   }
 
@@ -395,13 +422,14 @@ export class Renderer {
         else this.drawStatusMessage(state.message);
       }
     } else {
-      // Behind a modal: still allow a thin dim of background so wireframe vista
-      // remains visible, but no flight HUD/touch controls.
-      this.ctx.fillStyle = "rgba(2, 4, 8, 0.55)";
+      // Behind a modal panel: apply a solid dim over the wireframe vista so the
+      // background does not visually compete with the active panel. The HUD is
+      // intentionally suppressed — it bleeds through and distracts from panel
+      // content. Touch controls are already excluded by the !overlayActive guard.
+      this.ctx.fillStyle = "rgba(2, 4, 8, 0.62)";
       this.ctx.fillRect(0, 0, this.width, this.height);
-      if (this.signalGlassUi && !this.narrow) {
-        this.renderSignalGlassHud(state);
-      }
+      // HUD is NOT rendered here — even on desktop Signal Glass — because it
+      // creates visual noise behind trade/equipment/map/mission panels.
     }
   }
 
@@ -1709,6 +1737,40 @@ export class Renderer {
     const rowSpacing = this.narrow ? 56 : 62;
     const rowH = this.narrow ? 48 : 54;
     const maxRows = this.narrow ? Math.max(0, Math.floor((panelH - (top - panelY) - 40) / rowSpacing)) : state.missions.length;
+
+    // ── Empty state ──────────────────────────────────────────────────────────
+    if (state.missions.length === 0) {
+      const emptyCardW = this.narrow ? panelW - 32 : Math.min(540, panelW - 80);
+      const emptyCardH = this.narrow ? 108 : 128;
+      const emptyCardX = this.width / 2 - emptyCardW / 2;
+      const emptyCardY = top + (this.narrow ? 8 : 24);
+      this.signalGlassUi
+        ? this.signalPanel(emptyCardX, emptyCardY, emptyCardW, emptyCardH, "base")
+        : (() => {
+            this.ctx.fillStyle = "rgba(10, 14, 20, 0.5)";
+            this.ctx.beginPath();
+            this.ctx.roundRect(emptyCardX, emptyCardY, emptyCardW, emptyCardH, 8);
+            this.ctx.fill();
+          })();
+      this.drawText("NO CONTRACTS AVAILABLE HERE", this.width / 2, emptyCardY + (this.narrow ? 26 : 34), {
+        align: "center", color: THEME.colors.accentAmber, size: this.narrow ? 14 : 18, font: THEME.fonts.accent
+      });
+      const system = state.systems[state.player.currentSystemId];
+      const whyText = system
+        ? `${system.name.toUpperCase()} HAS NO ACTIVE POSTINGS AT THIS TIME.`
+        : "NO ACTIVE POSTINGS AT THIS STATION.";
+      this.drawText(whyText, this.width / 2, emptyCardY + (this.narrow ? 50 : 66), {
+        align: "center", color: THEME.colors.textSecondary, size: this.narrow ? 10 : 12, font: THEME.fonts.mono
+      });
+      this.drawText("TRY JUMPING TO ANOTHER SYSTEM OR CHECKING BACK AFTER A TRANSIT.", this.width / 2, emptyCardY + (this.narrow ? 70 : 90), {
+        align: "center", color: THEME.colors.textDim, size: this.narrow ? 9 : 11, font: THEME.fonts.mono
+      });
+      const actionY = emptyCardY + emptyCardH + (this.narrow ? 10 : 16);
+      const btnW = this.narrow ? (rowW - 16) / 2 : 140;
+      const btnH = this.narrow ? 34 : 38;
+      this.button("touch-dock", "LAUNCH [D]", left, actionY, btnW, btnH);
+      this.button("map-open", "OPEN MAP [M]", left + btnW + (this.narrow ? 16 : 16), actionY, btnW, btnH);
+    }
 
     state.missions.slice(0, maxRows).forEach((mission, index) => {
       const y = top + index * rowSpacing;

@@ -26,9 +26,11 @@ export const SIGNAL_GLASS_THEME = {
     info: "#7AA7FF"
   },
   typography: {
-    ui: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
-    telemetry: "ui-monospace, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace",
-    display: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    // Restored pre-Signal Glass game fonts: Space Grotesk (display), Inter (body), JetBrains Mono (telemetry).
+    // System fallbacks ensure canvas rendering works before web fonts resolve.
+    ui: "\"Inter\", system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    telemetry: "\"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace",
+    display: "\"Space Grotesk\", \"Segoe UI\", system-ui, -apple-system, sans-serif",
     scale: {
       display: 28,
       h1: 22,
@@ -133,9 +135,9 @@ export const SIGNAL_GLASS_CSS_VARS: Record<string, string> = {
   "--vst-grid": SIGNAL_GLASS_THEME.colors.grid,
   "--vst-focus": SIGNAL_GLASS_THEME.colors.focus,
   "--vst-disabled": SIGNAL_GLASS_THEME.colors.disabled,
-  "--vst-font-ui": SIGNAL_GLASS_THEME.typography.ui,
-  "--vst-font-telemetry": SIGNAL_GLASS_THEME.typography.telemetry,
-  "--vst-font-display": SIGNAL_GLASS_THEME.typography.display,
+  "--vst-font-ui": SIGNAL_GLASS_THEME.typography.ui,       // Inter → system-ui fallback
+  "--vst-font-telemetry": SIGNAL_GLASS_THEME.typography.telemetry, // JetBrains Mono → ui-monospace fallback
+  "--vst-font-display": SIGNAL_GLASS_THEME.typography.display,    // Space Grotesk → Segoe UI fallback
   "--vst-radius-chip": `${SIGNAL_GLASS_THEME.radius.chip}px`,
   "--vst-radius-control": `${SIGNAL_GLASS_THEME.radius.control}px`,
   "--vst-radius-panel": `${SIGNAL_GLASS_THEME.radius.panel}px`,
@@ -166,6 +168,8 @@ export const THEME = {
     disabled: "#3A4256"
   },
   fonts: {
+    // Restored game font stacks — accent uses Space Grotesk (distinctive, uppercase-friendly);
+    // primary uses Inter (clean body text); mono uses JetBrains Mono (telemetry numerics).
     primary: SIGNAL_GLASS_THEME.typography.ui,
     accent: SIGNAL_GLASS_THEME.typography.display,
     mono: SIGNAL_GLASS_THEME.typography.telemetry
