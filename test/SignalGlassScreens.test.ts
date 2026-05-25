@@ -4,6 +4,7 @@ import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import {
   classifyEquipment,
   formatDeltaBadge,
+  getEquipmentDisplayOrder,
   getMissionCardState,
   getRouteValidity,
   getShipComparison,
@@ -142,6 +143,47 @@ describe("Signal Glass screen helpers", () => {
     const sections = classifyEquipment(player(), getStationProfile(systems[0]));
     expect(sections.installed.some((item) => item.id === "pulseLaser")).toBe(true);
     expect(sections.available.length).toBeGreaterThan(0);
+  });
+
+  // R4 acceptance: getEquipmentDisplayOrder returns installed → available → unavailable.
+  it("R4: getEquipmentDisplayOrder puts installed first, then available, then unavailable", () => {
+    const station = getStationProfile(systems[0]);
+    // Build a player with exactly 1 installed item known to be installed.
+    const p = player();
+    const sections = classifyEquipment(p, station);
+
+    // Sanity-check the fixture has items in all three buckets.
+    expect(sections.installed.length).toBeGreaterThanOrEqual(1);
+    expect(sections.available.length).toBeGreaterThanOrEqual(1);
+    expect(sections.unavailable.length).toBeGreaterThanOrEqual(1);
+
+    const ordered = getEquipmentDisplayOrder(p, station);
+
+    // Total length must equal sum of all sections.
+    expect(ordered.length).toBe(sections.installed.length + sections.available.length + sections.unavailable.length);
+
+    // The first N items must all be installed.
+    const installedIds = new Set(sections.installed.map((i) => i.id));
+    const availableIds = new Set(sections.available.map((i) => i.id));
+    const unavailableIds = new Set(sections.unavailable.map((i) => i.id));
+
+    let zone: "installed" | "available" | "unavailable" = "installed";
+    for (const item of ordered) {
+      if (zone === "installed") {
+        if (!installedIds.has(item.id)) {
+          zone = "available";
+        }
+      }
+      if (zone === "available") {
+        if (!availableIds.has(item.id)) {
+          zone = "unavailable";
+        }
+      }
+      if (zone === "unavailable") {
+        expect(unavailableIds.has(item.id)).toBe(true);
+      }
+    }
+    expect(zone).toBe("unavailable"); // confirmed we reached all three zones
   });
 
   it("computes ship comparison deltas and cargo overflow", () => {

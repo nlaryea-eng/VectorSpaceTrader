@@ -2,7 +2,7 @@ import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, createToastModel, formatSystemChip } from "./UiHost";
 import { getPanelChromeLayout, getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout, type SubRect } from "./Layout";
-import { EQUIPMENT, isEquipmentAvailableAtStation } from "./Equipment";
+import { isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
 import { getLegalRiskLabel, getReputationLabel } from "./Reputation";
@@ -18,6 +18,7 @@ import {
   classifyEquipment,
   formatDeltaBadge,
   getEquipmentAffordability,
+  getEquipmentDisplayOrder,
   getMissionCardState,
   getRouteValidity,
   getShipComparison,
@@ -1039,23 +1040,35 @@ export class Renderer {
     });
   }
 
-  private drawDisabledControl(label: string, x: number, y: number, width: number, height: number, color = THEME.colors.textDim): void {
-    this.ctx.fillStyle = "rgba(14, 19, 32, 0.42)";
+  /**
+   * Draws a small status chip centered on (x, y) — used in equipment rows.
+   * tokenColor is the full-opacity token (e.g. THEME.colors.success).
+   * The chip background is the token at 22 % alpha; text is the token at full opacity.
+   * Returns the pixel width of the chip so callers can adjust layout.
+   */
+  private drawChip(x: number, y: number, label: string, tokenColor: string, rightAligned = false): number {
+    const chipH = this.narrow ? 16 : 18;
+    const padX = 6;
+    const fontSize = this.narrow ? 9 : 10;
+    this.ctx.font = `${fontSize}px ${THEME.fonts.mono}`;
+    const textW = this.ctx.measureText(label).width;
+    const chipW = Math.ceil(textW + padX * 2);
+    const chipX = rightAligned ? x - chipW : x;
+    const chipY = y - chipH / 2;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.22;
+    this.ctx.fillStyle = tokenColor;
     this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
+    this.ctx.roundRect(chipX, chipY, chipW, chipH, SIGNAL_GLASS_THEME.radius.chip);
     this.ctx.fill();
-    this.ctx.strokeStyle = "rgba(95, 105, 125, 0.45)";
-    this.ctx.lineWidth = 1;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
-    this.ctx.stroke();
-    this.drawText(label, x + width / 2, y + height / 2 + 4, {
-      align: "center",
-      color,
-      size: this.narrow ? 10 : 11,
-      font: THEME.fonts.accent
-    });
+    this.ctx.restore();
+
+    this.drawText(label, chipX + padX, y, { color: tokenColor, size: fontSize, font: THEME.fonts.mono });
+    return chipW;
   }
+
+
 
   private renderMap(state: RenderState): void {
     const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "map");
@@ -1573,11 +1586,16 @@ export class Renderer {
       : "HULL REPAIR ACTIVE / EQUIPMENT VENDOR OFFLINE";
     this.drawPanelHeader(chrome, "EQUIPMENT BAY", equipmentVendorLabel, `${profile.label.toUpperCase()} · MAINTENANCE`);
     this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
-    const filteredEquipment = state.equipmentCategoryFilter === "all"
-      ? EQUIPMENT
-      : EQUIPMENT.filter((e) => e.category === state.equipmentCategoryFilter);
 
-    const pageSize = this.narrow ? 5 : 8;
+    // Build ordered list (installed → available → unavailable) then apply category filter.
+    const orderedEquipment = getEquipmentDisplayOrder(state.player, profile);
+    const filteredEquipment = state.equipmentCategoryFilter === "all"
+      ? orderedEquipment
+      : orderedEquipment.filter((e) => e.category === state.equipmentCategoryFilter);
+
+    const rowH = this.narrow ? 44 : 48;
+    const rowSpacing = this.narrow ? 52 : 48;
+    const pageSize = Math.max(4, Math.floor(chrome.contentBounds.height / rowSpacing));
     const pageCount = Math.max(1, Math.ceil(filteredEquipment.length / pageSize));
     const page = Math.max(0, Math.min(state.equipmentPage, pageCount - 1));
     const visibleEquipment = filteredEquipment.slice(page * pageSize, page * pageSize + pageSize);
@@ -1585,19 +1603,20 @@ export class Renderer {
     const left = this.narrow ? panelX + 12 : this.width * 0.14;
     const top = chrome.contentBounds.y + (this.narrow ? 22 : 34);
     const rowW = this.narrow ? panelW - 24 : this.width * 0.72;
-    const rowH = this.narrow ? 44 : 40;
-    const rowSpacing = this.narrow ? 52 : 48;
 
     visibleEquipment.forEach((item, index) => {
       const installed = state.player.equipment[item.id];
       const stocked = isEquipmentAvailableAtStation(item, profile);
-      const affordable = state.player.balance >= item.price;
+      const unavailable = !installed && !stocked;
       const y = top + index * rowSpacing;
       const rowY = y - 20;
       const hovered = isPointInRect(state.mousePosition, left, rowY, rowW, rowH);
 
+      if (unavailable) this.ctx.save();
+      if (unavailable) this.ctx.globalAlpha = 0.6;
+
       if (hovered && !installed && stocked) {
-        this.ctx.fillStyle = "rgba(0, 242, 255, 0.08)";
+        this.ctx.fillStyle = HELP_HOVER_FILL;
         this.ctx.beginPath();
         this.ctx.roundRect(left - 8, rowY, rowW + 16, rowH, 4);
         this.ctx.fill();
@@ -1610,20 +1629,28 @@ export class Renderer {
         color: installed ? THEME.colors.accentTeal : THEME.colors.textPrimary, font: THEME.fonts.accent, size: nameSize
       });
 
+      // Status chip
       const status = installed ? "INSTALLED" : !stocked ? "UNAVAILABLE" : getEquipmentAffordability(state.player, item).toUpperCase();
-      const statusColor = installed ? THEME.colors.accentTeal : !stocked || !affordable ? THEME.colors.textDim : THEME.colors.accentAmber;
+      const chipToken = installed
+        ? THEME.colors.success
+        : !stocked
+          ? SIGNAL_GLASS_THEME.colors.disabled
+          : SIGNAL_GLASS_THEME.colors.accent2;
+
       if (this.narrow) {
-        // Status right-aligned; description on a second row.
-        this.drawText(status, left + rowW - 8, y, { align: "right", color: statusColor, size: SIGNAL_GLASS_TEXT_SIZES.equipmentRow, font: THEME.fonts.mono });
+        // Chip right-aligned; description on a second row.
+        this.drawChip(left + rowW - 8, y, status, chipToken, true);
         this.ctx.font = `${SIGNAL_GLASS_TEXT_SIZES.equipmentRow}px ${THEME.fonts.primary}`;
         const descLines = wrapText(this.ctx, item.description, rowW - 24);
         if (descLines.length > 0) {
           this.drawText(descLines[0], left + 22, y + 16, { size: SIGNAL_GLASS_TEXT_SIZES.equipmentRow, color: THEME.colors.textSecondary });
         }
       } else {
-        this.drawText(status, left + 260, y, { color: statusColor, size: 11, font: THEME.fonts.mono });
+        this.drawChip(left + 260, y, status, chipToken);
         this.drawText(item.description, left + 400, y, { size: 11, color: THEME.colors.textSecondary });
       }
+
+      if (unavailable) this.ctx.restore();
     });
 
     // Subtle separator above footer band
@@ -1635,29 +1662,40 @@ export class Renderer {
     this.ctx.stroke();
 
     const missing = state.player.maxHull - state.player.hull;
-    const hullFraction = state.player.hull / state.player.maxHull;
-    const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
 
-    this.drawText("HULL REPAIR", chrome.footerStatusRow.x, this.rowTextY(chrome.footerStatusRow), {
-      size: this.narrow ? 10 : 11,
-      font: THEME.fonts.mono,
-      color: THEME.colors.textSecondary
-    });
-    const barX = chrome.footerStatusRow.x + (this.narrow ? 86 : 104);
-    const barW = this.narrow ? 104 : 150;
-    this.drawProgressBar(barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
-    this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, barX + barW + 12, this.rowTextY(chrome.footerStatusRow), {
-      size: this.narrow ? 10 : 11,
-      font: THEME.fonts.mono,
-      color: hullColor
-    });
-
-    if (missing > 0) {
+    if (missing === 0) {
+      // Full hull — compact single-line affordance; no progress bar.
+      const compactY = this.rowTextY(chrome.footerStatusRow);
+      this.ctx.strokeStyle = SIGNAL_GLASS_THEME.colors.grid;
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.moveTo(chrome.footerStatusRow.x, chrome.footerStatusRow.y);
+      this.ctx.lineTo(chrome.footerStatusRow.x + chrome.footerStatusRow.width, chrome.footerStatusRow.y);
+      this.ctx.stroke();
+      this.drawText("Hull fully operational · Repair available here", chrome.footerStatusRow.x, compactY, {
+        size: this.narrow ? 10 : 11,
+        font: THEME.fonts.mono,
+        color: SIGNAL_GLASS_THEME.colors.textMuted
+      });
+    } else {
+      const hullFraction = state.player.hull / state.player.maxHull;
+      const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
+      this.drawText("HULL REPAIR", chrome.footerStatusRow.x, this.rowTextY(chrome.footerStatusRow), {
+        size: this.narrow ? 10 : 11,
+        font: THEME.fonts.mono,
+        color: THEME.colors.textSecondary
+      });
+      const barX = chrome.footerStatusRow.x + (this.narrow ? 86 : 104);
+      const barW = this.narrow ? 104 : 150;
+      this.drawProgressBar(barX, chrome.footerStatusRow.y + 5, barW, 12, hullFraction, hullColor);
+      this.drawText(`${Math.round(state.player.hull)}/${state.player.maxHull}`, barX + barW + 12, this.rowTextY(chrome.footerStatusRow), {
+        size: this.narrow ? 10 : 11,
+        font: THEME.fonts.mono,
+        color: hullColor
+      });
       const repairCost = calcRepairCost(state.player, profile.repairCostModifier);
       const repairLabel = `REPAIR HULL (${repairCost} BAL) [H]`;
       this.button("equip-repair", repairLabel, chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
-    } else {
-      this.drawDisabledControl("HULL FULLY OPERATIONAL", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height, THEME.colors.success);
     }
 
     const catLabel = `CAT: ${state.equipmentCategoryFilter.toUpperCase()}`;
@@ -1674,7 +1712,7 @@ export class Renderer {
         align: "right", color: THEME.colors.accentTeal, size: 10, font: THEME.fonts.mono
       });
     } else {
-      this.drawText(`PAGE ${page + 1}/${pageCount} · ${profile.label.toUpperCase()}`, chrome.footerSecondaryActionRow.x, this.rowTextY(chrome.footerSecondaryActionRow), {
+      this.drawText(`PAGE ${page + 1} / ${pageCount} · ${profile.label.toUpperCase()}`, chrome.footerSecondaryActionRow.x, this.rowTextY(chrome.footerSecondaryActionRow), {
         color: THEME.colors.accentTeal, size: 11, font: THEME.fonts.mono
       });
       const right = chrome.footerSecondaryActionRow.x + chrome.footerSecondaryActionRow.width;

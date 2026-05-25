@@ -262,11 +262,13 @@ describe("Signal Glass panel refinement button zones", () => {
     expectNoOverlap(category, help);
   });
 
-  it("shows complete Equipment hull state without exposing a repair button when fully repaired", () => {
+  it("shows compact hull-full affordance without a repair button or progress bar when fully repaired", () => {
     const { buttons, trace } = renderWithTrace("equipment", { width: 390, height: 844 }, { player: player({ hull: 100, maxHull: 100 }) });
+    // R4: no repair button when hull is full.
     expect(buttons.some((button) => button.id === "equip-repair")).toBe(false);
     expect(buttons.some((button) => button.id === "equip-category-cycle")).toBe(true);
-    const status = trace.texts.find((entry) => entry.text === "HULL FULLY OPERATIONAL");
+    // R4: compact one-line affordance replaces the old full-caps label.
+    const status = trace.texts.find((entry) => entry.text === "Hull fully operational · Repair available here");
     expect(status).toBeDefined();
     expect(status!.y).toBeLessThan(byId(buttons, "equip-category-cycle").y);
   });
