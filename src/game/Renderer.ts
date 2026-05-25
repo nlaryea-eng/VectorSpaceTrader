@@ -6,13 +6,12 @@ import { isEquipmentAvailableAtStation } from "./Equipment";
 import { getPriceTrend } from "./Economy";
 import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
 import { getLegalRiskLabel, getReputationLabel } from "./Reputation";
-import { HINT_TEXT } from "./Onboarding";
 import type { RankInfo } from "./Rank";
 import type { RunStats } from "./RunStats";
 import type { HintId } from "./Onboarding";
 import { getPlayerShip, getPlayerShipStats, PLAYER_SHIPS } from "./Ships";
 import { getStationProfile } from "./StationServices";
-import { HELP_CONTENT, searchHelpContent, type HelpSectionId } from "./HelpContent";
+import type { HelpSectionId } from "./HelpContent";
 import {
   classifyEquipment,
   getEquipmentAffordability,
@@ -67,12 +66,13 @@ import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader, 
 import { createRenderContext, updateRenderContext, type RenderContext } from "./render/RenderContext";
 import {
   getCompactTouchControlRects,
-  getOnboardingHintY,
-  getTutorialBannerRect,
   isModalPanelMode,
   NARROW_BREAKPOINT,
   NARROW_TOUCH_AREA
 } from "./render/RendererLayout";
+import { renderHelp } from "./render/overlays/HelpScreen";
+import { renderOnboardingHint } from "./render/overlays/OnboardingHint";
+import { renderTutorialBanner } from "./render/overlays/TutorialBanner";
 import { renderControls } from "./render/screens/ControlsScreen";
 import { renderGameOver } from "./render/screens/GameOverScreen";
 import { renderPause } from "./render/screens/PauseScreen";
@@ -232,12 +232,12 @@ export class Renderer {
       if (state.mode === "equipment") this.renderEquipment(state);
       if (state.mode === "shipyard") this.renderShipyard(state);
       if (state.mode === "missions") this.renderMissions(state);
-      if (state.mode === "help") this.renderHelp(state);
+      if (state.mode === "help") renderHelp(this.renderContext, state);
       if (state.mode === "settings") renderSettings(this.renderContext, state);
       if (state.mode === "paused") renderPause(this.renderContext, state);
       if (state.mode === "gameOver") renderGameOver(this.renderContext, state);
       if (state.tutorialHint && !["help", "settings", "paused", "gameOver"].includes(state.mode)) {
-        this.renderTutorialBanner(state);
+        renderTutorialBanner(this.renderContext, state);
       }
 
       const activeHint = state.tutorialHint ? null : state.activeHint;
@@ -249,9 +249,9 @@ export class Renderer {
       // Docked owns equivalent service controls in its station panel, so it does not float a hint.
       if (!this.isOverlayMode(state.mode)) {
         this.renderModeHelpText(state);
-        if (activeHint !== null) this.renderOnboardingHint(state, activeHint);
+        if (activeHint !== null) renderOnboardingHint(this.renderContext, state, activeHint);
       } else if (state.mode === "shipyard" && activeHint !== null) {
-        this.renderOnboardingHint(state, activeHint);
+        renderOnboardingHint(this.renderContext, state, activeHint);
       }
     }
   }
@@ -1945,170 +1945,6 @@ export class Renderer {
 
     const footer = this.narrow ? "TAP TO ACCEPT · ESC BACK" : "CLICK ROW OR 1-8 TO ACCEPT CONTRACT · ESC BACK";
     this.drawFooterHint(chrome, footer);
-  }
-
-  private renderHelp(state: RenderState): void {
-    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "help");
-    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
-    this.panel(panelX, panelY, panelW, panelH);
-    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
-
-    const titleSize = this.narrow ? 18 : 28;
-    const titleY = panelY + (this.narrow ? 32 : 48);
-    this.drawText("PILOT MANUAL", this.width / 2, titleY, {
-      align: "center", size: titleSize, color: THEME.colors.textPrimary, font: THEME.fonts.accent
-    });
-    this.drawHeaderActions(chrome, [{ id: "help-close", label: this.narrow ? "CLOSE" : "CLOSE [Esc]", width: this.narrow ? 78 : 112 }]);
-
-    const sidebarW = this.narrow ? 110 : 220;
-    const sidebarX = panelX + 12;
-    const contentX = sidebarX + sidebarW + 16;
-    const contentW = panelW - sidebarW - 40;
-    const top = titleY + (this.narrow ? 28 : 64);
-
-    const sidebarRowH = this.narrow ? 22 : 30;
-    const sidebarFontSize = this.narrow ? 9 : 12;
-    const helpQuery = state.helpSearchQuery ?? "";
-    const helpSections = searchHelpContent(helpQuery);
-    const visibleSections = helpSections.length > 0 ? helpSections : HELP_CONTENT;
-
-    if (this.signalGlassUi && helpQuery) {
-      const manualInput = typeof document !== "undefined"
-        ? document.querySelector(".manual-search-input")
-        : null;
-      if (manualInput) {
-        const inputRect = manualInput.getBoundingClientRect();
-        const captionY = inputRect.bottom + 14;
-        this.drawText(`${helpSections.length} RESULTS`, inputRect.left, captionY, {
-          color: SIGNAL_GLASS_THEME.colors.textMuted, size: 11, font: THEME.fonts.mono
-        });
-      }
-    }
-
-    visibleSections.forEach((section, index) => {
-      const y = top + index * sidebarRowH;
-      const selected = section.id === state.helpSectionId;
-      const rowY = y - sidebarRowH / 2;
-
-      if (selected || isPointInRect(state.mousePosition, sidebarX, rowY, sidebarW, sidebarRowH)) {
-        this.ctx.fillStyle = selected ? "rgba(108, 227, 214, 0.12)" : HELP_HOVER_FILL;
-        this.ctx.beginPath();
-        this.ctx.roundRect(sidebarX - 4, rowY, sidebarW, sidebarRowH, 4);
-        this.ctx.fill();
-        if (selected) {
-          this.ctx.fillStyle = SIGNAL_GLASS_THEME.colors.accent;
-          this.ctx.fillRect(sidebarX - 4, rowY, 3, sidebarRowH);
-        }
-      }
-
-      this.addButtonZone({ id: `help-sidebar-${section.id}`, label: section.title, x: sidebarX, y: rowY, width: sidebarW, height: sidebarRowH });
-      this.drawText(section.title.toUpperCase(), sidebarX + 8, y + 4, {
-        color: selected ? SIGNAL_GLASS_THEME.colors.accent : THEME.colors.textPrimary,
-        size: sidebarFontSize,
-        font: THEME.fonts.accent
-      });
-    });
-
-    const activeSection = HELP_CONTENT.find((s) => s.id === state.helpSectionId) ?? visibleSections[0] ?? HELP_CONTENT[0];
-    const activePage = activeSection.pages[state.helpPageIndex] ?? activeSection.pages[0];
-
-    this.drawText(activeSection.title.toUpperCase(), contentX, top, {
-      color: THEME.colors.accentTeal, size: this.narrow ? 14 : 20, font: THEME.fonts.accent
-    });
-
-    this.drawText(activePage.heading.toUpperCase(), contentX, top + (this.narrow ? 24 : 36), {
-      color: THEME.colors.textPrimary, size: this.narrow ? 12 : 16, font: THEME.fonts.accent
-    });
-
-    let bodyY = top + (this.narrow ? 48 : 72);
-    const bodySize = this.narrow ? 10 : 13;
-    const bodyGap = this.narrow ? 14 : 20;
-    this.ctx.font = `${bodySize}px ${THEME.fonts.primary}`;
-    activePage.body.forEach((line) => {
-      const lines = wrapText(this.ctx, line, contentW);
-      lines.forEach((l) => {
-        this.drawText(l, contentX, bodyY, { size: bodySize, color: THEME.colors.textPrimary });
-        bodyY += bodyGap;
-      });
-      bodyY += 6;
-    });
-
-    if (activePage.tips && activePage.tips.length > 0) {
-      bodyY += 8;
-      this.drawText("PRO TIPS:", contentX, bodyY, { color: THEME.colors.accentAmber, size: this.narrow ? 10 : 12, font: THEME.fonts.accent });
-      bodyY += (this.narrow ? 18 : 24);
-      activePage.tips.forEach((tip) => {
-        const lines = wrapText(this.ctx, `· ${tip}`, contentW);
-        lines.forEach((l) => {
-          this.drawText(l, contentX, bodyY, { size: this.narrow ? 10 : 12, color: THEME.colors.accentAmber });
-          bodyY += (this.narrow ? 14 : 18);
-        });
-      });
-    }
-
-    const navY = panelY + panelH - 74;
-    const btnW = this.narrow ? 70 : 120;
-    const btnH = 30;
-    if (state.helpPageIndex > 0) {
-      this.button("help-page-prev", "PREV", contentX, navY, btnW, btnH);
-    }
-    if (state.helpPageIndex < activeSection.pages.length - 1) {
-      this.button("help-page-next", "NEXT", contentX + contentW - btnW, navY, btnW, btnH);
-    }
-
-    this.drawText(`PAGE ${state.helpPageIndex + 1} / ${activeSection.pages.length}`, contentX + contentW / 2, navY + 20, {
-      align: "center", size: 10, font: THEME.fonts.mono, color: THEME.colors.textDim
-    });
-
-    this.button("help-close", "CLOSE [Esc]", this.width / 2 - 75, panelY + panelH - 34, 150, 28);
-  }
-
-  private renderOnboardingHint(state: RenderState, hint: HintId): void {
-    const hintText = HINT_TEXT[hint];
-    const padding = 12;
-    const fontSize = this.narrow ? 11 : 13;
-    const barW = Math.min(this.width - 32, 600);
-
-    this.ctx.font = `${fontSize}px ${THEME.fonts.accent}`;
-    const lines = wrapText(this.ctx, hintText.toUpperCase(), barW - padding * 2);
-    const lineHeight = fontSize + 6;
-    const barH = lineHeight * lines.length + padding * 2;
-    const barX = this.width / 2 - barW / 2;
-
-    const barY = getOnboardingHintY(state.mode, this.height, barH, this.narrow, state.messageLog.entries.length > 0);
-
-    this.ctx.fillStyle = THEME.colors.bgGlass;
-    this.ctx.beginPath();
-    this.ctx.roundRect(barX, barY, barW, barH, 8);
-    this.ctx.fill();
-
-    this.setVectorStroke(THEME.colors.accentTeal, 1.5, true);
-    this.ctx.beginPath();
-    this.ctx.roundRect(barX, barY, barW, barH, 8);
-    this.ctx.stroke();
-
-    lines.forEach((line, i) => {
-      this.drawText(line, this.width / 2, barY + padding + i * lineHeight + lineHeight / 2, {
-        align: "center", color: THEME.colors.textPrimary, size: fontSize, font: THEME.fonts.accent
-      });
-    });
-
-    this.addButtonZone({ id: "hint-dismiss", label: "Dismiss hint", x: barX, y: barY, width: barW, height: barH });
-  }
-
-  private renderTutorialBanner(state: RenderState): void {
-    const hint = state.tutorialHint;
-    if (!hint) return;
-
-    const rect = getTutorialBannerRect(state.mode, this.width, this.height, this.narrow, state.messageLog.entries.length);
-    const colors = SIGNAL_GLASS_THEME.colors;
-    this.signalPanel(rect.x, rect.y, rect.width, rect.height, "overlay");
-    this.drawText("FIRST FLIGHT", rect.x + 12, rect.y + 15, {
-      color: colors.accent2, size: this.narrow ? 8 : 9, font: THEME.fonts.mono
-    });
-    this.drawText(hint.toUpperCase(), rect.x + 12, rect.y + (this.narrow ? 32 : 31), {
-      color: colors.text, size: this.narrow ? 10 : 11, font: THEME.fonts.accent
-    });
   }
 
   private renderExplosion(effect: ExplosionEffect, player: PlayerState): void {
