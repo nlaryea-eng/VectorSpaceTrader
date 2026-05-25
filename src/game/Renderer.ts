@@ -992,8 +992,16 @@ export class Renderer {
     return row.y + row.height / 2 + 4;
   }
 
-  private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string): void {
-    this.drawText(title, chrome.titleRow.x + chrome.titleRow.width / 2, this.rowTextY(chrome.titleRow), {
+  /**
+   * @param titleAvailableWidth Optional override for the horizontal span used to center the title.
+   *   Pass `chrome.titleRow.width - chrome.headerActionRow.width - 8` on compact viewports where
+   *   the action row overlaps the right portion of the title row (e.g. docked screen on mobile).
+   */
+  private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string, titleAvailableWidth?: number): void {
+    const titleCenterX = titleAvailableWidth != null
+      ? chrome.titleRow.x + titleAvailableWidth / 2
+      : chrome.titleRow.x + chrome.titleRow.width / 2;
+    this.drawText(title, titleCenterX, this.rowTextY(chrome.titleRow), {
       align: "center",
       size: this.narrow ? 18 : 24,
       color: THEME.colors.textPrimary,
@@ -1037,6 +1045,36 @@ export class Renderer {
       color: THEME.colors.textDim,
       size: this.narrow ? 9 : 10,
       font: THEME.fonts.mono
+    });
+  }
+
+  /**
+   * Primary CTA button: accent-filled background at 18 % alpha + 1.5 px cyan border.
+   * Used for LAUNCH on the Station Hub so it reads as the dominant action.
+   * Pushes a buttonZone so InputRouter can route clicks normally.
+   */
+  private drawPrimaryButton(id: string, label: string, x: number, y: number, width: number, height: number): void {
+    this.buttonZones.push({ id, label, x, y, width, height });
+
+    this.ctx.save();
+    this.ctx.fillStyle = SIGNAL_GLASS_THEME.colors.accent;
+    this.ctx.globalAlpha = 0.18;
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
+    this.ctx.fill();
+    this.ctx.restore();
+
+    this.ctx.strokeStyle = SIGNAL_GLASS_THEME.colors.accent;
+    this.ctx.lineWidth = 1.5;
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, width, height, SIGNAL_GLASS_THEME.radius.control);
+    this.ctx.stroke();
+
+    this.drawText(label, x + width / 2, y + height / 2, {
+      align: "center",
+      color: SIGNAL_GLASS_THEME.colors.accent,
+      size: Math.min(13, Math.max(9, height * 0.32)),
+      font: THEME.fonts.accent
     });
   }
 
@@ -1319,28 +1357,58 @@ export class Renderer {
     const system = state.systems[state.player.currentSystemId];
     const profile = getStationProfile(system);
     const hullFraction = state.player.hull / state.player.maxHull;
-    const hullColor = hullFraction < 0.3 ? THEME.colors.danger : hullFraction < 0.6 ? THEME.colors.warning : THEME.colors.success;
     const repLabel = getReputationLabel(state.player.reputation);
     const riskLabel = getLegalRiskLabel(state.player.legalRisk);
-    const riskColor = state.player.legalRisk >= 5 ? THEME.colors.danger : state.player.legalRisk >= 2 ? THEME.colors.warning : THEME.colors.success;
 
-    this.drawPanelHeader(chrome, `${system.name.toUpperCase()} STATION`, profile.label.toUpperCase(), system.stationHint.toUpperCase());
+    // On compact viewports the HELP button sits in the right portion of titleRow —
+    // constrain the title to the available left region to prevent overlap.
+    const dockedTitleW = this.narrow
+      ? chrome.titleRow.width - chrome.headerActionRow.width - 8
+      : undefined;
+    this.drawPanelHeader(chrome, `${system.name.toUpperCase()} STATION`, profile.label.toUpperCase(), system.stationHint.toUpperCase(), dockedTitleW);
     this.drawHeaderActions(chrome, [{ id: "help", label: "HELP [?]", width: this.narrow ? 76 : 94 }]);
 
     const infoY = chrome.contentBounds.y + (this.narrow ? 18 : 20);
     const infoSize = this.narrow ? 11 : 14;
     const infoGap = this.narrow ? 22 : 32;
-    this.drawText(`PILOT RANK: ${state.pilotRank.title}`, this.width / 2, infoY, {
-      align: "center", color: THEME.colors.accentPink, size: infoSize, font: THEME.fonts.mono
-    });
-    this.drawText(
-      `HULL: ${Math.round(state.player.hull)}/${state.player.maxHull}   BAL: ${Math.round(state.player.balance)}`,
-      this.width / 2, infoY + infoGap, { align: "center", color: hullColor, size: infoSize, font: THEME.fonts.mono }
-    );
-    this.drawText(
-      `REPUTATION: ${repLabel}   STATUS: ${riskLabel}`,
-      this.width / 2, infoY + infoGap * 2, { align: "center", color: riskColor, size: infoSize - 2, font: THEME.fonts.mono }
-    );
+
+    // Value colors — only deviate from muted when off-nominal.
+    const muted = THEME.colors.textSecondary;
+    const hullValueColor = hullFraction < 0.3 ? THEME.colors.danger
+      : hullFraction < 0.6 ? THEME.colors.warning
+      : muted;
+    const repValueColor = state.player.reputation < 0 ? THEME.colors.warning : muted;
+    const riskValueColor = state.player.legalRisk >= 5 ? THEME.colors.danger
+      : state.player.legalRisk >= 2 ? THEME.colors.warning
+      : muted;
+
+    // Helper: draw a centered multi-segment line (label + value each with their own color).
+    const drawInfoLine = (y: number, fontSize: number, segments: Array<{ text: string; color: string }>) => {
+      const font = `${fontSize}px ${THEME.fonts.mono}`;
+      const widths = segments.map((seg) => { this.ctx.font = font; return this.ctx.measureText(seg.text).width; });
+      const totalW = widths.reduce((a, b) => a + b, 0);
+      let x = this.width / 2 - totalW / 2;
+      for (let i = 0; i < segments.length; i++) {
+        this.drawText(segments[i].text, x, y, { color: segments[i].color, size: fontSize, font: THEME.fonts.mono });
+        x += widths[i];
+      }
+    };
+
+    drawInfoLine(infoY, infoSize, [
+      { text: "PILOT RANK  ", color: muted },
+      { text: state.pilotRank.title.toUpperCase(), color: muted }
+    ]);
+    drawInfoLine(infoY + infoGap, infoSize, [
+      { text: "HULL  ", color: muted },
+      { text: `${Math.round(state.player.hull)}/${state.player.maxHull}`, color: hullValueColor },
+      { text: `   BAL  ${Math.round(state.player.balance)}`, color: muted }
+    ]);
+    drawInfoLine(infoY + infoGap * 2, infoSize - 2, [
+      { text: "REPUTATION  ", color: muted },
+      { text: repLabel.toUpperCase(), color: repValueColor },
+      { text: "   STATUS  ", color: muted },
+      { text: riskLabel.toUpperCase(), color: riskValueColor }
+    ]);
 
     if (state.player.activeMission) {
       const am = state.player.activeMission;
@@ -1407,27 +1475,35 @@ export class Renderer {
         const by = rowYs[Math.min(row, rowYs.length - 1)];
         this.button(entry[0], entry[1], bx, by, bw, bh);
       });
-      this.button("touch-dock", "LAUNCH", panelX + 16, chrome.footerHintRow.y - 6, panelW - 32, 28);
+      // Mobile LAUNCH — full-width primary CTA with accent fill.
+      this.drawPrimaryButton("touch-dock", "LAUNCH", panelX + 16, chrome.footerHintRow.y - 6, panelW - 32, 28);
     } else {
       const bw = 84;
+      const launchW = Math.round(bw * 1.5); // 126 — wider to signal dominance
       const bgap = 10;
       const tiles = this.signalGlassUi ? getStationServiceTiles(system) : null;
-      const totalButtons = (tiles?.length ?? 4) + 1;
-      const totalW = bw * totalButtons + bgap * (totalButtons - 1);
-      const startX = this.width / 2 - totalW / 2;
       const labels: Array<[string, string]> = tiles
         ? tiles.map((tile) => [tile.id, tile.available ? tile.shortLabel : "LOCKED"])
         : [["touch-trade", "MARKET"], ["touch-equipment", "EQUIPMENT"], ["touch-shipyard", "SHIPS"], ["touch-missions", "MISSIONS"]];
+
+      // Service tiles at uniform bw, then double gap, then LAUNCH at 1.5× width.
+      const nTiles = labels.length;
+      const totalServiceW = nTiles * bw + (nTiles - 1) * bgap;
+      const totalW = totalServiceW + bgap * 2 + launchW;
+      const startX = this.width / 2 - totalW / 2;
+
       labels.forEach(([id, label], index) => {
-        this.button(id, label, startX + (bw + bgap) * index, chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
+        this.button(id, label, startX + index * (bw + bgap), chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
         if (tiles && tiles[index] && !tiles[index].available) {
-          // Show unavailable reason inside the button bounds (inline, not floating label).
-          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + (bw + bgap) * index + bw / 2, chrome.footerSecondaryActionRow.y + 14, {
+          this.drawText(tiles[index].why.toUpperCase().slice(0, 18), startX + index * (bw + bgap) + bw / 2, chrome.footerSecondaryActionRow.y + 14, {
             align: "center", color: SIGNAL_GLASS_THEME.colors.textDim, size: 7, font: THEME.fonts.mono
           });
         }
       });
-      this.button("touch-dock", "LAUNCH", startX + (bw + bgap) * labels.length, chrome.footerPrimaryActionRow.y, bw, chrome.footerPrimaryActionRow.height);
+
+      // Desktop LAUNCH — wider, accent-filled primary CTA.
+      const launchX = startX + totalServiceW + bgap * 2;
+      this.drawPrimaryButton("touch-dock", "LAUNCH", launchX, chrome.footerPrimaryActionRow.y, launchW, chrome.footerPrimaryActionRow.height);
     }
   }
 

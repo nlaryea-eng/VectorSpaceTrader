@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 import { Renderer, type RenderState } from "../src/game/Renderer";
-import { getPanelChromeLayout, rectsOverlap } from "../src/game/Layout";
+import { getPanelChromeLayout, getScreenPanelBounds, rectsOverlap } from "../src/game/Layout";
 import { createMissionId } from "../src/game/MissionIds";
-import { SIGNAL_GLASS_TEXT_SIZES } from "../src/game/Theme";
+import { SIGNAL_GLASS_TEXT_SIZES, THEME } from "../src/game/Theme";
 import { generateUniverse } from "../src/game/Universe";
 import type { ButtonZone, GameMode, Mission, PlayerState } from "../src/game/types";
 
@@ -16,6 +16,7 @@ interface DrawnText {
   y: number;
   font: string;
   align: CanvasTextAlign;
+  color: string;
 }
 
 interface RenderTrace {
@@ -28,12 +29,19 @@ function createStubCanvas(trace?: RenderTrace): HTMLCanvasElement {
   const ctx = {
     font: "",
     textAlign: "left" as CanvasTextAlign,
+    fillStyle: "" as string | CanvasGradient | CanvasPattern,
+    strokeStyle: "" as string | CanvasGradient | CanvasPattern,
+    lineWidth: 1,
+    shadowBlur: 0,
+    shadowColor: "",
+    globalAlpha: 1,
+    textBaseline: "middle" as CanvasTextBaseline,
     setTransform() {}, clearRect() {}, fillRect() {}, beginPath() {},
     roundRect() {}, fill() {}, stroke() {},
     rect(x: number, y: number, width: number, height: number) { pendingRect = { x, y, width, height }; },
     clip() { if (pendingRect) trace?.clips.push(pendingRect); },
     fillText(text: string, x: number, y: number) {
-      trace?.texts.push({ text: String(text), x, y, font: ctx.font, align: ctx.textAlign });
+      trace?.texts.push({ text: String(text), x, y, font: ctx.font, align: ctx.textAlign, color: String(ctx.fillStyle) });
     },
     measureText(text: string) { return { width: text.length * 7 }; },
     moveTo() {}, lineTo() {}, arc() {}, ellipse() {}, setLineDash() {}, save() {}, restore() {},
@@ -336,6 +344,52 @@ describe("Signal Glass panel refinement button zones", () => {
     const active = renderWithTrace("missions", { width: 390, height: 844 }, { player: player({ activeMission }) });
     expect(drawnText(active.trace)).toContain("ACTIVE CONTRACT IN PROGRESS");
     expect(drawnText(active.trace)).toContain("ACTIVE: SIGNAL PACKET");
+  });
+
+  // R2: docked screen title must not overlap the HELP button on mobile.
+  it("R2: docked station title stays clear of HELP button at 390×844", () => {
+    const viewport = { width: 390, height: 844 };
+    const { trace } = renderWithTrace("docked", viewport);
+
+    // Station title is "{SYSTEM NAME} STATION" (space before STATION) and center-aligned.
+    // Exclude the standalone "STATION" wireframe label drawn by renderStation in the flight view.
+    const titleEntry = trace.texts.find((entry) => entry.text.includes(" STATION") && entry.align === "center");
+    expect(titleEntry, "no STATION title found").toBeDefined();
+
+    // Compute estimated right edge: center X + half stub text width.
+    const titleRightEdge = titleEntry!.x + (titleEntry!.text.length * 7) / 2;
+
+    // Compute headerActionRow.x for this viewport.
+    const panelBounds = getScreenPanelBounds(viewport, "docked");
+    const chrome = getPanelChromeLayout(
+      { x: panelBounds.x, y: panelBounds.y, width: panelBounds.width, height: panelBounds.height }, true
+    );
+
+    expect(titleRightEdge).toBeLessThanOrEqual(chrome.headerActionRow.x - 8);
+  });
+
+  // R2: pilot summary must be entirely muted when the player is in nominal state.
+  it("R2: pilot summary uses muted text when hull full, reputation ≥ 0, legalRisk 0", () => {
+    const viewport = { width: 1280, height: 800 };
+    const { trace } = renderWithTrace("docked", viewport, {
+      player: player({ hull: 100, maxHull: 100, reputation: 0, legalRisk: 0 })
+    });
+
+    const muted = THEME.colors.textSecondary;
+    // Every segment of every pilot-summary line must use the muted color.
+    // Match exact segment texts produced by renderDocked's drawInfoLine calls.
+    // Use precise prefixes to avoid accidentally matching footer/status strings
+    // (e.g. "EQUIPMENT INCLUDES HULL REPAIR" also contains "HULL").
+    const summarySegments = trace.texts.filter((entry) => {
+      const t = entry.text;
+      return t === "PILOT RANK  " || t === "CADET" ||
+             t === "HULL  " || t.startsWith("100/") || t.startsWith("   BAL  ") ||
+             t === "REPUTATION  " || t === "   STATUS  ";
+    });
+    expect(summarySegments.length).toBeGreaterThan(0);
+    for (const seg of summarySegments) {
+      expect(seg.color, `"${seg.text}" should be muted but got ${seg.color}`).toBe(muted);
+    }
   });
 
   it("keeps Pause summary microcopy readable and buttons separated", () => {
