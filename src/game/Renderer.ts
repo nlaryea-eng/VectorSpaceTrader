@@ -27,6 +27,7 @@ import {
 } from "./SignalGlassScreens";
 import type { MessageLog, MessageKind } from "./TransientState";
 import { computeBodies } from "./SystemBodies";
+import { STATION_VERTICES, STATION_EDGES } from "./StationModel";
 import type {
   ButtonZone,
   CommodityId,
@@ -614,30 +615,44 @@ export class Renderer {
 
   private renderStation(state: RenderState): void {
     const relative = subtractPoint(state.stationPosition, state.player.position);
-    const point = this.project(relative);
-    const cx = point.visible ? point.x : this.width * 0.78;
-    const cy = point.visible ? point.y : this.height * 0.34;
-    const size = Math.max(18, Math.min(54, 28 * (point.scale || 1)));
+    // Determine scale from centre-projected point for the model display size.
+    const centrePoint = this.project(relative);
+    const modelScale = Math.max(2.2, Math.min(7, 22 * (centrePoint.scale || 0.3)));
+    const t = performance.now() * 0.00018; // ring rotation rate
+    const cosT = Math.cos(t);
+    const sinT = Math.sin(t);
 
     this.setVectorStroke(THEME.colors.accentAmber, 1.2, state.phosphorGlow);
-    this.ctx.save();
-    this.ctx.translate(cx, cy);
-    this.ctx.rotate(performance.now() * 0.00025);
-    this.ctx.beginPath();
-    for (let index = 0; index < 8; index += 1) {
-      const angle = (Math.PI * 2 * index) / 8;
-      const x = Math.cos(angle) * size;
-      const y = Math.sin(angle) * size;
-      if (index === 0) this.ctx.moveTo(x, y);
-      else this.ctx.lineTo(x, y);
-    }
-    this.ctx.closePath();
-    this.ctx.stroke();
-    this.ctx.strokeRect(-size * 0.4, -size * 0.4, size * 0.8, size * 0.8);
-    this.ctx.restore();
-    this.drawText("STATION", cx, cy + size + 20, {
-      align: "center", color: THEME.colors.accentAmber, size: 10, font: THEME.fonts.mono
+
+    // Separate the ring (first RING_COUNT verts) from fixed structure.
+    // Ring vertices rotate; spire and trusses/beacons are static.
+    const RING_COUNT = 12;
+    const projected = STATION_VERTICES.map((v, idx) => {
+      let wx = v.x;
+      let wy = v.y;
+      let wz = v.z;
+      if (idx < RING_COUNT) {
+        // Rotate the ring around Y
+        wx = v.x * cosT - v.z * sinT;
+        wz = v.x * sinT + v.z * cosT;
+        wy = v.y;
+      }
+      return this.project({
+        x: wx * modelScale + relative.x,
+        y: wy * modelScale + relative.y,
+        z: wz * modelScale + relative.z,
+      });
     });
+
+    for (const [from, to] of STATION_EDGES) {
+      const a = projected[from];
+      const b = projected[to];
+      if (!a.visible || !b.visible) continue;
+      this.ctx.beginPath();
+      this.ctx.moveTo(a.x, a.y);
+      this.ctx.lineTo(b.x, b.y);
+      this.ctx.stroke();
+    }
   }
 
   private renderShip(ship: Ship, player: PlayerState, color: string, glow: boolean): void {
