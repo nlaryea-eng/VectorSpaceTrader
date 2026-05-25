@@ -2,7 +2,7 @@
 
 This repository contains **Vector Space Trader**, a browser-based vector space-trading and combat game built with TypeScript and Canvas.
 
-Current Release: **v0.3.0-beta — Content Systems Sprint**
+Current Release: **v0.4.1-beta — Trade Route Economy**
 
 ## Core Mandates & Safety
 
@@ -24,13 +24,11 @@ Current Release: **v0.3.0-beta — Content Systems Sprint**
 
 -   `src/main.ts`: Application entry point.
 -   `src/game/`: Core game logic.
-    -   `Game.ts`: The central orchestrator/state manager.
-    -   `Renderer.ts`: Canvas rendering logic (wireframes, HUD, effects).
-    -   `Audio.ts`: Procedural Web Audio implementation.
-    -   `types.ts`: Domain models and type definitions.
-    -   `Universe.ts` / `Economy.ts`: Procedural generation and simulation.
-    -   `Physics.ts`: Vector math and movement.
-    -   `Ships.ts` / `Equipment.ts`: Data-driven catalogs.
+    -   Core/state: `Game.ts`, `types.ts`, `SaveGame.ts`, `TransientState.ts`.
+    -   Presentation / Signal Glass: `Renderer.ts`, `Theme.ts`, `Layout.ts`, `FeatureFlags.ts`, `SignalGlassScreens.ts`, `UiHost.ts`, `HelpContent.ts`, `Onboarding.ts`, `AudioFeedback.ts`.
+    -   Gameplay helpers: `Trading.ts`, `Economy.ts`, `Universe.ts`, `WorldClasses.ts`, `StationServices.ts`, `MapSearch.ts`, `Combat.ts`, `Physics.ts`, `Ships.ts`, `Equipment.ts`.
+    -   Mission/rank/progression: `Missions.ts`, `MissionGenerator.ts`, `MissionIds.ts`, `MissionRouting.ts`, `RunStats.ts`, `Rank.ts`, `Reputation.ts`.
+    -   Audio/input: `Audio.ts`, `Input.ts`, `InputRouter.ts`.
 -   `test/`: Vitest unit tests.
 -   `scripts/`: Automation and smoke tests.
 
@@ -41,7 +39,8 @@ Current Release: **v0.3.0-beta — Content Systems Sprint**
 -   `npm run build`: Production build (TSC + Vite).
 -   `npm test`: Run Vitest suite.
 -   `npm run type-check`: Run TypeScript compiler check.
--   `npm run smoke`: Run browser smoke tests.
+-   `npm run smoke`: Run CI-gated static smoke tests.
+-   `npm run test:browser`: Run local/release-candidate browser smoke tests.
 
 ### Coding Conventions
 -   **TypeScript:** Use strict typing. Avoid `any`.
@@ -58,6 +57,7 @@ Current Release: **v0.3.0-beta — Content Systems Sprint**
     3. `npm run build`
     4. `npm run smoke`
     5. Strict compliance grep (see Core Mandates).
+* **Release-Candidate Browser Check:** Run `npm run test:browser` locally for public demo or release-candidate verification; it is not a PR CI gate.
 * **Focused Changes:** Avoid broad rewrites. Preserve gameplay stability, save compatibility, and existing features (Map Search, Pilot Manual, etc.).
 
 ## Strategic Guidance
@@ -70,6 +70,7 @@ Current Release: **v0.3.0-beta — Content Systems Sprint**
 -   **Modifying UI:**
     *   The cockpit and menus are drawn directly to the canvas in `Renderer.ts`.
     *   Maintain the 390×844 mobile viewport usability, even if primarily desktop-first.
+    *   Future maintenance note: if a dedicated renderer split sprint is approved, candidates include HUD chrome, Signal Glass panels, map overlay, and modal screen renderers. Do not do that refactor during unrelated changes.
 -   **Bug Fixes:**
     *   Reproduce the bug with a Vitest case before fixing.
     *   Be mindful of how changes affect the deterministic nature of the universe or economy.

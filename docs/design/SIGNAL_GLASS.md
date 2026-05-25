@@ -16,7 +16,7 @@ Signal Glass is the presentation system for Vector Space Trader. It is a clean-r
 - Accent: signal cyan for focus and selection.
 - Secondary accent: telemetry amber for opportunity and urgency.
 - Status: success, warning, danger, info, neutral, always paired with text or glyph.
-- Typography: system UI and system monospace stacks only. No external font downloads.
+- Typography: system UI and system monospace stacks only. No external font downloads or bundled font files. Descriptive style references must resolve through local/system fallback stacks. Telemetry and prices use tabular numerals where supported.
 - Radius: 8px panels, 6px controls, 4px chips.
 - Motion: 120-240ms where used, disabled under reduced-motion preference.
 
@@ -37,5 +37,6 @@ Only the topmost interactive layer should accept pointer/focus input. HUD and to
 - Verify 390x844 no-overlap for HUD, panels, and touch controls.
 - Verify map search and manual search do not steal each other's input.
 - Verify profit/loss, mission state, route validity, affordability, and cargo overflow use text as well as color.
-- Verify `npm run test:browser` before release review.
+- `npm run smoke` is the CI-gated static smoke check.
+- Verify `npm run test:browser` locally before release review.
 - Run the canonical CI compliance scan before commit.

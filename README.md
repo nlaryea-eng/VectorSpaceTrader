@@ -2,7 +2,7 @@
 
 **Vector Space Trader** is an original browser-based vector space-trading and combat game.
 
-Current Release: **v0.3.0-beta — Content Systems Sprint**
+Current Release: **v0.4.1-beta — Trade Route Economy**
 
 **Status:** This is a **desktop-first public demo beta**. It is not a v1 product, not an early access candidate, and is not yet mobile-certified.
 
@@ -30,9 +30,10 @@ npm test
 # Build production distribution
 npm run build
 
-# Run browser smoke tests
+# Run CI-gated static smoke check
 npm run smoke
-# or
+
+# Run local/release-candidate browser smoke with Chrome/Chromium
 npm run test:browser
 ```
 
@@ -50,9 +51,10 @@ To maintain repository integrity and compliance:
 - **No broad rewrites:** keep changes focused.
 - **Explicit staging:** do not use `git add .`; stage files individually or with `git add -u`.
 - **Verification:** run `npm run type-check`, `npm test`, `npm run build`, and `npm run smoke` before any commit.
+- **Browser smoke:** run `npm run test:browser` for local release-candidate verification; it is not a PR CI gate.
 - **Compliance:** run the strict compliance grep to ensure no banned terms are introduced.
 - **Save Compatibility:** ensure `PlayerState` changes include migration logic.
-- **Tagging:** beta releases are tagged semantically (e.g., `v0.3.0-beta`).
+- **Tagging:** beta releases are tagged semantically (e.g., `v0.4.1-beta`).
 
 ## Controls
 
@@ -112,6 +114,17 @@ All stations keep fuel and basic repair access, while other services vary by det
 
 ## Recent Changes
 
+### v0.4.1-beta — Trade Route Economy
+- **Trade-route depth:** Expanded economy and route signals with richer market context.
+- **World-class modifiers:** Market stock, services, mission tendencies, and risk cues respond to original system classes.
+- **Persistence safety:** Added migration and validation coverage for the economy expansion.
+- **Smoke coverage:** Extended smoke checks around map filters, station flow, and trade context.
+
+### v0.4.0-beta — Signal Glass Polish
+- **Signal Glass R1-R5:** Polished manual search, station hub launch emphasis, pilot summary, map filters, equipment sorting, repair presentation, and touch-control gating.
+- **Responsive QA:** Strengthened 390x844 layout coverage for docked screens, map controls, and touch overlays.
+- **Release polish:** Kept the legacy Canvas action path available while the Signal Glass presentation layer reached parity.
+
 ### v0.3.0-beta — Content Systems Sprint
 - **Compliance hardening:** Resolved economy labels and currency markers.
 - **Universe Rotation:** Refreshed procedural seed.
@@ -121,7 +134,9 @@ All stations keep fuel and basic repair access, while other services vary by det
 
 ## Browser Smoke
 
-Run `npm run smoke` (or `npm run test:browser`) before a public demo pass. It launches the built app locally, verifies the first playable flow, checks station hub, trade, missions, equipment, shipyard, manual search, settings/audio, map search/filter, the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
+`npm run smoke` is the CI-gated static smoke check. It runs without browser dependencies and verifies the built app surface, branding, entry point, and static regression guards.
+
+Run `npm run test:browser` before a public demo or release-candidate pass. It launches the built app locally with Chrome/Chromium, verifies the first playable flow, checks station hub, trade, missions, equipment, shipyard, manual search, settings/audio, map search/filter, the real save/reload path, and exercises a 390×844 mobile viewport for clipped touch controls and docked-hint overlap.
 
 ## Known Limitations
 

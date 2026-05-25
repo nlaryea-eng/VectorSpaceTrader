@@ -32,6 +32,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Static smoke
+        run: npm run smoke
+
       - name: Compliance string search
         run: |
           set +e
@@ -43,6 +46,8 @@ jobs:
           set -e
 
           if [ "$grep_status" -eq 0 ]; then
+            # assessment/ is gitignored, but remains allowed as a local fallback
+            # for private assessment artifacts if this scan is run outside CI.
             grep -vE '^\./(assessment/.*|\.github/workflows/ci\.yml):' \
               /tmp/compliance-matches.txt > /tmp/compliance-violations.txt || true
             if [ -s /tmp/compliance-violations.txt ]; then

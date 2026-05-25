@@ -84,7 +84,8 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 
 ## Browser Smoke Tests
 
-- [ ] `npm run test:browser` passed locally with Chrome/Chromium.
+- [ ] `npm run smoke` passed as the CI-gated static smoke check.
+- [ ] `npm run test:browser` passed locally with Chrome/Chromium for release-candidate verification.
 - [ ] 390×844 mobile viewport: verify touch controls, station hub, trade, map search, and docked-hint overlap are not clipped.
 - [ ] Chrome desktop: launch, station hub, recommended action, market, profit/loss display, missions, map search/filter/CLASS, equipment, shipyard, Pilot Manual search, settings/audio, reload save.
 - [ ] Firefox desktop: launch, flight, dock, market, map, jump, combat, reload save.
@@ -99,5 +100,6 @@ Use this checklist for public demo release-candidate testing. Mark each item onl
 - [ ] `npm run type-check` passed.
 - [ ] `npm test` passed.
 - [ ] `npm run build` passed.
-- [ ] `npm run test:browser` passed.
+- [ ] `npm run smoke` passed.
+- [ ] `npm run test:browser` passed locally for the release candidate.
 - [ ] Any manual QA failures are documented with reproduction steps before release.

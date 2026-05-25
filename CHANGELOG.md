@@ -2,11 +2,25 @@
 
 ## [Unreleased]
 
-- R1: Pilot Manual search overlap fix — removed canvas-drawn "SEARCH MANUAL TOPICS" label, replaced with "N RESULTS" caption below HTML input; aligned selected sidebar row to cyan focus token.
-- R2: Station Hub LAUNCH promotion + calm pilot summary — LAUNCH rendered as accent-bordered primary button inline with service tiles; pilot summary collapses to two compact info lines with token-colored health/rep/risk values; title constrained to left region on compact viewports to stay clear of HELP button.
-- R3: Map filter rail collapse — compact viewports show a single FILTERS [N] toggle button; tapping opens a floating 4×2 chip sheet anchored above the footer; desktop layout unchanged.
-- R5: Hide touch controls on desktop pointer — `shouldShowTouchControls()` gates on `navigator.maxTouchPoints` and `(pointer: fine)`; on-screen flight overlay suppressed when no touch capability; smoke test now emulates `maxTouchPoints: 5` on the mobile pass.
-- R4: Equipment availability sort + collapse full-hull repair — installed → available → unavailable order; status chips with token colors; unavailable rows dimmed to 0.6 alpha; dynamic page size from content area height; full-hull state collapses to a single compact line.
+## [0.4.1-beta] - 2026-05-25
+
+- Trade Route Economy: expanded market context, route depth, and price movement signals.
+- World-class economy hooks: original system classes now influence market stock, services, mission tendencies, and risk cues.
+- Persistence coverage: added validation and migration coverage for the economy expansion.
+- QA coverage: extended tests and smoke checks for map filters, station flow, and trade context.
+
+## [0.4.0-beta] - 2026-05-25
+
+- Signal Glass R1-R5 polish: refined Pilot Manual search, station hub launch emphasis, pilot summary, map filter sheet, equipment sorting, repair presentation, and desktop touch-control gating.
+- Responsive QA: strengthened 390x844 checks for docked panels, map controls, and touch overlays.
+- Presentation parity: preserved existing Canvas action handlers while polishing the Signal Glass layer.
+
+## [0.3.0-beta] - 2026-05-24
+
+- Content Systems Sprint: expanded fleet, equipment, mission variety, and station-service coverage.
+- Compliance hardening: resolved project terminology and HUD currency markers.
+- Universe update: refreshed procedural seed while preserving deterministic generation.
+- Browser smoke: established viewport-specific QA coverage.
 
 ## [0.1.1] - 2026-05-24
 

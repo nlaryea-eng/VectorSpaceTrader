@@ -1,5 +1,7 @@
 # Vector Space Trader Design System (2026 Edition)
 
+Current UI note: `docs/design/SIGNAL_GLASS.md` is the source of truth for the active Signal Glass presentation system. This document is retained as background design guidance and must not introduce font downloads or bundled font assets.
+
 ## Visual Identity
 The visual identity of Vector Space Trader combines a deep dark-mode foundation with high-contrast vector accents, glassy overlays, and compact cockpit readability.
 
@@ -16,9 +18,11 @@ The visual identity of Vector Space Trader combines a deep dark-mode foundation 
 - **Text Dim:** `#64748b` (Tertiary info)
 
 ### Typography
-- **Primary UI:** `Inter` (Clean, modern, highly legible - SIL Open Font License)
-- **Accent UI:** `Space Grotesk` (Futuristic headings - SIL Open Font License)
-- **Monospace:** `JetBrains Mono` (Stats, tech data, console outputs - SIL Open Font License)
+- **Primary UI:** System UI stack only, tuned for compact cockpit readability.
+- **Accent UI:** Geometric/grotesk style direction is descriptive only and must resolve through local or system fallback fonts.
+- **Monospace:** System monospace stack only for telemetry, prices, and technical values.
+- **Font loading policy:** No remote font imports and no bundled font files.
+- **Numerals:** Use tabular numerals for telemetry and prices where supported.
 
 ### Component Styles
 - **Buttons:** Rounded corners (4px), glass effect, neon borders.
