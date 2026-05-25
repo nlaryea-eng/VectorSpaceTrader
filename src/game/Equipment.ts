@@ -142,8 +142,77 @@ export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "patrolTracker", name: "Patrol Tracker", price: 1300, description: "Monitors local security movement.", category: "survey", tier: "specialist", effect: { survey: true, legalRisk: 0.7 } }
 ];
 
-// Re-map the salvageLoom ID if it was incorrect or use it for one of the missing ones.
-// I see I have some overlaps, let me clean up the last few.
+export type EquipmentStatus = "implemented" | "partial" | "noop" | "cosmetic";
+
+// Classification of each EquipmentId by whether its gameplay effects are actually applied.
+// "implemented" — all declared effects are wired through.
+// "partial"     — some effects work, others are not yet consumed (e.g. scanner rating, legalRisk modifier).
+// "noop"        — no declared effect is applied in the current game loop.
+// "cosmetic"    — visual/label-only, never intended to be mechanical.
+export const EQUIPMENT_AUDIT: Record<EquipmentId, EquipmentStatus> = {
+  // Weapons — damage and energyCost applied in getLaserProfile
+  pulseLaser: "implemented", beamLaser: "implemented", ribbonLance: "implemented",
+  needleEmitter: "implemented", burstRepeater: "implemented",
+  // Cargo — cargo bonus applied via cargoCapacity; vaultSleeve legalRisk modifier not consumed
+  cargoExpansion: "implemented", foldedHoldGrid: "implemented", modularRack: "implemented",
+  densityCompressor: "implemented", vaultSleeve: "partial",
+  // Shield — shield applied; quietShieldMatrix shieldRecharge hardcoded; others partial/noop
+  shieldBooster: "implemented", quietShieldMatrix: "implemented", staticFieldGen: "implemented",
+  pulseAbsorber: "noop",        // shieldRecharge only, not returned from getStatsForShip
+  fluxCapacitor: "partial",     // shield ✅, shieldRecharge ❌
+  // Fuel — fuelUse and fuelCapacity applied in getStatsForShip; fuelScoop also hardcoded
+  fuelScoop: "implemented", thriftBurnRegulator: "implemented", reserveCell: "implemented",
+  flowOptimizer: "implemented", ionFilter: "implemented",
+  // Navigation — jumpRange applied; marketInsight/scanner not consumed
+  laneGlassScanner: "partial",  // survey ✅ (mission gate), scanner ❌
+  routeAbacus: "partial",       // jumpRange ✅, marketInsight ❌
+  arcSpoolDrive: "implemented", pathVectorLogic: "partial", // jumpRange ✅, marketInsight ❌
+  stellarCompass: "partial",    // jumpRange ✅, scanner ❌
+  driftStabilizer: "implemented",
+  // Repair — repairCost applied in getStatsForShip
+  fieldPatchDrones: "implemented", autoRepairBot: "implemented", naniteGel: "implemented",
+  weldKit: "implemented", sealantFoam: "implemented",
+  // Hull — hull bonus applied via hullBonus in getStatsForShip; stressBraces handling ✅
+  reinforcedRibs: "implemented", alloyPlating: "implemented", impactBuffer: "implemented",
+  stressBraces: "implemented", tensileWeb: "implemented",
+  // Ship — speed/handling applied in getStatsForShip
+  engineTuning: "implemented", gyroStabilizer: "implemented", reactionThruster: "implemented",
+  inertialDampener: "implemented", vectorNozzle: "implemented",
+  // Efficiency — energyCost modifier not consumed; powerRegulator speed ✅, energyCycle fuelUse ✅
+  coolingFin: "noop", heatSink: "noop",
+  powerRegulator: "partial",    // speed ✅, energyCost ❌
+  energyCycle: "partial",       // fuelUse ✅, energyCost ❌
+  circuitBreaker: "noop",
+  // Defensive — legalRisk modifier from equipment not applied in game loop
+  signalJammer: "noop", decoyLauncher: "noop", chaffDispenser: "noop",
+  flareArray: "noop", stealthCoating: "noop",
+  // Range — jumpRange applied
+  jumpBooster: "implemented", rangeExtender: "implemented", warpSpool: "implemented",
+  voidSails: "implemented", gravityAnchor: "implemented",
+  // Salvage — salvage:true gates salvage mission acceptance; missionReward not applied
+  salvageTongs: "implemented",
+  wreckProbe: "partial",        // salvage ✅, missionReward ❌
+  dataSiphon: "partial",        // salvage ✅, missionReward ❌
+  componentSpare: "partial",    // salvage ✅, marketInsight ❌
+  salvageLoom: "partial",       // salvage ✅, missionReward ❌
+  // Survey — survey:true gates survey mission acceptance; scanner/legalRisk not consumed
+  surveyMast: "partial",   hazardSensor: "partial", weatherRadar: "partial",
+  debrisShield: "implemented",  // survey ✅, shield ✅
+  raiderAlarm: "partial",       // survey ✅, scanner ❌
+  patrolTracker: "partial",     // survey ✅, legalRisk ❌
+  // Mission support — missionReward/legalRisk modifiers not consumed
+  contractLog: "noop", priorityTransceiver: "noop", secureLockbox: "noop",
+  diplomaticSeal: "noop", cargoScanner: "noop",
+  // Utility — marketInsight/scanner not consumed; jumpRange/fuelUse/repairCost ✅
+  tradeLedger: "noop", marketLink: "noop", pricePredictor: "noop",
+  routePlotter: "implemented",
+  dockingComputer: "partial",   // repairCost ✅, marketInsight ❌
+};
+
+export function isPurchasable(id: EquipmentId): boolean {
+  const status = EQUIPMENT_AUDIT[id];
+  return status === "implemented" || status === "partial";
+}
 
 export const DEFAULT_EQUIPMENT: EquipmentState = {} as EquipmentState;
 EQUIPMENT.forEach(e => {

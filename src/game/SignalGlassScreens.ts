@@ -1,4 +1,4 @@
-import { EQUIPMENT, isEquipmentAvailableAtStation, type EquipmentDefinition } from "./Equipment";
+import { EQUIPMENT, isEquipmentAvailableAtStation, isPurchasable, type EquipmentDefinition } from "./Equipment";
 import { acceptMission } from "./Missions";
 import { getPlayerShipStats, PLAYER_SHIPS } from "./Ships";
 import { getStationProfile, type StationProfile } from "./StationServices";
@@ -224,6 +224,7 @@ export function getRouteValidity(current: StarSystem, selected: StarSystem, play
 export function classifyEquipment(player: PlayerState, station: StationProfile): EquipmentSections {
   return EQUIPMENT.reduce<EquipmentSections>((sections, item) => {
     if (player.equipment[item.id]) sections.installed.push(item);
+    else if (!isPurchasable(item.id)) return sections;
     else if (isEquipmentAvailableAtStation(item, station)) sections.available.push(item);
     else sections.unavailable.push(item);
     return sections;

@@ -9,7 +9,7 @@ import {
   getLastKnownPrice,
   recordPriceHistory
 } from "./Economy";
-import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT } from "./Equipment";
+import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT, isPurchasable } from "./Equipment";
 import { Input } from "./Input";
 import { normalizeMapAction, normalizeMarketAction } from "./InputRouter";
 import { DEFAULT_MAP_FILTERS, cycleMapFilterState, type MapFilterState, selectAdjacentFilteredSystem, getSystemAtProjectedMapPoint } from "./MapSearch";
@@ -706,6 +706,7 @@ export class Game {
 
   private getFilteredEquipmentKeys(): EquipmentId[] {
     return EQUIPMENT
+      .filter(e => isPurchasable(e.id))
       .filter(e => this.equipmentCategoryFilter === "all" || e.category === this.equipmentCategoryFilter)
       .map(e => e.id);
   }

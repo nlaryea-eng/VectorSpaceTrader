@@ -417,7 +417,7 @@ export const HELP_CONTENT: HelpSection[] = [
           "Restricted contracts pay more but carry higher risk of fines.",
           "High risk attracts unwanted attention from local patrols."
         ],
-        tips: ["Some equipment like the Signal Jammer can mitigate risk."]
+        tips: ["Keeping a low profile reduces patrol attention over time."]
       },
       {
         heading: "Consequences",
