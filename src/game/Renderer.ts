@@ -80,6 +80,7 @@ export interface RenderState {
   pilotRank: RankInfo;
   isNewPersonalBest: boolean;
   activeHint: HintId | null;
+  tutorialHint?: string | null;
   mapFilters: MapFilterState;
   sfxVolume: number;
   musicVolume: number;
@@ -197,6 +198,29 @@ export function getOnboardingHintY(mode: GameMode, height: number, barHeight: nu
   return height - barHeight - 100;
 }
 
+export function getTutorialBannerRect(
+  mode: GameMode,
+  width: number,
+  height: number,
+  narrow: boolean,
+  messageRows: number,
+): ButtonZone {
+  const bannerH = narrow ? 44 : 42;
+  const bannerW = Math.min(width - 32, narrow ? width - 32 : 560);
+  const rows = Math.min(5, Math.max(0, messageRows));
+  const logH = rows > 0 ? rows * 18 + 10 : 0;
+  const logY = narrow ? height - NARROW_TOUCH_AREA - logH - 6 : height - logH - 38;
+  const y = isModalPanelMode(mode)
+    ? (narrow ? 88 : 86)
+    : rows > 0
+      ? logY - bannerH - 10
+      : narrow
+        ? height - NARROW_TOUCH_AREA - bannerH - 44
+        : height - bannerH - 96;
+
+  return { id: "tutorial-banner", label: "First flight hint", x: width / 2 - bannerW / 2, y, width: bannerW, height: bannerH };
+}
+
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   private width = 1;
@@ -276,7 +300,11 @@ export class Renderer {
       if (state.mode === "settings") this.renderSettings(state);
       if (state.mode === "paused") this.renderPause(state);
       if (state.mode === "gameOver") this.renderGameOver(state);
+      if (state.tutorialHint && !["help", "settings", "paused", "gameOver"].includes(state.mode)) {
+        this.renderTutorialBanner(state);
+      }
 
+      const activeHint = state.tutorialHint ? null : state.activeHint;
       // Shortcut strip and onboarding hints must not float over active panel screens.
       // Panel modes (map, trade, equipment, shipyard, missions, docked, help) own their
       // own footer with shortcut text, so the global strip is suppressed there.
@@ -285,9 +313,9 @@ export class Renderer {
       // Docked owns equivalent service controls in its station panel, so it does not float a hint.
       if (!this.isOverlayMode(state.mode)) {
         this.renderModeHelpText(state);
-        if (state.activeHint !== null) this.renderOnboardingHint(state, state.activeHint);
-      } else if (state.mode === "shipyard" && state.activeHint !== null) {
-        this.renderOnboardingHint(state, state.activeHint);
+        if (activeHint !== null) this.renderOnboardingHint(state, activeHint);
+      } else if (state.mode === "shipyard" && activeHint !== null) {
+        this.renderOnboardingHint(state, activeHint);
       }
     }
   }
@@ -975,7 +1003,7 @@ export class Renderer {
    */
   private renderModeHelpText(state: RenderState): void {
     // Suppress the strip when an onboarding hint already occupies the bottom area.
-    if (this.signalGlassUi && state.activeHint !== null) return;
+    if (this.signalGlassUi && (state.activeHint !== null || state.tutorialHint)) return;
     const tips = this.getModeShortcuts(state);
     if (tips.length === 0) return;
     const text = tips.join("  ");
@@ -2530,6 +2558,21 @@ export class Renderer {
     });
 
     this.buttonZones.push({ id: "hint-dismiss", label: "Dismiss hint", x: barX, y: barY, width: barW, height: barH });
+  }
+
+  private renderTutorialBanner(state: RenderState): void {
+    const hint = state.tutorialHint;
+    if (!hint) return;
+
+    const rect = getTutorialBannerRect(state.mode, this.width, this.height, this.narrow, state.messageLog.entries.length);
+    const colors = SIGNAL_GLASS_THEME.colors;
+    this.signalPanel(rect.x, rect.y, rect.width, rect.height, "overlay");
+    this.drawText("FIRST FLIGHT", rect.x + 12, rect.y + 15, {
+      color: colors.accent2, size: this.narrow ? 8 : 9, font: THEME.fonts.mono
+    });
+    this.drawText(hint.toUpperCase(), rect.x + 12, rect.y + (this.narrow ? 32 : 31), {
+      color: colors.text, size: this.narrow ? 10 : 11, font: THEME.fonts.accent
+    });
   }
 
   private renderExplosion(effect: ExplosionEffect, player: PlayerState): void {

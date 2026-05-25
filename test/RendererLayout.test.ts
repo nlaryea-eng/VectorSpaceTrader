@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getCompactTouchControlRects, getOnboardingHintY, isModalPanelMode } from "../src/game/Renderer";
+import { getCompactTouchControlRects, getOnboardingHintY, getTutorialBannerRect, isModalPanelMode } from "../src/game/Renderer";
 import { getPanelBounds } from "../src/game/Layout";
 import type { ButtonZone, GameMode } from "../src/game/types";
 
@@ -62,6 +62,16 @@ describe("mobile renderer layout helpers", () => {
 
     expect(overlaps(hint, status)).toBe(false);
     expect(controls.some((rect) => overlaps(hint, rect))).toBe(false);
+  });
+
+  it("places the tutorial banner above the message log and clear of the station marker on 390x844", () => {
+    const banner = getTutorialBannerRect("flight", MOBILE_W, MOBILE_H, true, 1);
+    const messageLog: ButtonZone = { id: "message-log", label: "Message log", x: 0, y: MOBILE_H - 176 - 28 - 6, width: MOBILE_W, height: 28 };
+    const stationMarker: ButtonZone = { id: "station-marker", label: "Station marker", x: MOBILE_W / 2 - 18, y: MOBILE_H / 2 - 18, width: 36, height: 36 };
+
+    assertWithinCanvas(banner);
+    expect(overlaps(banner, messageLog)).toBe(false);
+    expect(overlaps(banner, stationMarker)).toBe(false);
   });
 
   it("keeps the shipyard hint above station actions on 390x844", () => {
