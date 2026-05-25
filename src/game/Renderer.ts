@@ -102,6 +102,7 @@ interface ProjectedPoint {
 const NARROW_BREAKPOINT = 720;
 const SHORT_BREAKPOINT = 640;
 const NARROW_TOUCH_AREA = 176;
+const HELP_HOVER_FILL = "rgba(108, 227, 214, 0.08)";
 
 export function getCompactTouchControlRects(width: number, height: number, docked: boolean): ButtonZone[] {
   const size = width <= 420 ? 36 : 40;
@@ -1982,13 +1983,17 @@ export class Renderer {
     const helpSections = searchHelpContent(helpQuery);
     const visibleSections = helpSections.length > 0 ? helpSections : HELP_CONTENT;
 
-    if (this.signalGlassUi) {
-      const searchLabel = helpQuery
-        ? `SEARCH "${helpQuery.toUpperCase()}" / ${helpSections.length} TOPICS`
-        : "SEARCH MANUAL TOPICS";
-      this.drawText(searchLabel, contentX, top - (this.narrow ? 14 : 24), {
-        color: SIGNAL_GLASS_THEME.colors.accent, size: this.narrow ? 9 : 11, font: THEME.fonts.mono
-      });
+    if (this.signalGlassUi && helpQuery) {
+      const manualInput = typeof document !== "undefined"
+        ? document.querySelector(".manual-search-input")
+        : null;
+      if (manualInput) {
+        const inputRect = manualInput.getBoundingClientRect();
+        const captionY = inputRect.bottom + 14;
+        this.drawText(`${helpSections.length} RESULTS`, inputRect.left, captionY, {
+          color: SIGNAL_GLASS_THEME.colors.textMuted, size: 11, font: THEME.fonts.mono
+        });
+      }
     }
 
     visibleSections.forEach((section, index) => {
@@ -1997,20 +2002,19 @@ export class Renderer {
       const rowY = y - sidebarRowH / 2;
 
       if (selected || isPointInRect(state.mousePosition, sidebarX, rowY, sidebarW, sidebarRowH)) {
-        this.ctx.fillStyle = selected ? "rgba(255, 0, 127, 0.15)" : "rgba(0, 242, 255, 0.1)";
+        this.ctx.fillStyle = selected ? "rgba(108, 227, 214, 0.12)" : HELP_HOVER_FILL;
         this.ctx.beginPath();
         this.ctx.roundRect(sidebarX - 4, rowY, sidebarW, sidebarRowH, 4);
         this.ctx.fill();
         if (selected) {
-          this.ctx.strokeStyle = THEME.colors.accentPink;
-          this.ctx.lineWidth = 1;
-          this.ctx.stroke();
+          this.ctx.fillStyle = SIGNAL_GLASS_THEME.colors.accent;
+          this.ctx.fillRect(sidebarX - 4, rowY, 3, sidebarRowH);
         }
       }
 
       this.buttonZones.push({ id: `help-sidebar-${section.id}`, label: section.title, x: sidebarX, y: rowY, width: sidebarW, height: sidebarRowH });
       this.drawText(section.title.toUpperCase(), sidebarX + 8, y + 4, {
-        color: selected ? THEME.colors.accentPink : THEME.colors.textPrimary,
+        color: selected ? SIGNAL_GLASS_THEME.colors.accent : THEME.colors.textPrimary,
         size: sidebarFontSize,
         font: THEME.fonts.accent
       });
