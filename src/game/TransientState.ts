@@ -1,4 +1,4 @@
-import type { ExplosionEffect } from "./Renderer";
+import type { ExplosionEffect } from "./render/types";
 
 export type MessageKind = "info" | "success" | "warning" | "danger";
 

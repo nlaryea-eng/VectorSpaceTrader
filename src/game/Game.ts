@@ -18,7 +18,7 @@ import { dismissHint, shouldShowHint, type HintId } from "./Onboarding";
 import { clamp, distance, length, updateOrientation, updatePosition, updateVelocity, vec3 } from "./Physics";
 import { getPilotRank, type RankInfo } from "./Rank";
 import { Renderer } from "./Renderer";
-import type { ExplosionEffect } from "./Renderer";
+import type { ExplosionEffect } from "./render/types";
 import {
   addBalEarned,
   advanceTimePlayed,
