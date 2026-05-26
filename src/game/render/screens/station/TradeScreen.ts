@@ -1,6 +1,5 @@
 import { getPriceTrend } from "../../../Economy";
 import { getScreenPanelBounds } from "../../../Layout";
-import type { RenderState } from "../../../Renderer";
 import { getMarketRowDisplay } from "../../../SignalGlassScreens";
 import { getPlayerShipStats } from "../../../Ships";
 import { SIGNAL_GLASS_TEXT_SIZES, THEME } from "../../../Theme";
@@ -10,6 +9,7 @@ import { addButtonZone } from "../../ButtonZones";
 import { drawButton, drawPanel, drawText, isPointInRect } from "../../CanvasPrimitives";
 import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader } from "../../PanelChrome";
 import type { RenderContext } from "../../RenderContext";
+import type { RenderState } from "../../types";
 
 export function renderTrade(rc: RenderContext, state: RenderState): void {
   const { ctx } = rc;

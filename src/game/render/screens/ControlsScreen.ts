@@ -1,7 +1,7 @@
 import { THEME } from "../../Theme";
-import type { RenderState } from "../../Renderer";
 import { drawButton, drawCenteredTitle, drawText } from "../CanvasPrimitives";
 import type { RenderContext } from "../RenderContext";
+import type { RenderState } from "../types";
 
 export function renderControls(rc: RenderContext, state: RenderState): void {
   void state;

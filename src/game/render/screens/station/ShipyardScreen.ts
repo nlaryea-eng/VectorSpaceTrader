@@ -1,5 +1,4 @@
 import { getScreenPanelBounds } from "../../../Layout";
-import type { RenderState } from "../../../Renderer";
 import { getShipComparison } from "../../../SignalGlassScreens";
 import { getPlayerShip, getPlayerShipStats, PLAYER_SHIPS } from "../../../Ships";
 import { THEME } from "../../../Theme";
@@ -8,6 +7,7 @@ import { addButtonZone } from "../../ButtonZones";
 import { drawButton, drawPanel, drawText, isPointInRect, wrapText } from "../../CanvasPrimitives";
 import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader, rowTextY } from "../../PanelChrome";
 import type { RenderContext } from "../../RenderContext";
+import type { RenderState } from "../../types";
 
 export function renderShipyard(rc: RenderContext, state: RenderState): void {
   const { ctx } = rc;

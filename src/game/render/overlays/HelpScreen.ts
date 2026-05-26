@@ -1,11 +1,11 @@
 import { HELP_CONTENT, searchHelpContent } from "../../HelpContent";
 import { getScreenPanelBounds } from "../../Layout";
-import type { RenderState } from "../../Renderer";
 import { SIGNAL_GLASS_THEME, THEME } from "../../Theme";
 import { addButtonZone } from "../ButtonZones";
 import { drawButton, drawPanel, drawText, isPointInRect, wrapText } from "../CanvasPrimitives";
 import { createPanelChrome, drawHeaderActions } from "../PanelChrome";
 import type { RenderContext } from "../RenderContext";
+import type { RenderState } from "../types";
 
 const HELP_HOVER_FILL = "rgba(108, 227, 214, 0.08)";
 

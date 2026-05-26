@@ -11,7 +11,8 @@
  */
 import { describe, expect, it, beforeAll } from "vitest";
 
-import { Renderer, type RenderState } from "../src/game/Renderer";
+import { Renderer } from "../src/game/Renderer";
+import type { RenderState } from "../src/game/render/types";
 import type { GameMode, PlayerState } from "../src/game/types";
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
 

@@ -1,6 +1,5 @@
 import { getScreenPanelBounds } from "../../../Layout";
 import { getLegalRiskLabel, getReputationLabel } from "../../../Reputation";
-import type { RenderState } from "../../../Renderer";
 import { getStationRecommendation, getStationServiceTiles } from "../../../SignalGlassScreens";
 import { getStationProfile } from "../../../StationServices";
 import { SIGNAL_GLASS_THEME, THEME } from "../../../Theme";
@@ -8,6 +7,7 @@ import { calcRepairCost } from "../../../Trading";
 import { drawButton, drawPanel, drawSignalPanel, drawText, wrapText } from "../../CanvasPrimitives";
 import { createPanelChrome, drawHeaderActions, drawPanelHeader, drawPrimaryButton, rowTextY } from "../../PanelChrome";
 import type { RenderContext } from "../../RenderContext";
+import type { RenderState } from "../../types";
 
 export function renderDocked(rc: RenderContext, state: RenderState): void {
   const { ctx } = rc;

@@ -1,8 +1,8 @@
-import type { RenderState } from "../../Renderer";
 import { SIGNAL_GLASS_THEME, THEME } from "../../Theme";
 import { drawSignalPanel, drawText } from "../CanvasPrimitives";
 import type { RenderContext } from "../RenderContext";
 import { getTutorialBannerRect } from "../RendererLayout";
+import type { RenderState } from "../types";
 
 export function renderTutorialBanner(rc: RenderContext, state: RenderState): void {
   const hint = state.tutorialHint;

@@ -1,9 +1,9 @@
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "../../Theme";
-import type { RenderState } from "../../Renderer";
 import { drawButton, drawPanel, drawText } from "../CanvasPrimitives";
 import { createPanelChrome, drawPanelHeader } from "../PanelChrome";
 import type { RenderContext } from "../RenderContext";
 import { SHORT_BREAKPOINT } from "../RendererLayout";
+import type { RenderState } from "../types";
 
 export function renderPause(rc: RenderContext, state: RenderState): void {
   const short = rc.height < SHORT_BREAKPOINT;

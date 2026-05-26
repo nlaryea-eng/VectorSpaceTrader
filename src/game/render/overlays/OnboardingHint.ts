@@ -1,10 +1,10 @@
 import { HINT_TEXT, type HintId } from "../../Onboarding";
-import type { RenderState } from "../../Renderer";
 import { THEME } from "../../Theme";
 import { addButtonZone } from "../ButtonZones";
 import { drawText, setVectorStroke, wrapText } from "../CanvasPrimitives";
 import type { RenderContext } from "../RenderContext";
 import { getOnboardingHintY } from "../RendererLayout";
+import type { RenderState } from "../types";
 
 export function renderOnboardingHint(rc: RenderContext, state: RenderState, hint: HintId): void {
   const { ctx } = rc;

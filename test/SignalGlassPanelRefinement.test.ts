@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_EQUIPMENT } from "../src/game/Equipment";
-import { Renderer, type RenderState } from "../src/game/Renderer";
+import { Renderer } from "../src/game/Renderer";
+import type { RenderState } from "../src/game/render/types";
 import { getPanelChromeLayout, getScreenPanelBounds, rectsOverlap } from "../src/game/Layout";
 import { createMissionId } from "../src/game/MissionIds";
 import { SIGNAL_GLASS_TEXT_SIZES, THEME } from "../src/game/Theme";

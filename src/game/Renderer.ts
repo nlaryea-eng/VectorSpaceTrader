@@ -2,32 +2,19 @@ import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, formatSystemChip } from "./UiHost";
 import { getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout } from "./Layout";
-import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap, type MapFilterState } from "./MapSearch";
+import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap } from "./MapSearch";
 import { getLegalRiskLabel } from "./Reputation";
-import type { RankInfo } from "./Rank";
-import type { RunStats } from "./RunStats";
-import type { HintId } from "./Onboarding";
 import { getPlayerShip, getPlayerShipStats } from "./Ships";
-import type { HelpSectionId } from "./HelpContent";
 import { getRouteValidity } from "./SignalGlassScreens";
 import type { MessageLog, MessageKind } from "./TransientState";
 import { computeBodies } from "./SystemBodies";
 import { STATION_VERTICES, STATION_EDGES } from "./StationModel";
 import type {
   ButtonZone,
-  CommodityId,
-  EconomyState,
-  EquipmentCategory,
   GameMode,
-  MarketItem,
-  Meta,
-  Mission,
-  PlayerShipId,
   PlayerState,
   Projectile,
   Ship,
-  ShipClassId,
-  StarSystem,
   Vector3
 } from "./types";
 import { getTotalOccupiedCargo } from "./Trading";
@@ -47,6 +34,7 @@ import {
 } from "./render/CanvasPrimitives";
 import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader } from "./render/PanelChrome";
 import { createRenderContext, updateRenderContext, type RenderContext } from "./render/RenderContext";
+import type { ExplosionEffect, RenderState } from "./render/types";
 import {
   getCompactTouchControlRects,
   isModalPanelMode,
@@ -68,55 +56,7 @@ import { renderShipyard } from "./render/screens/station/ShipyardScreen";
 import { renderTrade } from "./render/screens/station/TradeScreen";
 
 export { getCompactTouchControlRects, getOnboardingHintY, getTutorialBannerRect, isModalPanelMode } from "./render/RendererLayout";
-
-export interface ExplosionEffect {
-  worldPosition: Vector3;
-  age: number;
-  maxAge: number;
-}
-
-export interface RenderState {
-  mode: GameMode;
-  player: PlayerState;
-  systems: StarSystem[];
-  selectedSystemId: number;
-  market: MarketItem[];
-  enemy: Ship;
-  projectiles: Projectile[];
-  hasSave: boolean;
-  messageLog: MessageLog;
-  stationPosition: Vector3;
-  dockingProgress: number;
-  phosphorGlow: boolean;
-  audioMuted: boolean;
-  missions: Mission[];
-  economy: EconomyState;
-  mousePosition: { x: number; y: number } | null;
-  playerHitFlash: number;
-  explosionEffect: ExplosionEffect | null;
-  previousPrices: Partial<Record<CommodityId, number | undefined>>;
-  runStats: RunStats;
-  meta: Meta;
-  pilotRank: RankInfo;
-  isNewPersonalBest: boolean;
-  activeHint: HintId | null;
-  tutorialHint?: string | null;
-  mapFilters: MapFilterState;
-  sfxVolume: number;
-  musicVolume: number;
-  selectedShipId: PlayerShipId;
-  equipmentPage: number;
-  equipmentCategoryFilter: EquipmentCategory | "all";
-  helpSectionId: HelpSectionId;
-  helpPageIndex: number;
-  helpSearchQuery?: string;
-  shipyardPage: number;
-  shipyardClassFilter: ShipClassId | "all";
-  /** False when a fine pointer device is detected — suppresses on-screen touch overlay in flight. */
-  showTouchControls: boolean;
-  /** True when the compact map filter sheet is expanded (mobile only). */
-  mapFilterSheetOpen: boolean;
-}
+export type { ExplosionEffect, RenderState } from "./render/types";
 
 interface ProjectedPoint {
   x: number;

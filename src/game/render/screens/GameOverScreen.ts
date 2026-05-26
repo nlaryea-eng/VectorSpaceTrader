@@ -1,9 +1,9 @@
 import { formatTimePlayed } from "../../RunStats";
 import { SIGNAL_GLASS_THEME, THEME } from "../../Theme";
-import type { RenderState } from "../../Renderer";
 import { drawButton, drawPanel, drawText } from "../CanvasPrimitives";
 import { createPanelChrome, drawHeaderActions, drawPanelHeader } from "../PanelChrome";
 import type { RenderContext } from "../RenderContext";
+import type { RenderState } from "../types";
 
 export function renderGameOver(rc: RenderContext, state: RenderState): void {
   const { ctx } = rc;

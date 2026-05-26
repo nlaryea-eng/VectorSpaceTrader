@@ -1,6 +1,5 @@
 import { isEquipmentAvailableAtStation } from "../../../Equipment";
 import { getScreenPanelBounds } from "../../../Layout";
-import type { RenderState } from "../../../Renderer";
 import { classifyEquipment, getEquipmentAffordability, getEquipmentDisplayOrder } from "../../../SignalGlassScreens";
 import { getStationProfile } from "../../../StationServices";
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "../../../Theme";
@@ -9,6 +8,7 @@ import { addButtonZone } from "../../ButtonZones";
 import { drawButton, drawChip, drawPanel, drawProgressBar, drawText, isPointInRect, wrapText } from "../../CanvasPrimitives";
 import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader, rowTextY } from "../../PanelChrome";
 import type { RenderContext } from "../../RenderContext";
+import type { RenderState } from "../../types";
 
 const HELP_HOVER_FILL = "rgba(108, 227, 214, 0.08)";
 
