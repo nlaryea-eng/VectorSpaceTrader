@@ -1,11 +1,9 @@
 import { SIGNAL_GLASS_TEXT_SIZES, SIGNAL_GLASS_THEME, THEME } from "./Theme";
 import { isSignalGlassUiEnabled } from "./FeatureFlags";
 import { createHudShellLayout, formatSystemChip } from "./UiHost";
-import { getScreenPanelBounds, respectsReducedMotion, type PanelChromeLayout } from "./Layout";
-import { filterSystems, getMapSystemVisualState, hasActiveMapFilter, isSystemDiscovered, matchesMapFilters, projectSystemToMap } from "./MapSearch";
+import { respectsReducedMotion } from "./Layout";
 import { getLegalRiskLabel } from "./Reputation";
 import { getPlayerShip, getPlayerShipStats } from "./Ships";
-import { getRouteValidity } from "./SignalGlassScreens";
 import type { MessageLog, MessageKind } from "./TransientState";
 import { computeBodies } from "./SystemBodies";
 import { STATION_VERTICES, STATION_EDGES } from "./StationModel";
@@ -18,8 +16,7 @@ import type {
   Vector3
 } from "./types";
 import { getTotalOccupiedCargo } from "./Trading";
-import { canJump, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
-import { addButtonZone, createButtonZoneCollector } from "./render/ButtonZones";
+import { createButtonZoneCollector } from "./render/ButtonZones";
 import {
   drawButton,
   drawHudPanel,
@@ -32,7 +29,6 @@ import {
   type SignalPanelTier,
   type TextDrawOptions
 } from "./render/CanvasPrimitives";
-import { createPanelChrome, drawFooterHint, drawHeaderActions, drawPanelHeader } from "./render/PanelChrome";
 import { createRenderContext, updateRenderContext, type RenderContext } from "./render/RenderContext";
 import type { ExplosionEffect, RenderState } from "./render/types";
 import {
@@ -46,6 +42,7 @@ import { renderOnboardingHint } from "./render/overlays/OnboardingHint";
 import { renderTutorialBanner } from "./render/overlays/TutorialBanner";
 import { renderControls } from "./render/screens/ControlsScreen";
 import { renderGameOver } from "./render/screens/GameOverScreen";
+import { renderMap as renderMapScreen } from "./render/screens/MapScreen";
 import { renderPause } from "./render/screens/PauseScreen";
 import { renderSettings } from "./render/screens/SettingsScreen";
 import { renderStart } from "./render/screens/StartScreen";
@@ -131,10 +128,6 @@ export class Renderer {
       reducedMotion: this.reducedMotion,
       currentMousePosition: this.currentMousePosition
     });
-  }
-
-  private addButtonZone(zone: ButtonZone): ButtonZone {
-    return addButtonZone(this.buttonZones, zone);
   }
 
   render(state: RenderState): void {
@@ -820,290 +813,8 @@ export class Renderer {
     }
   }
 
-  private createPanelChrome(x: number, y: number, width: number, height: number): PanelChromeLayout {
-    return createPanelChrome(this.renderContext, x, y, width, height);
-  }
-
-  /**
-   * @param titleAvailableWidth Optional override for the horizontal span used to center the title.
-   *   Pass `chrome.titleRow.width - chrome.headerActionRow.width - 8` on compact viewports where
-   *   the action row overlaps the right portion of the title row (e.g. docked screen on mobile).
-   */
-  private drawPanelHeader(chrome: PanelChromeLayout, title: string, subtitle?: string, context?: string, titleAvailableWidth?: number): void {
-    drawPanelHeader(this.renderContext, chrome, title, subtitle, context, titleAvailableWidth);
-  }
-
-  private drawHeaderActions(chrome: PanelChromeLayout, actions: Array<{ id: string; label: string; width?: number }>): void {
-    drawHeaderActions(this.renderContext, chrome, actions);
-  }
-
-  private drawFooterHint(chrome: PanelChromeLayout, hint: string): void {
-    drawFooterHint(this.renderContext, chrome, hint);
-  }
-
   private renderMap(state: RenderState): void {
-    const bounds = getScreenPanelBounds({ width: this.width, height: this.height }, "map");
-    const { x: panelX, y: panelY, width: panelW, height: panelH } = bounds;
-    this.panel(panelX, panelY, panelW, panelH);
-    const chrome = this.createPanelChrome(panelX, panelY, panelW, panelH);
-    const matches = filterSystems(state.systems, state.mapFilters, state.player);
-    this.drawPanelHeader(chrome, "UNIVERSE NAVIGATION", `SYSTEMS ${matches.length}/${state.systems.length}`, "SEARCH / FILTER / CLASS");
-    this.drawHeaderActions(chrome, [
-      { id: "help", label: "HELP [?]", width: this.narrow ? 66 : 92 },
-      { id: "map-back", label: this.narrow ? "CLOSE" : "CLOSE MAP", width: this.narrow ? 72 : 112 }
-    ]);
-
-    const mapX = this.narrow ? chrome.contentBounds.x : chrome.contentBounds.x;
-    const mapY = chrome.contentBounds.y + (this.narrow ? 4 : 8);
-    const mapW = this.narrow ? chrome.contentBounds.width : chrome.contentBounds.width * 0.64;
-    const mapH = this.narrow ? Math.min(this.height * 0.34, chrome.contentBounds.height * 0.55) : Math.min(this.height * 0.5, chrome.contentBounds.height - 16);
-
-    this.ctx.strokeStyle = "rgba(0, 242, 255, 0.2)";
-    this.ctx.strokeRect(mapX, mapY, mapW, mapH);
-
-    const current = state.systems[state.player.currentSystemId];
-    const selected = state.systems[state.selectedSystemId];
-
-    const currentPoint = projectSystemToMap(current, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
-    const selectedPoint = projectSystemToMap(selected, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
-    const routeValidity = getRouteValidity(current, selected, state.player);
-    const shipStats = getPlayerShipStats(state.player);
-    const ringRx = (shipStats.maxJumpRange / UNIVERSE_CONSTANTS.width) * mapW;
-    const ringRy = (shipStats.maxJumpRange / UNIVERSE_CONSTANTS.height) * mapH;
-
-    this.ctx.save();
-    this.ctx.beginPath();
-    this.ctx.rect(mapX, mapY, mapW, mapH);
-    this.ctx.clip();
-
-    // Jump range indicator
-    this.ctx.save();
-    this.ctx.strokeStyle = "rgba(0, 242, 255, 0.25)";
-    this.ctx.lineWidth = 1.5;
-    this.ctx.setLineDash([8, 8]);
-    this.ctx.beginPath();
-    this.ctx.ellipse(currentPoint.x, currentPoint.y, ringRx, ringRy, 0, 0, Math.PI * 2);
-    this.ctx.stroke();
-    this.ctx.setLineDash([]);
-    this.ctx.restore();
-
-    if (selected.id !== current.id) {
-      const routeColor = routeValidity.state === "valid"
-        ? THEME.colors.success
-        : routeValidity.state === "warning"
-          ? THEME.colors.warning
-          : THEME.colors.danger;
-      this.ctx.save();
-      this.ctx.strokeStyle = routeColor;
-      this.ctx.globalAlpha = 0.72;
-      this.ctx.lineWidth = 1.5;
-      this.ctx.setLineDash(routeValidity.state === "valid" ? [] : [6, 5]);
-      this.ctx.beginPath();
-      this.ctx.moveTo(currentPoint.x, currentPoint.y);
-      this.ctx.lineTo(selectedPoint.x, selectedPoint.y);
-      this.ctx.stroke();
-      this.ctx.restore();
-    }
-
-    const labeledPoints: Array<{ x: number; y: number }> = [];
-
-    for (const system of state.systems) {
-      const point = projectSystemToMap(system, mapX, mapY, mapW, mapH, UNIVERSE_CONSTANTS.width, UNIVERSE_CONSTANTS.height);
-      const isCurrent = system.id === current.id;
-      const isSelected = system.id === selected.id;
-      const inRange = !isCurrent && canJump(current, system, state.player.fuel, state.player);
-      const discovered = isSystemDiscovered(state.player, system.id);
-      const matched = matchesMapFilters(system, state.mapFilters, state.player);
-      const visualState = getMapSystemVisualState(system, state.mapFilters, state.player, selected.id);
-      const nearby = getJumpDistance(current, system) <= shipStats.maxJumpRange * 0.65;
-      const activeFilter = hasActiveMapFilter(state.mapFilters);
-
-      this.ctx.globalAlpha = visualState.protected ? 1 : visualState.dimmed ? 0.2 : discovered ? 1 : 0.4;
-
-      let color = THEME.colors.textDim;
-      if (isCurrent) color = THEME.colors.textPrimary;
-      else if (isSelected) color = THEME.colors.accentPink;
-      else if (matched && activeFilter) color = THEME.colors.accentAmber;
-      else if (inRange) color = THEME.colors.accentTeal;
-
-      this.ctx.fillStyle = color;
-      this.ctx.beginPath();
-      this.ctx.arc(point.x, point.y, isCurrent || isSelected ? 5 : matched && activeFilter ? 4 : 2.5, 0, Math.PI * 2);
-      this.ctx.fill();
-
-      if (isSelected) {
-        this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        this.ctx.arc(point.x, point.y, 10, 0, Math.PI * 2);
-        this.ctx.stroke();
-      }
-
-      this.ctx.globalAlpha = 1;
-
-      // Robust labeling with clutter reduction
-      let labelPriority = 0;
-      if (isCurrent || isSelected) labelPriority = 3;
-      else if (matched && activeFilter) labelPriority = 2;
-      else if (nearby) labelPriority = 1;
-
-      if (labelPriority > 0) {
-        const tooClose = labeledPoints.some((p) => Math.abs(p.x - point.x) < 48 && Math.abs(p.y - point.y) < 15);
-        if (!tooClose || labelPriority >= 3) {
-          this.drawText(system.name, point.x + 12, point.y, {
-            align: "left",
-            size: 11,
-            font: THEME.fonts.mono,
-            color: discovered ? THEME.colors.textPrimary : THEME.colors.textDim
-          });
-          labeledPoints.push(point);
-        }
-      }
-
-      const hitR = 12;
-      this.addButtonZone({ id: `map-system-${system.id}`, label: system.name, x: point.x - hitR, y: point.y - hitR, width: hitR * 2, height: hitR * 2 });
-    }
-    this.ctx.restore();
-
-    const detailX = this.narrow ? chrome.contentBounds.x : mapX + mapW + 18;
-    const detailY = this.narrow ? mapY + mapH + 12 : mapY;
-    const detailW = this.narrow ? chrome.contentBounds.width : Math.max(210, chrome.contentBounds.x + chrome.contentBounds.width - detailX);
-    const detailH = this.narrow ? Math.min(118, Math.max(96, chrome.contentBounds.y + chrome.contentBounds.height - detailY - 6)) : mapH;
-
-    // System Detail Panel
-    this.hudPanel(detailX, detailY, detailW, detailH);
-    const detailTitleSize = this.narrow ? 14 : 18;
-    this.drawText(selected.name.toUpperCase(), detailX + 12, detailY + (this.narrow ? 18 : 24), {
-      size: detailTitleSize, font: THEME.fonts.accent, color: THEME.colors.accentTeal
-    });
-
-    const dist = getJumpDistance(current, selected);
-    const fuel = getFuelRequired(current, selected, state.player);
-    const discovered = isSystemDiscovered(state.player, selected.id);
-
-    const details = [
-      { label: "DISTANCE", value: `${dist.toFixed(1)} LY` },
-      { label: "FUEL REQ", value: `${fuel.toFixed(1)}`, color: fuel > state.player.fuel ? THEME.colors.danger : THEME.colors.accentAmber },
-      { label: "CLASS", value: discovered ? selected.profile.classId.toUpperCase() : "UNKNOWN" },
-      { label: "ECONOMY", value: discovered ? selected.economy.toUpperCase() : "UNKNOWN" },
-      { label: "HAZARD", value: discovered ? formatMapValue(selected.hazardTag).toUpperCase() : "UNKNOWN", color: discovered ? (selected.hazardLevel > 5 ? THEME.colors.danger : THEME.colors.success) : THEME.colors.textDim },
-      { label: "ROUTE", value: routeValidity.label.toUpperCase(), color: routeValidity.state === "valid" ? THEME.colors.success : routeValidity.state === "warning" ? THEME.colors.warning : THEME.colors.danger },
-    ];
-
-    if (this.narrow) {
-      // Compact 2-column grid of details inside the detail strip.
-      const grid = details;
-      const cellW = (detailW - 24) / 2;
-      grid.forEach((d, i) => {
-        const col = i % 2;
-        const row = Math.floor(i / 2);
-        const x = detailX + 12 + col * cellW;
-        const y = detailY + 42 + row * 18;
-        this.drawText(d.label, x, y, { size: SIGNAL_GLASS_TEXT_SIZES.mapDetail, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
-        this.drawText(d.value, x + cellW - 12, y, { align: "right", size: SIGNAL_GLASS_TEXT_SIZES.mapDetail, font: THEME.fonts.mono, color: d.color ?? THEME.colors.textPrimary });
-      });
-      if (discovered) {
-        this.drawText(selected.profile.localDescriptor.toUpperCase(), detailX + 12, detailY + 42 + 3 * 18, { size: SIGNAL_GLASS_TEXT_SIZES.mapDetail, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
-      }
-    } else {
-      details.forEach((d, i) => {
-        const dy = detailY + 64 + i * 28;
-        this.drawText(d.label, detailX + 16, dy, { size: 10, font: THEME.fonts.mono, color: THEME.colors.textSecondary });
-        this.drawText(d.value, detailX + detailW - 16, dy, { align: "right", size: 10, font: THEME.fonts.mono, color: d.color ?? THEME.colors.textPrimary });
-      });
-      if (discovered) {
-        this.drawText(selected.profile.localDescriptor.toUpperCase(), detailX + 16, detailY + 64 + 5 * 28, { size: 11, font: THEME.fonts.mono, color: THEME.colors.accentAmber });
-      }
-    }
-
-    if (this.narrow) {
-      this.button("map-jump", "JUMP [Enter]", chrome.footerPrimaryActionRow.x, chrome.footerPrimaryActionRow.y, chrome.footerPrimaryActionRow.width, chrome.footerPrimaryActionRow.height);
-    } else {
-      this.button("map-jump", "ENGAGE JUMP DRIVE [Enter]", detailX, chrome.footerPrimaryActionRow.y, Math.min(detailW, 280), chrome.footerPrimaryActionRow.height);
-    }
-
-    // Map filters
-    const filterDefs = [
-      { id: "map-filter-hazard", label: "HAZ", value: state.mapFilters.hazard },
-      { id: "map-filter-economy", label: "ECO", value: state.mapFilters.economy },
-      { id: "map-filter-government", label: "GOV", value: state.mapFilters.government },
-      { id: "map-filter-opportunity", label: "OPP", value: state.mapFilters.opportunity },
-      { id: "map-filter-discovery", label: "DISC", value: state.mapFilters.discovery },
-      { id: "map-filter-service", label: "SVC", value: state.mapFilters.service },
-      { id: "map-filter-systemClass", label: "CLASS", value: state.mapFilters.systemClass },
-      { id: "map-filter-clear", label: "CLEAR", value: "" }
-    ];
-
-    if (this.narrow) {
-      // R3: compact viewports collapse all filter chips into a single toggle button.
-      // When the sheet is open, float the full 4×2 grid above the toggle row.
-      const activeCount = filterDefs.filter((f) => f.id !== "map-filter-clear" && f.value !== "all").length;
-      const toggleLabel = state.mapFilterSheetOpen
-        ? "DONE"
-        : activeCount > 0 ? `FILTERS [${activeCount}]` : "FILTERS";
-      this.button(
-        "map-filters-toggle",
-        toggleLabel,
-        chrome.footerSecondaryActionRow.x,
-        chrome.footerSecondaryActionRow.y,
-        chrome.footerSecondaryActionRow.width,
-        chrome.footerSecondaryActionRow.height
-      );
-
-      if (state.mapFilterSheetOpen) {
-        const cols = 4;
-        const fbGap = 4;
-        const fbH = 26;
-        const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (cols - 1)) / cols);
-        // Sheet floats above the toggle row.
-        const sheetRows = 2;
-        const sheetInnerH = sheetRows * fbH + (sheetRows - 1) * fbGap;
-        const sheetPadY = 8;
-        const sheetH = sheetInnerH + sheetPadY * 2;
-        const sheetY = chrome.footerSecondaryActionRow.y - sheetH - 4;
-        const sheetX = chrome.footerSecondaryActionRow.x;
-        const sheetW = chrome.footerSecondaryActionRow.width;
-
-        // Sheet background
-        this.ctx.save();
-        this.ctx.fillStyle = THEME.colors.bgDeep;
-        this.ctx.globalAlpha = 0.92;
-        this.ctx.beginPath();
-        this.ctx.roundRect(sheetX, sheetY, sheetW, sheetH, SIGNAL_GLASS_THEME.radius.control);
-        this.ctx.fill();
-        this.ctx.restore();
-        this.ctx.strokeStyle = "rgba(0, 242, 255, 0.18)";
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.roundRect(sheetX, sheetY, sheetW, sheetH, SIGNAL_GLASS_THEME.radius.control);
-        this.ctx.stroke();
-
-        const firstFbY = sheetY + sheetPadY;
-        filterDefs.forEach((f, i) => {
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          const fx = sheetX + col * (fbW + fbGap);
-          const fy = firstFbY + row * (fbH + fbGap);
-          const active = f.id === "map-filter-clear" ? false : f.value !== "all";
-          const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
-          this.button(f.id, label, fx, fy, fbW, fbH);
-        });
-      }
-    } else {
-      const fbGap = 6;
-      const fbW = Math.floor((chrome.footerSecondaryActionRow.width - fbGap * (filterDefs.length - 1)) / filterDefs.length);
-      const fbH = Math.min(30, chrome.footerSecondaryActionRow.height);
-      const fbY = chrome.footerSecondaryActionRow.y + (chrome.footerSecondaryActionRow.height - fbH) / 2;
-      const fbStartX = chrome.footerSecondaryActionRow.x;
-
-      filterDefs.forEach((f, i) => {
-        const fx = fbStartX + i * (fbW + fbGap);
-        const active = f.id === "map-filter-clear" ? false : f.value !== "all";
-        const label = f.id === "map-filter-clear" ? "CLR" : `${f.label}:${active ? f.value.slice(0, 3).toUpperCase() : "ALL"}`;
-        this.button(f.id, label, fx, fbY, fbW, fbH);
-      });
-      this.drawFooterHint(chrome, "SEARCH SYSTEMS · FILTERS STAY CLEAR OF HEADER COMMANDS · ESC CLOSE");
-    }
+    renderMapScreen(this.renderContext, state);
   }
 
   private renderDocking(state: RenderState): void {
@@ -1231,9 +942,4 @@ function addPoint(a: Vector3, b: Vector3): Vector3 {
 
 function subtractPoint(a: Vector3, b: Vector3): Vector3 {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function formatMapValue(value: string): string {
-  if (value === "all") return "all";
-  return value.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
 }

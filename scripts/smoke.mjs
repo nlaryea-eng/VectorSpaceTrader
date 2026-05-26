@@ -99,6 +99,14 @@ function staticSmoke() {
   assert(!/\[M\]\s*Map\s+\[D\]\s*Dock\s+\[T\]\s*Trade\s+\[Space\]\s*Fire/.test(renderer),
     "Renderer.ts still hard-codes generic flight HUD shortcut string — must be mode-derived");
   log("STATIC: source branding + help-text scan — OK");
+
+  const mapScreen = readFileSync(join(ROOT, "src", "game", "render", "screens", "MapScreen.ts"), "utf8");
+  for (const label of ["ROUTE PREVIEW", "DESTINATION SERVICES", "LOCAL TRADE", "MISSION DEST", "LEGEND REACHABLE", "FOCUS "]) {
+    assert(mapScreen.includes(label), `Map decision-surface label missing: ${label}`);
+  }
+  assert(/getStationServiceTiles/.test(mapScreen), "Map service chips must be derived from station data");
+  assert(/getRouteValidity/.test(mapScreen), "Map route preview must read existing route validity");
+  log("STATIC: map decision-surface affordance scan — OK");
 }
 
 function assert(cond, message) {

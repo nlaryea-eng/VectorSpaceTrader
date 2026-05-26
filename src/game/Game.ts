@@ -12,7 +12,7 @@ import {
 import { buyEquipment, DEFAULT_EQUIPMENT, getLaserProfile, EQUIPMENT, isPurchasable } from "./Equipment";
 import { Input } from "./Input";
 import { normalizeMapAction, normalizeMarketAction } from "./InputRouter";
-import { DEFAULT_MAP_FILTERS, cycleMapFilterState, type MapFilterState, selectAdjacentFilteredSystem, getSystemAtProjectedMapPoint } from "./MapSearch";
+import { DEFAULT_MAP_FILTERS, cycleMapFilterState, type MapFilterState, selectAdjacentFilteredSystem } from "./MapSearch";
 import { acceptMission, completeMission, decrementMissionDeadline, generateMissions } from "./Missions";
 import { dismissHint, shouldShowHint, type HintId } from "./Onboarding";
 import { clamp, distance, length, updateOrientation, updatePosition, updateVelocity, vec3 } from "./Physics";
@@ -45,7 +45,8 @@ import {
   type TutorialStage
 } from "./Tutorial";
 import { buyCommodity, buyFuel, getBulkBuyQuantity, getBulkSellQuantity, getMarketBuyPrice, getMarketSellPrice, repairHull, sellCommodity } from "./Trading";
-import { canJump, generateUniverse, getFuelRequired, getJumpDistance, UNIVERSE_CONSTANTS } from "./Universe";
+import { canJump, generateUniverse, getFuelRequired, getJumpDistance } from "./Universe";
+import { hitTestMapSystem } from "./render/screens/MapScreen";
 import { HELP_CONTENT, getHelpSectionForMode, searchHelpContent, type HelpSectionId } from "./HelpContent";
 import { shouldShowTouchControls } from "./Layout";
 import type {
@@ -915,30 +916,14 @@ export class Game {
       // We'll use more robust hit testing for map systems to handle close clusters.
       // The button zones are still useful to know we clicked *somewhere* near systems,
       // but we'll re-evaluate the closest/best candidate here.
-      const panelX = this.renderer.isNarrow() ? 8 : this.renderer.getWidth() * 0.08;
-      const panelY = this.renderer.isNarrow() ? 12 : this.renderer.getHeight() * 0.1;
-      const panelW = this.renderer.isNarrow() ? this.renderer.getWidth() - 16 : this.renderer.getWidth() * 0.84;
-      const titleY = panelY + (this.renderer.isNarrow() ? 26 : 40);
-
-      const mapX = this.renderer.isNarrow() ? panelX + 12 : this.renderer.getWidth() * 0.12;
-      const mapY = this.renderer.isNarrow() ? titleY + 18 : this.renderer.getHeight() * 0.23;
-      const mapW = this.renderer.isNarrow() ? panelW - 24 : this.renderer.getWidth() * 0.54;
-      const mapH = this.renderer.isNarrow() ? this.renderer.getHeight() * 0.42 : this.renderer.getHeight() * 0.56;
-
-      const target = getSystemAtProjectedMapPoint(
-        this.systems,
-        click.x,
-        click.y,
-        mapX,
-        mapY,
-        mapW,
-        mapH,
-        UNIVERSE_CONSTANTS.width,
-        UNIVERSE_CONSTANTS.height,
-        this.player,
-        this.mapFilters,
-        20 // Larger hit radius for re-evaluation
-      );
+      const target = hitTestMapSystem({
+        viewport: { width: this.renderer.getWidth(), height: this.renderer.getHeight(), narrow: this.renderer.isNarrow() },
+        systems: this.systems,
+        player: this.player,
+        filters: this.mapFilters,
+        click,
+        hitRadius: 20
+      });
 
       if (target) {
         this.selectedSystemId = target.id;
